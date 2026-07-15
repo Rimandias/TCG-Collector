@@ -1,0 +1,1380 @@
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { User, Card, UserCardData, TradeFolder, CardCondition, VARIATION_TYPES } from '../types';
+import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber } from '../db';
+import { fetchCardsBySet, fetchSets } from '../api';
+import CardModal from '../components/CardModal';
+
+interface TradesViewProps {
+  user: User;
+  onUpdateUser: (user: User) => void;
+}
+
+// Mock cards for friends' folders
+const MOCK_FRIEND_CARDS: Card[] = [
+  {
+    id: 'base1-4',
+    name: 'Charizard',
+    imageUrl: 'https://images.pokemontcg.io/base1/4.png',
+    imageUrlHiRes: 'https://images.pokemontcg.io/base1/4_hires.png',
+    number: '4',
+    rarity: 'Rare Holo',
+    isSecret: false,
+    marketPrice: 350.00,
+    set: { id: 'base1', name: 'Base Set', printedTotal: 102 }
+  },
+  {
+    id: 'base1-2',
+    name: 'Blastoise',
+    imageUrl: 'https://images.pokemontcg.io/base1/2.png',
+    imageUrlHiRes: 'https://images.pokemontcg.io/base1/2_hires.png',
+    number: '2',
+    rarity: 'Rare Holo',
+    isSecret: false,
+    marketPrice: 120.00,
+    set: { id: 'base1', name: 'Base Set', printedTotal: 102 }
+  },
+  {
+    id: 'base1-58',
+    name: 'Pikachu',
+    imageUrl: 'https://images.pokemontcg.io/base1/58.png',
+    imageUrlHiRes: 'https://images.pokemontcg.io/base1/58_hires.png',
+    number: '58',
+    rarity: 'Common',
+    isSecret: false,
+    marketPrice: 2.50,
+    set: { id: 'base1', name: 'Base Set', printedTotal: 102 }
+  },
+  {
+    id: 'sv3pt5-199',
+    name: 'Charizard ex',
+    imageUrl: 'https://images.pokemontcg.io/sv3pt5/199.png',
+    imageUrlHiRes: 'https://images.pokemontcg.io/sv3pt5/199_hires.png',
+    number: '199',
+    rarity: 'Rare Special Illustration',
+    isSecret: true,
+    marketPrice: 120.00,
+    set: { id: 'sv3pt5', name: '151', printedTotal: 165 }
+  }
+];
+
+const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
+  const [activeTab, setActiveTab] = useState<'my' | 'friends'>('my');
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  
+  // Friend detail states
+  const [selectedFriend, setSelectedFriend] = useState<string | null>(null);
+  const [selectedFriendFolderId, setSelectedFriendFolderId] = useState<string | null>(null);
+
+  const [showAddFriend, setShowAddFriend] = useState(false);
+  const [friendName, setFriendName] = useState('');
+  const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [showManageCards, setShowManageCards] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [tradeCards, setTradeCards] = useState<{card: Card, data: UserCardData}[]>([]);
+  const [editingCard, setEditingCard] = useState<Card | null>(null);
+
+  // New features states (Lists and metadata)
+  const [allSetCards, setAllSetCards] = useState<Card[]>([]);
+  const [loadingWishlist, setLoadingWishlist] = useState(false);
+  const [sets, setSets] = useState<any[]>([]);
+
+  // Folder visual states (Toggle "Cartas" vs "Coleção")
+  const [folderViewMode, setFolderViewMode] = useState<'cards' | 'collections'>('cards');
+  const [selectedFolderSeries, setSelectedFolderSeries] = useState<string | null>(null);
+  const [selectedFolderSetId, setSelectedFolderSetId] = useState<string | null>(null);
+
+  // Search/Filters states inside folders
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterRarity, setFilterRarity] = useState('all');
+  const [filterSet, setFilterSet] = useState('all');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterQuality, setFilterQuality] = useState('all');
+  const [showFolderFilters, setShowFolderFilters] = useState(false);
+
+  // Memoized user folders
+  const folders = useMemo<TradeFolder[]>(() => user.folders || [], [user.folders]);
+
+  // Carrega as informações das cartas que estão marcadas para troca ou possuem duplicatas (>1 cópias)
+  useEffect(() => {
+    const loadTradeCards = async () => {
+      setLoading(true);
+      const trades = (Object.entries(user.ownedCards) as [string, UserCardData][])
+        .filter(([_, data]) => {
+          // Automatic duplicate rule: more than 1 copy of any quality and category
+          const normalized = getNormalizedVariations(data.variations);
+          const hasDuplicate = Object.values(normalized).some(conditionsObj => 
+            Object.values(conditionsObj).some(details => details.quantity > 1)
+          );
+          return data.isForTrade || hasDuplicate;
+        });
+      
+      const loaded: {card: Card, data: UserCardData}[] = [];
+      
+      for (const [id, data] of trades) {
+        const setId = id.split('-')[0];
+        try {
+          const cardsInSet = await fetchCardsBySet(setId);
+          const card = cardsInSet.find(c => c.id === id);
+          if (card) loaded.push({ card, data });
+        } catch (e) {
+          console.error("Failed to fetch cards in set", setId, e);
+        }
+      }
+      
+      setTradeCards(loaded);
+      setLoading(false);
+    };
+
+    if (activeTab === 'my') {
+      loadTradeCards();
+    }
+  }, [user.ownedCards, activeTab]);
+
+  // Carrega as coleções e todas as cartas das coleções em paralelo para a Lista de Desejos
+  useEffect(() => {
+    const loadSetsAndAllCards = async () => {
+      setLoadingWishlist(true);
+      try {
+        const setsList = await fetchSets();
+        if (setsList) {
+          setSets(setsList);
+          
+          const allCards: Card[] = [];
+          const promises = setsList.map(async (s) => {
+            try {
+              return await fetchCardsBySet(s.id);
+            } catch (e) {
+              return [];
+            }
+          });
+          const results = await Promise.all(promises);
+          results.forEach(cards => {
+            allCards.push(...cards);
+          });
+          setAllSetCards(allCards);
+        }
+      } catch (err) {
+        console.warn("Error loading wishlist sets/cards (handled with fallback/mock cards):", err);
+      } finally {
+        setLoadingWishlist(false);
+      }
+    };
+    loadSetsAndAllCards();
+  }, []);
+
+  // Lista de Desejos: Cartas adicionadas manualmente via coração pelo usuário
+  const wishlistCards = useMemo(() => {
+    const wishlistIds = user.wishlist || [];
+    return allSetCards.filter(card => wishlistIds.includes(card.id));
+  }, [allSetCards, user.wishlist]);
+
+  // Estrutura de Eras/Coleções idêntica à Home
+  const eras = useMemo(() => {
+    const uniqueSeries = Array.from(new Set(sets.map(s => s.series)));
+    
+    const getEraOldestReleaseDate = (eraName: string) => {
+      const eraSets = sets.filter(s => s.series === eraName);
+      if (eraSets.length === 0) return '9999-99-99';
+      const dates = eraSets.map(s => s.releaseDate).sort();
+      return dates[0];
+    };
+
+    return uniqueSeries.sort((a, b) => {
+      const dateA = getEraOldestReleaseDate(a);
+      const dateB = getEraOldestReleaseDate(b);
+      return dateA.localeCompare(dateB);
+    });
+  }, [sets]);
+
+  const getEraStyle = useCallback((eraName: string) => {
+    const index = eras.indexOf(eraName);
+    const safeIndex = index >= 0 ? index : 0;
+    
+    const styles = [
+      { bg: 'bg-red-600', dotBg: 'bg-red-500' },
+      { bg: 'bg-blue-600', dotBg: 'bg-red-500' },
+      { bg: 'bg-zinc-950', dotBg: 'bg-yellow-400' },
+      { bg: 'bg-purple-600', dotBg: 'bg-pink-500' },
+    ];
+    
+    return styles[safeIndex % styles.length];
+  }, [eras]);
+
+  const getSetLogoForSeries = useCallback((seriesName: string) => {
+    const seriesSets = sets.filter(s => s.series === seriesName);
+    if (seriesSets.length === 0) return '';
+    const sorted = [...seriesSets].sort((a, b) => a.releaseDate.localeCompare(b.releaseDate));
+    return sorted[0]?.logoUrl || '';
+  }, [sets]);
+
+  const getEraYear = useCallback((eraName: string) => {
+    const eraSets = sets.filter(s => s.series === eraName);
+    if (eraSets.length === 0) return '';
+    const dates = eraSets.map(s => s.releaseDate).sort();
+    const oldestDate = dates[0];
+    if (!oldestDate) return '';
+    return oldestDate.split('-')[0];
+  }, [sets]);
+
+  // Unifica a obtenção das cartas da pasta ativa (duplicates, wishlist, custom)
+  const activeFolderCards = useMemo(() => {
+    if (selectedFolderId === 'duplicates') {
+      return tradeCards;
+    } else if (selectedFolderId === 'wishlist') {
+      return wishlistCards.map(card => ({
+        card,
+        data: user.ownedCards[card.id] || getInitialCardData(card.id)
+      }));
+    } else if (selectedFolderId) {
+      const currentFolder = folders.find(f => f.id === selectedFolderId);
+      return tradeCards.filter(tc => currentFolder?.cardIds.includes(tc.card.id));
+    }
+    return [];
+  }, [selectedFolderId, tradeCards, wishlistCards, folders, user.ownedCards]);
+
+  // Aplicação de todos os filtros nas cartas da pasta
+  const filteredFolderCards = useMemo(() => {
+    return activeFolderCards.filter(({ card, data }) => {
+      // 1. Campo de Pesquisa (pesquisa por nome, número ou set)
+      if (searchQuery.trim() !== '') {
+        const q = searchQuery.toLowerCase().trim();
+        const fullNum = getCompleteCardNumber(card).toLowerCase();
+        const matchesName = card.name.toLowerCase().includes(q);
+        const matchesNum = card.number.toLowerCase() === q || fullNum === q || card.number.toLowerCase().includes(q) || fullNum.includes(q);
+        const matchesSet = card.set.name.toLowerCase().includes(q);
+        if (!matchesName && !matchesNum && !matchesSet) return false;
+      }
+
+      // 2. Filtro de Raridade (campo da API)
+      if (filterRarity !== 'all') {
+        if (card.rarity !== filterRarity) return false;
+      }
+
+      // 3. Filtro de Set (campo da API)
+      if (filterSet !== 'all') {
+        if (card.set.id !== filterSet) return false;
+      }
+
+      // 4. Filtro de Categoria (Standard, Foil, etc.)
+      if (filterCategory !== 'all') {
+        const normalized = getNormalizedVariations(data.variations);
+        const varData = normalized[filterCategory];
+        const hasQty = varData && Object.values(varData).some(cond => cond.quantity > 0);
+        if (!hasQty && selectedFolderId !== 'wishlist') return false;
+      }
+
+      // 5. Filtro de Qualidade/Condição (NM, SP, etc.)
+      if (filterQuality !== 'all') {
+        const normalized = getNormalizedVariations(data.variations);
+        const hasQty = Object.values(normalized).some(conds => conds[filterQuality as CardCondition]?.quantity > 0);
+        if (!hasQty && selectedFolderId !== 'wishlist') return false;
+      }
+
+      return true;
+    });
+  }, [activeFolderCards, searchQuery, filterRarity, filterSet, filterCategory, filterQuality, selectedFolderId]);
+
+  // Opções para preencher os seletores com base nas cartas da pasta ativa
+  const folderRarities = useMemo(() => {
+    const r = activeFolderCards.map(({ card }) => card.rarity).filter(Boolean);
+    return Array.from(new Set(r)).sort();
+  }, [activeFolderCards]);
+
+  const folderSets = useMemo(() => {
+    const s = activeFolderCards.map(({ card }) => card.set);
+    const unique = new Map<string, string>();
+    s.forEach(set => unique.set(set.id, set.name));
+    return Array.from(unique.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [activeFolderCards]);
+
+  // Reseta filtros e navegação ao voltar/fechar uma pasta
+  const handleExitFolder = () => {
+    setSelectedFolderId(null);
+    setFolderViewMode('cards');
+    setSelectedFolderSeries(null);
+    setSelectedFolderSetId(null);
+    setSearchQuery('');
+    setFilterRarity('all');
+    setFilterSet('all');
+    setFilterCategory('all');
+    setFilterQuality('all');
+    setShowFolderFilters(false);
+  };
+
+  // Remove card from trade entirely (updates DB)
+  const handleRemoveFromTrade = (cardId: string) => {
+    onUpdateUser(updateCardStatus(user, cardId, { isForTrade: false }));
+  };
+
+  // Remove card from a custom folder (doesn't stop trading the card, just removes from custom folder)
+  const handleRemoveFromFolder = (folderId: string, cardId: string) => {
+    const updatedFolders = folders.map(f => {
+      if (f.id === folderId) {
+        return {
+          ...f,
+          cardIds: f.cardIds.filter(id => id !== cardId)
+        };
+      }
+      return f;
+    });
+    onUpdateUser({
+      ...user,
+      folders: updatedFolders
+    });
+  };
+
+  // Toggle card inside a folder
+  const handleToggleCardInFolder = (folderId: string, cardId: string) => {
+    const updatedFolders = folders.map(f => {
+      if (f.id === folderId) {
+        const exists = f.cardIds.includes(cardId);
+        const newCardIds = exists 
+          ? f.cardIds.filter(id => id !== cardId)
+          : [...f.cardIds, cardId];
+        return { ...f, cardIds: newCardIds };
+      }
+      return f;
+    });
+    onUpdateUser({
+      ...user,
+      folders: updatedFolders
+    });
+  };
+
+  const handleCreateFolder = () => {
+    if (!newFolderName.trim()) return;
+    
+    const newFolder: TradeFolder = {
+      id: Date.now().toString(),
+      name: newFolderName.trim(),
+      cardIds: []
+    };
+
+    onUpdateUser({
+      ...user,
+      folders: [...folders, newFolder]
+    });
+
+    setNewFolderName('');
+    setShowCreateFolder(false);
+  };
+
+  const handleDeleteFolder = (folderId: string) => {
+    if (window.confirm("Tem certeza de que deseja excluir esta pasta? As cartas não serão removidas de suas trocas gerais.")) {
+      const updatedFolders = folders.filter(f => f.id !== folderId);
+      onUpdateUser({
+        ...user,
+        folders: updatedFolders
+      });
+      if (selectedFolderId === folderId) {
+        setSelectedFolderId(null);
+      }
+    }
+  };
+
+  const handleAddFriend = () => {
+    if (friendName.trim()) {
+      onUpdateUser({ ...user, friends: [...user.friends, friendName.trim()] });
+      setFriendName('');
+      setShowAddFriend(false);
+    }
+  };
+
+  // Friends' mock folders
+  const getFriendFolders = useCallback((name: string) => {
+    return [
+      {
+        id: 'f-general',
+        name: 'Pasta de Repetidas',
+        isGeneral: true,
+        cardIds: ['base1-4', 'base1-2', 'base1-58']
+      },
+      {
+        id: 'f-retro',
+        name: 'Coleção Clássica Base',
+        isGeneral: false,
+        cardIds: ['base1-4', 'base1-2']
+      },
+      {
+        id: 'f-modern',
+        name: 'Scarlet & Violet Favs',
+        isGeneral: false,
+        cardIds: ['sv3pt5-199', 'base1-58']
+      }
+    ];
+  }, []);
+
+  return (
+    <div className="animate-in fade-in duration-500 px-6 max-w-lg mx-auto pb-8">
+      <div className="mb-6 flex flex-col gap-4">
+        <div>
+          <h2 className="text-2xl text-slate-800">Central de Trocas</h2>
+          <p className="text-slate-400 text-xs">Gerencie suas pastas ou explore os álbuns dos seus amigos.</p>
+        </div>
+
+        <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+          <button 
+            onClick={() => {
+              setActiveTab('my');
+              handleExitFolder();
+              setSelectedFriend(null);
+              setSelectedFriendFolderId(null);
+            }}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'my' ? 'bg-white text-[#646B99] shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            Minhas Pastas
+          </button>
+          <button 
+            onClick={() => {
+              setActiveTab('friends');
+              handleExitFolder();
+              setSelectedFriend(null);
+              setSelectedFriendFolderId(null);
+            }}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'friends' ? 'bg-white text-[#646B99] shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            Pasta de Amigos
+          </button>
+        </div>
+      </div>
+
+      {activeTab === 'my' ? (
+        // --- MY FOLDERS SUB-VIEW ---
+        selectedFolderId === null ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Pastas Ativas</span>
+              <button
+                onClick={() => setShowCreateFolder(true)}
+                className="text-[11px] font-medium text-[#646B99] hover:text-[#4d5275] flex items-center gap-1 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-lg transition-colors"
+              >
+                + Criar Pasta
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-2">
+                <div className="w-6 h-6 border-2 border-[#646B99] border-t-transparent rounded-full animate-spin" />
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest">Carregando dados...</p>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {/* 1. Pasta de Repetidas */}
+                <div 
+                  onClick={() => setSelectedFolderId('duplicates')}
+                  className="flex items-center justify-between bg-gradient-to-r from-slate-50 to-white p-4 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:border-[#646B99]/30 transition-all group animate-in fade-in"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-[#646B99]/10 rounded-xl flex items-center justify-center text-[#646B99]">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-800">Pasta de Repetidas</h3>
+                      <p className="text-[10px] text-slate-400">Cartas repetidas ou para troca</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full font-medium">
+                      {tradeCards.length}
+                    </span>
+                    <span className="text-[9px] bg-[#646B99]/10 text-[#646B99] px-2 py-0.5 rounded uppercase tracking-wider font-semibold">
+                      Automática
+                    </span>
+                  </div>
+                </div>
+
+                {/* 2. Lista de Desejos */}
+                <div 
+                  onClick={() => setSelectedFolderId('wishlist')}
+                  className="flex items-center justify-between bg-gradient-to-r from-red-50/10 to-white p-4 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:border-red-500/30 transition-all group animate-in fade-in"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center text-red-600">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-800">Lista de Desejos</h3>
+                      <p className="text-[10px] text-slate-400">Cartas marcadas com coração</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {loadingWishlist ? (
+                      <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <span className="text-xs bg-red-50 text-red-700 border border-red-100 px-2.5 py-1 rounded-full font-medium">
+                        {wishlistCards.length}
+                      </span>
+                    )}
+                    <span className="text-[9px] bg-red-500/10 text-red-600 px-2 py-0.5 rounded uppercase tracking-wider font-semibold">
+                      Manual
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3. Custom Folders */}
+                {folders.map(folder => {
+                  const validCardsCount = folder.cardIds.filter(id => 
+                    tradeCards.some(tc => tc.card.id === id)
+                  ).length;
+
+                  return (
+                    <div 
+                      key={folder.id}
+                      className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:border-[#646B99]/30 transition-all group animate-in fade-in"
+                    >
+                      <div 
+                        className="flex-1 flex items-center gap-4"
+                        onClick={() => setSelectedFolderId(folder.id)}
+                      >
+                        <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-500">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-semibold text-slate-800 group-hover:text-[#646B99] transition-colors">{folder.name}</h3>
+                          <p className="text-[10px] text-slate-400">Pasta de trocas personalizada</p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs bg-slate-50 border border-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-medium" onClick={() => setSelectedFolderId(folder.id)}>
+                          {validCardsCount}
+                        </span>
+                        
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteFolder(folder.id);
+                          }}
+                          className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                          title="Excluir Pasta"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          // --- VIEWING A SPECIFIC FOLDER (duplicates, wishlist, or custom) ---
+          (() => {
+            const isDuplicates = selectedFolderId === 'duplicates';
+            const isWishlist = selectedFolderId === 'wishlist';
+            const currentFolder = (!isDuplicates && !isWishlist) ? folders.find(f => f.id === selectedFolderId) : null;
+            
+            if (!isDuplicates && !isWishlist && !currentFolder) {
+              handleExitFolder();
+              return null;
+            }
+
+            return (
+              <div className="space-y-4 animate-in fade-in duration-300">
+                {/* Navigation Header */}
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <button 
+                    onClick={handleExitFolder}
+                    className="text-xs font-semibold text-slate-400 hover:text-slate-600 flex items-center gap-1"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    Voltar
+                  </button>
+
+                  <h3 className="text-sm font-semibold text-slate-700 truncate max-w-[180px]">
+                    {isDuplicates ? 'Pasta de Repetidas' : isWishlist ? 'Lista de Desejos' : currentFolder?.name}
+                  </h3>
+
+                  {!isDuplicates && !isWishlist && (
+                    <button
+                      onClick={() => setShowManageCards(true)}
+                      className="text-[11px] font-medium text-[#646B99] hover:bg-[#646B99]/5 border border-[#646B99]/20 px-2.5 py-1 rounded-lg transition-colors uppercase tracking-wider"
+                    >
+                      Gerenciar
+                    </button>
+                  )}
+                  {(isDuplicates || isWishlist) && <div className="w-12" />}
+                </div>
+
+                {/* Folder Info Banner */}
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100/50 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-slate-500">
+                      {isDuplicates 
+                        ? 'Todas as cartas que você tem mais de 1 cópia ou marcou para troca estão aqui automaticamente.'
+                        : isWishlist 
+                          ? 'Todas as cartas que você adicionou à sua lista clicando no ícone de coração.'
+                          : 'Uma seleção de suas cartas de troca organizadas nesta pasta.'}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Total nesta pasta: <span className="font-semibold text-slate-700">{activeFolderCards.length} cartas</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Toggle visual: Cartas vs Coleção */}
+                <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+                  <button 
+                    onClick={() => {
+                      setFolderViewMode('cards');
+                      setSelectedFolderSeries(null);
+                      setSelectedFolderSetId(null);
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${folderViewMode === 'cards' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                  >
+                    Cartas
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setFolderViewMode('collections');
+                      setSelectedFolderSeries(null);
+                      setSelectedFolderSetId(null);
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${folderViewMode === 'collections' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                  >
+                    Coleção
+                  </button>
+                </div>
+
+                {/* Search Bar & Advanced Filters (rendered in 'cards' view or when a set is active in 'collections' view) */}
+                {(folderViewMode === 'cards' || selectedFolderSetId !== null) && (
+                  <div className="space-y-3 bg-slate-50/50 p-3 rounded-xl border border-slate-100 animate-in slide-in-from-top duration-200">
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                        </span>
+                        <input
+                          type="text"
+                          placeholder="Buscar por nome, número ou set..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#646B99] transition-all shadow-sm"
+                        />
+                      </div>
+                      <button
+                        onClick={() => setShowFolderFilters(!showFolderFilters)}
+                        className={`px-3 py-2 border rounded-xl flex items-center gap-1.5 text-xs font-semibold transition-all ${showFolderFilters ? 'bg-[#646B99] text-white border-[#646B99]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                        Filtros
+                      </button>
+                    </div>
+
+                    {showFolderFilters && (
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 animate-in fade-in duration-200">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Raridade</span>
+                          <select
+                            value={filterRarity}
+                            onChange={(e) => setFilterRarity(e.target.value)}
+                            className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
+                          >
+                            <option value="all">Todas as Raridades</option>
+                            {folderRarities.map(r => (
+                              <option key={r} value={r}>{r}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {folderViewMode === 'cards' && (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Coleção</span>
+                            <select
+                              value={filterSet}
+                              onChange={(e) => setFilterSet(e.target.value)}
+                              className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
+                            >
+                              <option value="all">Todas as Coleções</option>
+                              {folderSets.map(s => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Categoria</span>
+                          <select
+                            value={filterCategory}
+                            onChange={(e) => setFilterCategory(e.target.value)}
+                            className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
+                          >
+                            <option value="all">Todas as Categorias</option>
+                            {VARIATION_TYPES.map(v => (
+                              <option key={v} value={v}>{v}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Qualidade</span>
+                          <select
+                            value={filterQuality}
+                            onChange={(e) => setFilterQuality(e.target.value)}
+                            className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
+                          >
+                            <option value="all">Todas as Qualidades</option>
+                            {Object.keys(CardCondition).map(c => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="col-span-2 flex justify-end mt-1">
+                          <button
+                            onClick={() => {
+                              setFilterRarity('all');
+                              setFilterSet('all');
+                              setFilterCategory('all');
+                              setFilterQuality('all');
+                              setSearchQuery('');
+                            }}
+                            className="text-[10px] font-semibold text-slate-400 hover:text-[#646B99] transition-colors"
+                          >
+                            Limpar Filtros
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Folder Rendering - Based on visual toggles */}
+                {folderViewMode === 'cards' ? (
+                  // --- CARDS LIST VIEW ---
+                  filteredFolderCards.length === 0 ? (
+                    <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-100">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 mx-auto text-slate-200 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                      <p className="text-slate-400 font-medium text-sm">Nenhuma carta encontrada</p>
+                      <p className="text-[10px] text-slate-300 mt-1 uppercase tracking-wider">
+                        Tente ajustar os filtros ou a pesquisa
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3">
+                      {filteredFolderCards.map(({ card, data }) => (
+                        <div key={card.id} className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
+                          <img 
+                            src={card.imageUrl} 
+                            onClick={() => setEditingCard(card)}
+                            className="w-14 h-20 rounded-lg object-contain bg-slate-50/50 border border-slate-100/40 cursor-pointer hover:scale-105 transition-transform" 
+                          />
+                          
+                          <div className="flex-1 min-w-0">
+                            <h4 
+                              onClick={() => setEditingCard(card)}
+                              className="text-slate-800 font-semibold truncate text-xs cursor-pointer hover:text-[#646B99] transition-colors"
+                            >
+                              {card.name}
+                            </h4>
+                            <p className="text-[9px] text-slate-400">{card.rarity} • #{getCompleteCardNumber(card)} ({card.set.name})</p>
+                            
+                             <div className="flex flex-wrap gap-1 mt-2">
+                              {(() => {
+                                const normalized = getNormalizedVariations(data.variations);
+                                const badges: React.ReactNode[] = [];
+                                Object.entries(normalized).forEach(([varType, conditionsObj]) => {
+                                  Object.entries(conditionsObj).forEach(([cond, details]) => {
+                                    if (details.quantity > 0) {
+                                      const isOnlyOne = details.quantity === 1;
+                                      badges.push(
+                                        <span 
+                                          key={`${varType}-${cond}`} 
+                                          className={`px-1.5 py-0.5 border rounded text-[8px] font-medium flex items-center gap-1 ${
+                                            isOnlyOne 
+                                              ? 'bg-amber-50 border-amber-200 text-amber-700 font-semibold' 
+                                              : 'bg-slate-50 border-slate-100 text-[#646B99]'
+                                          }`}
+                                        >
+                                          {isOnlyOne && <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />}
+                                          {varType} {cond}: {details.quantity}
+                                          {details.price ? ` ($${details.price})` : ''}
+                                          {isOnlyOne && ' (Única!)'}
+                                        </span>
+                                      );
+                                    }
+                                  });
+                                });
+                                return badges.length > 0 ? badges : (
+                                  <span className="px-1.5 py-0.5 border border-dashed border-slate-200 rounded text-[8px] text-slate-400 font-medium bg-slate-50/50">
+                                    Não Possui
+                                  </span>
+                                );
+                              })()}
+                            </div>
+
+                            <div className="flex items-center gap-2 mt-2">
+                              <button
+                                onClick={() => setEditingCard(card)}
+                                className="px-2 py-0.5 bg-[#646B99]/5 hover:bg-[#646B99]/10 text-[#646B99] border border-[#646B99]/10 rounded text-[8px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                                Editar Qtd / Preço
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="text-[10px] font-semibold text-emerald-500">
+                              ${card.marketPrice ? card.marketPrice.toFixed(2) : '0.00'}
+                            </span>
+                            
+                            {isWishlist ? (
+                              <button 
+                                onClick={() => {
+                                  const updatedWishlist = (user.wishlist || []).filter(id => id !== card.id);
+                                  onUpdateUser({
+                                    ...user,
+                                    wishlist: updatedWishlist
+                                  });
+                                }}
+                                className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Remover da lista de desejos"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                              </button>
+                            ) : (
+                              <button 
+                                onClick={() => {
+                                  if (isDuplicates) {
+                                    handleRemoveFromTrade(card.id);
+                                  } else if (currentFolder) {
+                                    handleRemoveFromFolder(currentFolder.id, card.id);
+                                  }
+                                }}
+                                className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                title={isDuplicates ? "Remover de todas as trocas" : "Remover desta pasta"}
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                ) : (
+                  // --- COLLECTIONS VIEW MODE ---
+                  (() => {
+                    if (selectedFolderSetId !== null) {
+                      // --- SHOW SET DETAILS CARD LIST ---
+                      const setCardsInFolder = filteredFolderCards.filter(tc => tc.card.set.id === selectedFolderSetId);
+                      return (
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2 mb-4 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                            <button 
+                              onClick={() => setSelectedFolderSetId(null)}
+                              className="text-xs font-semibold text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                              Voltar para Coleções
+                            </button>
+                            <span className="text-xs text-slate-300">/</span>
+                            <span className="text-xs font-semibold text-slate-700 truncate max-w-[140px]">
+                              {sets.find(s => s.id === selectedFolderSetId)?.name}
+                            </span>
+                          </div>
+
+                          {setCardsInFolder.length === 0 ? (
+                            <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-100">
+                              <p className="text-slate-400 font-medium text-xs uppercase tracking-widest">Nenhuma carta nesta coleção</p>
+                              <p className="text-[10px] text-slate-300 mt-1 uppercase tracking-wider">corresponde aos filtros ativos</p>
+                            </div>
+                          ) : (
+                            <div className="grid gap-3">
+                              {setCardsInFolder.map(({ card, data }) => (
+                                <div key={card.id} className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
+                                  <img 
+                                    src={card.imageUrl} 
+                                    onClick={() => setEditingCard(card)}
+                                    className="w-14 h-20 rounded-lg object-contain bg-slate-50/50 border border-slate-100/40 cursor-pointer hover:scale-105 transition-transform" 
+                                  />
+                                  
+                                  <div className="flex-1 min-w-0">
+                                    <h4 
+                                      onClick={() => setEditingCard(card)}
+                                      className="text-slate-800 font-semibold truncate text-xs cursor-pointer hover:text-[#646B99] transition-colors"
+                                    >
+                                      {card.name}
+                                    </h4>
+                                    <p className="text-[9px] text-slate-400">{card.rarity} • #{getCompleteCardNumber(card)}</p>
+                                    
+                                     <div className="flex flex-wrap gap-1 mt-2">
+                                      {(() => {
+                                        const normalized = getNormalizedVariations(data.variations);
+                                        const badges: React.ReactNode[] = [];
+                                        Object.entries(normalized).forEach(([varType, conditionsObj]) => {
+                                          Object.entries(conditionsObj).forEach(([cond, details]) => {
+                                            if (details.quantity > 0) {
+                                              const isOnlyOne = details.quantity === 1;
+                                              badges.push(
+                                                <span 
+                                                  key={`${varType}-${cond}`} 
+                                                  className={`px-1.5 py-0.5 border rounded text-[8px] font-medium flex items-center gap-1 ${
+                                                    isOnlyOne 
+                                                      ? 'bg-amber-50 border-amber-200 text-amber-700 font-semibold' 
+                                                      : 'bg-slate-50 border-slate-100 text-[#646B99]'
+                                                  }`}
+                                                >
+                                                  {isOnlyOne && <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />}
+                                                  {varType} {cond}: {details.quantity}
+                                                  {isOnlyOne && ' (Única!)'}
+                                                </span>
+                                              );
+                                            }
+                                          });
+                                        });
+                                        return badges.length > 0 ? badges : (
+                                          <span className="px-1.5 py-0.5 border border-dashed border-slate-200 rounded text-[8px] text-slate-400 font-medium bg-slate-50/50">
+                                            Não Possui
+                                          </span>
+                                        );
+                                      })()}
+                                    </div>
+
+                                    <div className="flex items-center gap-2 mt-2">
+                                      <button
+                                        onClick={() => setEditingCard(card)}
+                                        className="px-2 py-0.5 bg-[#646B99]/5 hover:bg-[#646B99]/10 text-[#646B99] border border-[#646B99]/10 rounded text-[8px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                                        Editar Qtd / Preço
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className="text-[10px] font-semibold text-emerald-500">
+                                      ${card.marketPrice ? card.marketPrice.toFixed(2) : '0.00'}
+                                    </span>
+                                    {isWishlist ? (
+                                      <button 
+                                        onClick={() => {
+                                          const updatedWishlist = (user.wishlist || []).filter(id => id !== card.id);
+                                          onUpdateUser({
+                                            ...user,
+                                            wishlist: updatedWishlist
+                                          });
+                                        }}
+                                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                        title="Remover da lista de desejos"
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                                      </button>
+                                    ) : (
+                                      <button 
+                                        onClick={() => {
+                                          if (isDuplicates) {
+                                            handleRemoveFromTrade(card.id);
+                                          } else if (currentFolder) {
+                                            handleRemoveFromFolder(currentFolder.id, card.id);
+                                          }
+                                        }}
+                                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                        title={isDuplicates ? "Remover de todas as trocas" : "Remover desta pasta"}
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    } else if (selectedFolderSeries !== null) {
+                      // --- SHOW LIST OF SETS IN ACTIVE ERA ---
+                      return (
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2 mb-4 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                            <button 
+                              onClick={() => setSelectedFolderSeries(null)}
+                              className="text-xs font-semibold text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                              Voltar para Eras
+                            </button>
+                            <span className="text-xs text-slate-300">/</span>
+                            <span className="text-xs font-semibold text-slate-700 truncate">
+                              {selectedFolderSeries}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            {sets
+                              .filter(s => s.series === selectedFolderSeries)
+                              .sort((a, b) => a.releaseDate.localeCompare(b.releaseDate))
+                              .map(set => {
+                                const count = filteredFolderCards.filter(tc => tc.card.set.id === set.id).length;
+                                if (count === 0 && !isWishlist) return null; // Only show sets containing cards
+                                return (
+                                  <button
+                                    key={set.id}
+                                    onClick={() => setSelectedFolderSetId(set.id)}
+                                    className="flex flex-col items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-[#646B99]/30 transition-all group min-h-[140px]"
+                                  >
+                                    <div className="h-12 w-full flex items-center justify-center mb-2">
+                                      <img src={set.logoUrl} className="max-h-full max-w-full object-contain filter group-hover:scale-110 transition-transform" />
+                                    </div>
+                                    <div className="w-full space-y-1 mt-auto text-center">
+                                      <p className="text-[10px] font-medium text-slate-600 line-clamp-1 group-hover:text-[#646B99] transition-colors">
+                                        {set.name}
+                                      </p>
+                                      <p className="text-[9px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2 py-0.5 rounded-full inline-block">
+                                        {count} {count === 1 ? 'carta' : 'cartas'}
+                                      </p>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      // --- SHOW ERAS ---
+                      return (
+                        <div className="space-y-4">
+                          <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold text-center mb-2">Selecione a Era</p>
+                          <div className="grid gap-3">
+                            {eras.map(era => {
+                              const count = filteredFolderCards.filter(tc => tc.card.set.series === era).length;
+                              if (count === 0 && !isWishlist) return null; // Hide empty eras
+                              return (
+                                <button
+                                  key={era}
+                                  onClick={() => setSelectedFolderSeries(era)}
+                                  className="w-full flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-[#646B99]/30 transition-all group gap-4"
+                                >
+                                  <div className="flex items-center gap-4 flex-1">
+                                    <div className="h-10 w-24 flex items-center justify-center">
+                                      <img 
+                                        src={getSetLogoForSeries(era)} 
+                                        alt={era} 
+                                        className="max-h-full max-w-full object-contain filter group-hover:scale-105 transition-all duration-300" 
+                                      />
+                                    </div>
+                                    <div className="text-left">
+                                      <h4 className="text-xs font-semibold text-slate-700">{era}</h4>
+                                      <p className="text-[9px] text-slate-400">{getEraYear(era)}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2.5 py-1 rounded-full border border-[#646B99]/10">
+                                      {count} {count === 1 ? 'carta' : 'cartas'}
+                                    </span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-slate-300 group-hover:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    }
+                  })()
+                )}
+              </div>
+            );
+          })()
+        )
+      ) : (
+        // --- FRIENDS TAB VIEW ---
+        selectedFriend === null ? (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Amigos Conectados</span>
+              <button 
+                onClick={() => setShowAddFriend(true)}
+                className="text-[11px] font-medium text-[#646B99] hover:text-[#4d5275] flex items-center gap-1 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-lg transition-colors"
+              >
+                + Adicionar Amigo
+              </button>
+            </div>
+
+            <div className="grid gap-3">
+               {user.friends.length === 0 ? (
+                 <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-100">
+                   <p className="text-slate-400 text-sm">Você ainda não adicionou nenhum amigo.</p>
+                   <p className="text-[10px] text-slate-300 uppercase tracking-wider mt-1">Conecte-se para negociar suas pastas</p>
+                 </div>
+               ) : (
+                 user.friends.map((friend, idx) => (
+                   <div 
+                     key={idx} 
+                     onClick={() => {
+                       setSelectedFriend(friend);
+                       setSelectedFriendFolderId(null);
+                     }}
+                     className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 cursor-pointer hover:border-[#646B99]/30 hover:shadow-md transition-all shadow-sm group"
+                   >
+                     <div className="flex items-center gap-4">
+                       <div className="w-10 h-10 rounded-xl bg-[#646B99]/10 flex items-center justify-center text-[#646B99] font-bold text-sm">
+                         {friend[0].toUpperCase()}
+                       </div>
+                       <div>
+                         <span className="text-sm font-semibold text-slate-700 group-hover:text-[#646B99] transition-colors">{friend}</span>
+                         <p className="text-[10px] text-slate-400">Ver coleções compartilhadas</p>
+                       </div>
+                     </div>
+                     <div className="flex items-center gap-2">
+                       <span className="text-[9px] text-slate-400 uppercase tracking-widest font-semibold">Ver Pastas</span>
+                       <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-slate-300 group-hover:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                     </div>
+                   </div>
+                 ))
+               )}
+            </div>
+          </div>
+        ) : (
+          // --- VIEWING A FRIEND'S FOLDERS ---
+          selectedFriendFolderId === null ? (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              {/* Header */}
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                <button 
+                  onClick={() => setSelectedFriend(null)}
+                  className="text-xs font-semibold text-slate-400 hover:text-slate-600 flex items-center gap-1"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                  Amigos
+                </button>
+                <span className="text-slate-300">/</span>
+                <span className="text-xs font-semibold text-slate-700">Pastas de {selectedFriend}</span>
+              </div>
+
+              {/* Folders List of Friend */}
+              <div className="grid gap-3 mt-4">
+                {getFriendFolders(selectedFriend).map(folder => (
+                  <div 
+                    key={folder.id}
+                    onClick={() => setSelectedFriendFolderId(folder.id)}
+                    className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:border-[#646B99]/30 transition-all group"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${folder.isGeneral ? 'bg-[#646B99]/10 text-[#646B99]' : 'bg-indigo-50 text-indigo-500'}`}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-800 group-hover:text-[#646B99] transition-colors">{folder.name}</h3>
+                        <p className="text-[10px] text-slate-400">{folder.isGeneral ? 'Todas as cartas de troca' : 'Pasta selecionada'}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs bg-slate-50 border border-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-medium">
+                        {folder.cardIds.length}
+                      </span>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            // --- VIEWING A FRIEND'S SPECIFIC FOLDER CARDS ---
+            (() => {
+              const friendFolders = getFriendFolders(selectedFriend);
+              const folder = friendFolders.find(f => f.id === selectedFriendFolderId);
+              if (!folder) {
+                setSelectedFriendFolderId(null);
+                return null;
+              }
+
+              // Filter our mock friend cards
+              const folderCards = MOCK_FRIEND_CARDS.filter(c => folder.cardIds.includes(c.id));
+
+              return (
+                <div className="space-y-4 animate-in fade-in duration-300">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <button 
+                      onClick={() => setSelectedFriendFolderId(null)}
+                      className="text-xs font-semibold text-slate-400 hover:text-slate-600 flex items-center gap-1"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                      Pastas
+                    </button>
+                    <span className="text-xs font-semibold text-slate-700 truncate max-w-[200px]">
+                      {folder.name} ({selectedFriend})
+                    </span>
+                    <div className="w-12" />
+                  </div>
+
+                  <div className="grid gap-3">
+                    {folderCards.map(card => (
+                      <div key={card.id} className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                        <img src={card.imageUrl} className="w-14 h-20 rounded-lg object-contain bg-slate-50/50 border border-slate-100/40" />
+                        
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-slate-800 font-semibold truncate text-xs">{card.name}</h4>
+                          <p className="text-[9px] text-slate-400">{card.rarity} • #{getCompleteCardNumber(card)} ({card.set.name})</p>
+                          <span className="inline-block mt-2 px-1.5 py-0.5 bg-[#646B99]/5 text-[#646B99] rounded text-[8px] font-semibold">
+                            NM: 1
+                          </span>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-xs font-bold text-[#646B99]">
+                            ${card.marketPrice ? card.marketPrice.toFixed(2) : '0.00'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()
+          )
+        )
+      )}
+
+      {/* --- MODAL: CREATE NEW FOLDER --- */}
+      {showCreateFolder && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+           <div className="bg-white border border-slate-100 w-full max-w-xs rounded-2xl shadow-2xl p-6">
+              <h3 className="text-sm font-semibold text-slate-800 mb-1">Criar Nova Pasta</h3>
+              <p className="text-[10px] text-slate-400 mb-4">Escolha um nome para organizar as cartas selecionadas.</p>
+              
+              <input 
+                type="text" 
+                placeholder="Ex: Cartas Ultra Raras, Para Sábado..."
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-[#646B99] mb-4"
+              />
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => {
+                    setShowCreateFolder(false);
+                    setNewFolderName('');
+                  }}
+                  className="flex-1 py-2 bg-slate-50 text-slate-400 text-xs rounded-lg hover:bg-slate-100 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleCreateFolder}
+                  className="flex-1 py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors disabled:opacity-50"
+                  disabled={!newFolderName.trim()}
+                >
+                  Criar Pasta
+                </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* --- MODAL: ADD FRIEND --- */}
+      {showAddFriend && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+           <div className="bg-white border border-slate-100 w-full max-w-xs rounded-2xl shadow-2xl p-6">
+              <h3 className="text-sm font-semibold text-slate-800 mb-1">Adicionar Amigo</h3>
+              <p className="text-[10px] text-slate-400 mb-4">Insira o username do seu amigo para conectar.</p>
+              
+              <input 
+                type="text" 
+                placeholder="Username do amigo..."
+                value={friendName}
+                onChange={(e) => setFriendName(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-[#646B99] mb-4"
+              />
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => {
+                    setShowAddFriend(false);
+                    setFriendName('');
+                  }}
+                  className="flex-1 py-2 bg-slate-50 text-slate-400 text-xs rounded-lg hover:bg-slate-100 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleAddFriend}
+                  className="flex-1 py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors disabled:opacity-50"
+                  disabled={!friendName.trim()}
+                >
+                  Confirmar
+                </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* --- MODAL: MANAGE CARDS IN CUSTOM FOLDER --- */}
+      {showManageCards && selectedFolderId && (
+        (() => {
+          const currentFolder = folders.find(f => f.id === selectedFolderId);
+          if (!currentFolder) return null;
+
+          return (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+               <div className="bg-white border border-slate-100 w-full max-w-sm rounded-2xl shadow-2xl p-6 max-h-[85vh] flex flex-col">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-slate-800">Gerenciar Pasta</h3>
+                    <p className="text-[10px] text-slate-400">Selecione quais cartas marcadas para troca pertencem à pasta: <span className="font-semibold text-slate-600">{currentFolder.name}</span></p>
+                  </div>
+
+                  {tradeCards.length === 0 ? (
+                    <div className="flex-1 overflow-y-auto py-10 text-center bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center justify-center">
+                      <p className="text-xs text-slate-400">Você não possui nenhuma carta marcada para troca.</p>
+                      <p className="text-[9px] text-slate-300 uppercase mt-1">Marque-as primeiro na aba Home</p>
+                    </div>
+                  ) : (
+                    <div className="flex-1 overflow-y-auto space-y-2 pr-1 my-2 max-h-[45vh]">
+                      {tradeCards.map(({ card }) => {
+                        const isInFolder = currentFolder.cardIds.includes(card.id);
+                        return (
+                          <div 
+                            key={card.id}
+                            onClick={() => handleToggleCardInFolder(currentFolder.id, card.id)}
+                            className={`flex items-center gap-3 p-2 rounded-xl border cursor-pointer transition-all ${isInFolder ? 'border-[#646B99]/30 bg-[#646B99]/5' : 'border-slate-100 hover:bg-slate-50'}`}
+                          >
+                            <input 
+                              type="checkbox" 
+                              checked={isInFolder}
+                              onChange={() => {}} // Controlled via onClick on div
+                              className="w-3.5 h-3.5 text-[#646B99] border-slate-300 rounded focus:ring-[#646B99]"
+                            />
+                            <img src={card.imageUrl} className="w-10 h-14 object-contain rounded bg-white border border-slate-100/50" />
+                            <div className="flex-1 min-w-0">
+                              <h4 className="text-[11px] font-semibold text-slate-700 truncate">{card.name}</h4>
+                              <p className="text-[9px] text-slate-400 truncate">{card.rarity} • #{card.number}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
+                    <button 
+                      onClick={() => setShowManageCards(false)}
+                      className="w-full py-2.5 bg-[#646B99] hover:bg-[#4d5275] text-white text-xs font-semibold rounded-xl transition-colors"
+                    >
+                      Concluído
+                    </button>
+                  </div>
+               </div>
+            </div>
+          );
+        })()
+      )}
+      {editingCard && (
+        <CardModal
+          card={editingCard}
+          user={user}
+          onUpdateUser={onUpdateUser}
+          onClose={() => setEditingCard(null)}
+          showWarnings={true}
+        />
+      )}
+    </div>
+  );
+};
+
+export default TradesView;
