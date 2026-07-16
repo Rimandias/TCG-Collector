@@ -76,36 +76,44 @@ const deleteFolders = db.prepare(`DELETE FROM trade_folders WHERE user_id = ?`);
 const insertFolder = db.prepare(`INSERT INTO trade_folders (id, user_id, name) VALUES (?, ?, ?)`);
 const insertFolderCard = db.prepare(`INSERT OR IGNORE INTO trade_folder_cards (folder_id, card_id) VALUES (?, ?)`);
 
-export const replaceUserData = db.transaction((userId: string, data: UserDataInput) => {
-  updateProfile.run(data.username ?? '', data.avatarUrl ?? '', userId);
+export function replaceUserData(userId: string, data: UserDataInput) {
+  db.exec('BEGIN');
+  try {
+    updateProfile.run(data.username ?? '', data.avatarUrl ?? '', userId);
 
-  deleteUserCards.run(userId);
-  for (const [cardId, card] of Object.entries(data.ownedCards || {})) {
-    insertUserCard.run(
-      userId,
-      cardId,
-      card.isOwned ? 1 : 0,
-      card.isForTrade ? 1 : 0,
-      JSON.stringify(card.variations || {})
-    );
-  }
-
-  deleteWishlist.run(userId);
-  for (const cardId of data.wishlist || []) {
-    insertWishlist.run(userId, cardId);
-  }
-
-  deleteFriends.run(userId);
-  for (const name of data.friends || []) {
-    insertFriend.run(userId, name);
-  }
-
-  // trade_folder_cards cascade-deletes via FK when trade_folders rows are removed
-  deleteFolders.run(userId);
-  for (const folder of data.folders || []) {
-    insertFolder.run(folder.id, userId, folder.name);
-    for (const cardId of folder.cardIds || []) {
-      insertFolderCard.run(folder.id, cardId);
+    deleteUserCards.run(userId);
+    for (const [cardId, card] of Object.entries(data.ownedCards || {})) {
+      insertUserCard.run(
+        userId,
+        cardId,
+        card.isOwned ? 1 : 0,
+        card.isForTrade ? 1 : 0,
+        JSON.stringify(card.variations || {})
+      );
     }
+
+    deleteWishlist.run(userId);
+    for (const cardId of data.wishlist || []) {
+      insertWishlist.run(userId, cardId);
+    }
+
+    deleteFriends.run(userId);
+    for (const name of data.friends || []) {
+      insertFriend.run(userId, name);
+    }
+
+    // trade_folder_cards cascade-deletes via FK when trade_folders rows are removed
+    deleteFolders.run(userId);
+    for (const folder of data.folders || []) {
+      insertFolder.run(folder.id, userId, folder.name);
+      for (const cardId of folder.cardIds || []) {
+        insertFolderCard.run(folder.id, cardId);
+      }
+    }
+
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
   }
-});
+}
