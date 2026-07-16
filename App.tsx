@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User, AppTab, PokemonSet } from './types';
-import { loadUser, saveUser } from './db';
+import { fetchCurrentUser, persistUser, logout as clearSession, getToken } from './auth';
 import HomeView from './views/HomeView';
 import CollectionView from './views/CollectionView';
 import TradesView from './views/TradesView';
@@ -11,32 +11,50 @@ import BottomNav from './components/BottomNav';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.HOME);
   const [selectedSeries, setSelectedSeries] = useState<string | null>(null);
   const [selectedSet, setSelectedSet] = useState<PokemonSet | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const savedUser = loadUser();
-    if (savedUser) {
-      setUser(savedUser);
-    }
+    const restoreSession = async () => {
+      if (getToken()) {
+        const savedUser = await fetchCurrentUser();
+        if (savedUser) setUser(savedUser);
+      }
+      setCheckingSession(false);
+    };
+    restoreSession();
   }, []);
 
   const handleLogin = (userData: User) => {
     setUser(userData);
-    saveUser(userData);
   };
 
   const handleLogout = () => {
     setUser(null);
-    localStorage.removeItem('poketracker_user_data');
+    clearSession();
   };
 
   const handleUpdateUser = (updatedUser: User) => {
     setUser(updatedUser);
-    saveUser(updatedUser);
+
+    // Agrupa atualizações rápidas (ex: cliques repetidos de +/-) em uma única gravação no servidor
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    persistTimer.current = setTimeout(() => {
+      persistUser(updatedUser);
+    }, 500);
   };
+
+  if (checkingSession) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-white">
+        <div className="w-10 h-10 border-4 border-[#646B99] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!user) {
     return <LoginView onLogin={handleLogin} />;

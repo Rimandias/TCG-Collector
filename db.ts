@@ -1,16 +1,9 @@
 
 import { User, UserCardData, Card, CardCondition, VARIATION_TYPES } from './types';
 
-const USER_KEY = 'poketracker_user_data';
-
-export const saveUser = (user: User) => {
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
-};
-
-export const loadUser = (): User | null => {
-  const data = localStorage.getItem(USER_KEY);
-  return data ? JSON.parse(data) : null;
-};
+// A persistência de dados do usuário (coleção, trocas, wishlist) vive no backend
+// (ver auth.ts: fetchCurrentUser / persistUser). Este arquivo só contém helpers puros
+// de leitura/transformação do estado do usuário em memória.
 
 export const getCardTotalQuantity = (variations: Record<string, any>): number => {
   if (!variations) return 0;
@@ -134,7 +127,6 @@ export const updateCardStatus = (user: User, cardId: string, updates: Partial<Us
       [cardId]: updatedCard
     }
   };
-  saveUser(newUser);
   return newUser;
 };
 

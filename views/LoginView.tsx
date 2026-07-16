@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
+import { registerUser, loginUser, AuthError } from '../auth';
 
 interface LoginViewProps {
   onLogin: (user: User) => void;
@@ -14,6 +15,8 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     email: '',
     password: ''
   });
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -22,19 +25,22 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     return () => clearTimeout(timer);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.email || !formData.password) return;
+    setError(null);
+    setSubmitting(true);
 
-    const mockUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
-      username: formData.username || 'Treinador',
-      email: formData.email,
-      avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${formData.email}`,
-      ownedCards: {},
-      friends: []
-    };
-    onLogin(mockUser);
+    try {
+      const user = isRegister
+        ? await registerUser(formData.username || 'Treinador', formData.email, formData.password)
+        : await loginUser(formData.email, formData.password);
+      onLogin(user);
+    } catch (err) {
+      setError(err instanceof AuthError ? err.message : 'Não foi possível conectar ao servidor.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (showSplash) {
@@ -99,12 +105,17 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs uppercase tracking-widest text-slate-900 outline-none focus:border-[#646B99] transition-colors"
           />
 
+          {error && (
+            <p className="text-red-500 text-[10px] uppercase tracking-widest text-center">{error}</p>
+          )}
+
           <div className="pt-6">
-            <button 
+            <button
               type="submit"
-              className="w-full py-5 bg-slate-900 text-white text-xs rounded-full hover:bg-slate-800 transition-all shadow-xl uppercase tracking-[0.3em]"
+              disabled={submitting}
+              className="w-full py-5 bg-slate-900 text-white text-xs rounded-full hover:bg-slate-800 transition-all shadow-xl uppercase tracking-[0.3em] disabled:opacity-50"
             >
-              {isRegister ? 'Criar Registro' : 'Acessar Pasta'}
+              {submitting ? 'Aguarde...' : isRegister ? 'Criar Registro' : 'Acessar Pasta'}
             </button>
           </div>
 
