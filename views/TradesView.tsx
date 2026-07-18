@@ -681,46 +681,22 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                   </div>
                 </div>
 
-                {/* Toggle visual: Cartas vs Coleção */}
-                <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
-                  <button 
-                    onClick={() => {
-                      setFolderViewMode('cards');
-                      setSelectedFolderSeries(null);
-                      setSelectedFolderSetId(null);
-                    }}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${folderViewMode === 'cards' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                  >
-                    Cartas
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setFolderViewMode('collections');
-                      setSelectedFolderSeries(null);
-                      setSelectedFolderSetId(null);
-                    }}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${folderViewMode === 'collections' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                  >
-                    Coleção
-                  </button>
-                </div>
-
-                {/* Search Bar & Advanced Filters (rendered in 'cards' view or when a set is active in 'collections' view) */}
-                {(folderViewMode === 'cards' || selectedFolderSetId !== null) && (
-                  <div className="space-y-3 bg-slate-50/50 p-3 rounded-xl border border-slate-100 animate-in slide-in-from-top duration-200">
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                        </span>
-                        <input
-                          type="text"
-                          placeholder="Buscar por nome, número ou set..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#646B99] transition-all shadow-sm"
-                        />
-                      </div>
+                {/* Campo de busca interno da pasta (sempre visível) */}
+                <div className="space-y-3 bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="Buscar por nome, número ou set..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#646B99] transition-all shadow-sm"
+                      />
+                    </div>
+                    {(folderViewMode === 'cards' || selectedFolderSetId !== null) && (
                       <button
                         onClick={() => setShowFolderFilters(!showFolderFilters)}
                         className={`px-3 py-2 border rounded-xl flex items-center gap-1.5 text-xs font-semibold transition-all ${showFolderFilters ? 'bg-[#646B99] text-white border-[#646B99]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
@@ -728,9 +704,34 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                         <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                         Filtros
                       </button>
-                    </div>
+                    )}
+                  </div>
 
-                    {showFolderFilters && (
+                  {/* Toggle visual: todas as cartas vs coleções */}
+                  <div className="flex bg-white p-1 rounded-xl border border-slate-200">
+                    <button
+                      onClick={() => {
+                        setFolderViewMode('cards');
+                        setSelectedFolderSeries(null);
+                        setSelectedFolderSetId(null);
+                      }}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${folderViewMode === 'cards' ? 'bg-[#646B99] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      Todas as Cartas
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFolderViewMode('collections');
+                        setSelectedFolderSeries(null);
+                        setSelectedFolderSetId(null);
+                      }}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${folderViewMode === 'collections' ? 'bg-[#646B99] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      Coleções
+                    </button>
+                  </div>
+
+                  {(folderViewMode === 'cards' || selectedFolderSetId !== null) && showFolderFilters && (
                       <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 animate-in fade-in duration-200">
                         <div className="flex flex-col gap-1">
                           <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Raridade</span>
@@ -807,7 +808,6 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                       </div>
                     )}
                   </div>
-                )}
 
                 {/* Folder Rendering - Based on visual toggles */}
                 {folderViewMode === 'cards' ? (
