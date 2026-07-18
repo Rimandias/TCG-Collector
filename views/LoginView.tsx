@@ -28,6 +28,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.email || !formData.password) return;
+    if (isRegister && formData.password.length < 8) {
+      setError('A senha precisa ter pelo menos 8 caracteres.');
+      return;
+    }
     setError(null);
     setSubmitting(true);
 

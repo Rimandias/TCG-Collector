@@ -23,11 +23,20 @@ const authLimiter = rateLimit({
 const registerSchema = z.object({
   username: z.string().trim().min(2).max(40),
   email: z.string().trim().toLowerCase().email(),
-  password: z.string().min(6).max(200),
+  password: z.string().min(8).max(200),
 });
 
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(1).max(200),
+});
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(200),
+  newPassword: z.string().min(8).max(200),
+});
+
+const deleteAccountSchema = z.object({
   password: z.string().min(1).max(200),
 });
 
@@ -36,6 +45,9 @@ const insertUser = db.prepare(`
   VALUES (?, ?, ?, ?, ?, ?, ?)
 `);
 const findByEmail = db.prepare(`SELECT id, password_hash FROM users WHERE email = ?`);
+const findPasswordHashById = db.prepare(`SELECT password_hash FROM users WHERE id = ?`);
+const updatePasswordHash = db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`);
+const deleteUserById = db.prepare(`DELETE FROM users WHERE id = ?`);
 
 function issueToken(userId: string) {
   return jwt.sign({ sub: userId }, env.jwtSecret, { expiresIn: '30d' });
@@ -86,4 +98,37 @@ authRouter.get('/me', requireAuth, (req: AuthedRequest, res) => {
   const user = assembleFullUser(req.userId!);
   if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
   return res.json({ user });
+});
+
+authRouter.patch('/password', authLimiter, requireAuth, (req: AuthedRequest, res) => {
+  const parsed = changePasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Dados inválidos.', details: parsed.error.flatten() });
+  }
+  const { currentPassword, newPassword } = parsed.data;
+
+  const row = findPasswordHashById.get(req.userId!) as { password_hash: string } | undefined;
+  if (!row || !bcrypt.compareSync(currentPassword, row.password_hash)) {
+    return res.status(401).json({ error: 'Senha atual incorreta.' });
+  }
+
+  const newHash = bcrypt.hashSync(newPassword, 12);
+  updatePasswordHash.run(newHash, req.userId!);
+  return res.json({ ok: true });
+});
+
+authRouter.delete('/me', authLimiter, requireAuth, (req: AuthedRequest, res) => {
+  const parsed = deleteAccountSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Confirme sua senha para excluir a conta.' });
+  }
+
+  const row = findPasswordHashById.get(req.userId!) as { password_hash: string } | undefined;
+  if (!row || !bcrypt.compareSync(parsed.data.password, row.password_hash)) {
+    return res.status(401).json({ error: 'Senha incorreta.' });
+  }
+
+  // ON DELETE CASCADE remove coleção, pastas, wishlist, amizades e trocas do usuário.
+  deleteUserById.run(req.userId!);
+  return res.json({ ok: true });
 });

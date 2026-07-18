@@ -222,8 +222,8 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
   // Estrutura de Eras/Coleções idêntica à Home
   const eras = useMemo(() => {
-    const uniqueSeries = Array.from(new Set(sets.map(s => s.series)));
-    
+    const uniqueSeries: string[] = Array.from(new Set(sets.map(s => s.series)));
+
     const getEraOldestReleaseDate = (eraName: string) => {
       const eraSets = sets.filter(s => s.series === eraName);
       if (eraSets.length === 0) return '9999-99-99';
@@ -1108,7 +1108,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                           <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold text-center mb-2">Selecione a Era</p>
                           <div className="grid gap-3">
                             {eras.map(era => {
-                              const count = filteredFolderCards.filter(tc => tc.card.set.series === era).length;
+                              const count = filteredFolderCards.filter(tc => sets.find(s => s.id === tc.card.set.id)?.series === era).length;
                               if (count === 0 && !isWishlist) return null; // Hide empty eras
                               return (
                                 <button

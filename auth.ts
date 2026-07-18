@@ -126,6 +126,45 @@ export const removeFriend = async (friendUserId: string): Promise<User | null> =
   return body.user;
 };
 
+export const changePassword = async (currentPassword: string, newPassword: string): Promise<{ ok: boolean; error?: string }> => {
+  const token = getToken();
+  if (!token) return { ok: false, error: 'Sessão expirada, faça login novamente.' };
+
+  const response = await fetch(`${API_BASE}/auth/password`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+
+  if (!response.ok) {
+    return { ok: false, error: await parseErrorMessage(response, 'Não foi possível atualizar a senha.') };
+  }
+  return { ok: true };
+};
+
+export const deleteAccount = async (password: string): Promise<{ ok: boolean; error?: string }> => {
+  const token = getToken();
+  if (!token) return { ok: false, error: 'Sessão expirada, faça login novamente.' };
+
+  const response = await fetch(`${API_BASE}/auth/me`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ password }),
+  });
+
+  if (!response.ok) {
+    return { ok: false, error: await parseErrorMessage(response, 'Não foi possível excluir a conta.') };
+  }
+  clearToken();
+  return { ok: true };
+};
+
 export const logout = () => {
   clearToken();
 };

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User } from '../types';
-import { addFriendByCode, removeFriend as removeFriendRequest } from '../auth';
+import { addFriendByCode, removeFriend as removeFriendRequest, changePassword, deleteAccount } from '../auth';
 
 interface SettingsViewProps {
   user: User;
@@ -22,7 +22,10 @@ const formatAddedAt = (iso: string) => {
 const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogout }) => {
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState(user.username);
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [pwdError, setPwdError] = useState<string | null>(null);
+  const [changingPwd, setChangingPwd] = useState(false);
   const [showPwdMsg, setShowPwdMsg] = useState(false);
 
   const [showAddFriend, setShowAddFriend] = useState(false);
@@ -30,6 +33,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
   const [addFriendError, setAddFriendError] = useState<string | null>(null);
   const [addingFriend, setAddingFriend] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
+
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState('');
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const handleChangeAvatar = () => {
     const newAvatar = `https://picsum.photos/seed/${Math.random()}/200`;
@@ -41,13 +49,23 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
     setEditingName(false);
   };
 
-  const handleUpdatePassword = (e: React.FormEvent) => {
+  const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword) {
-      setShowPwdMsg(true);
-      setNewPassword('');
-      setTimeout(() => setShowPwdMsg(false), 3000);
+    if (!currentPassword || !newPassword) return;
+    setPwdError(null);
+    setChangingPwd(true);
+
+    const { ok, error } = await changePassword(currentPassword, newPassword);
+    setChangingPwd(false);
+
+    if (!ok) {
+      setPwdError(error || 'Não foi possível atualizar a senha.');
+      return;
     }
+    setCurrentPassword('');
+    setNewPassword('');
+    setShowPwdMsg(true);
+    setTimeout(() => setShowPwdMsg(false), 3000);
   };
 
   const handleCopyCode = async () => {
@@ -85,6 +103,22 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
     if (updatedUser) {
       onUpdateUser(updatedUser);
     }
+  };
+
+  const handleDeleteAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deleteAccountPassword) return;
+    setDeletingAccount(true);
+    setDeleteAccountError(null);
+
+    const { ok, error } = await deleteAccount(deleteAccountPassword);
+    setDeletingAccount(false);
+
+    if (!ok) {
+      setDeleteAccountError(error || 'Não foi possível excluir a conta.');
+      return;
+    }
+    onLogout();
   };
 
   const friendsSortedByDate = [...user.friends].sort(
@@ -135,23 +169,36 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
              </div>
           </div>
 
-          <form onSubmit={handleUpdatePassword} className="space-y-4">
+          <form onSubmit={handleUpdatePassword} className="space-y-3">
             <h4 className="text-[10px] text-slate-300 uppercase tracking-widest">Alterar Senha</h4>
+            <input
+              type="password"
+              placeholder="Senha atual..."
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              className="w-full bg-white border border-slate-100 rounded-xl px-4 py-2 text-sm text-slate-700 focus:ring-1 focus:ring-[#646B99] outline-none"
+            />
             <div className="flex gap-3">
               <input
                 type="password"
-                placeholder="Nova senha..."
+                placeholder="Nova senha (mín. 8 caracteres)..."
+                autoComplete="new-password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 className="flex-1 bg-white border border-slate-100 rounded-xl px-4 py-2 text-sm text-slate-700 focus:ring-1 focus:ring-[#646B99] outline-none"
               />
               <button
                 type="submit"
-                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl text-slate-600 text-sm transition-colors"
+                disabled={changingPwd || !currentPassword || newPassword.length < 8}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl text-slate-600 text-sm transition-colors disabled:opacity-50"
               >
-                Atualizar
+                {changingPwd ? 'Atualizando...' : 'Atualizar'}
               </button>
             </div>
+            {pwdError && (
+              <p className="text-red-500 text-[10px]">{pwdError}</p>
+            )}
             {showPwdMsg && (
               <p className="text-emerald-500 text-[10px] uppercase tracking-widest">Senha atualizada com sucesso!</p>
             )}
@@ -214,6 +261,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
         >
           Sair da Conta
         </button>
+
+        <button
+          onClick={() => { setShowDeleteAccount(true); setDeleteAccountError(null); setDeleteAccountPassword(''); }}
+          className="w-full py-3 text-red-300 hover:text-red-500 transition-colors uppercase tracking-[0.2em] text-[9px]"
+        >
+          Excluir minha conta permanentemente
+        </button>
       </div>
 
       {showAddFriend && (
@@ -249,6 +303,49 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
                   className="flex-1 py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors disabled:opacity-50"
                 >
                   {addingFriend ? 'Adicionando...' : 'Confirmar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showDeleteAccount && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-100 w-full max-w-xs rounded-2xl shadow-2xl p-6">
+            <h3 className="text-sm font-semibold text-red-500 mb-1">Excluir conta permanentemente</h3>
+            <p className="text-[10px] text-slate-400 mb-4">
+              Essa ação é irreversível. Sua coleção, pastas, lista de desejos, amizades e trocas serão apagadas para sempre. Confirme sua senha para continuar.
+            </p>
+
+            <form onSubmit={handleDeleteAccount}>
+              <input
+                type="password"
+                placeholder="Sua senha"
+                autoComplete="current-password"
+                value={deleteAccountPassword}
+                onChange={(e) => setDeleteAccountPassword(e.target.value)}
+                autoFocus
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-red-300 mb-2"
+              />
+              {deleteAccountError && (
+                <p className="text-red-500 text-[10px] mb-2">{deleteAccountError}</p>
+              )}
+
+              <div className="flex gap-3 mt-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowDeleteAccount(false); setDeleteAccountPassword(''); setDeleteAccountError(null); }}
+                  className="flex-1 py-2 bg-slate-50 text-slate-400 text-xs rounded-lg hover:bg-slate-100 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!deleteAccountPassword || deletingAccount}
+                  className="flex-1 py-2 bg-red-500 text-white text-xs font-semibold rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+                >
+                  {deletingAccount ? 'Excluindo...' : 'Excluir conta'}
                 </button>
               </div>
             </form>

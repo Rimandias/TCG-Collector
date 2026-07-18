@@ -170,8 +170,8 @@ const HomeView: React.FC<HomeViewProps> = ({
   }, [selectedSet]);
 
   const eras = useMemo(() => {
-    const uniqueSeries = Array.from(new Set(sets.map(s => s.series)));
-    
+    const uniqueSeries: string[] = Array.from(new Set(sets.map(s => s.series)));
+
     // Helper to get the oldest release date of an era
     const getEraOldestReleaseDate = (eraName: string) => {
       const eraSets = sets.filter(s => s.series === eraName);
