@@ -127,7 +127,7 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
               disabled={busy}
               className="w-full py-2.5 bg-[#646B99] text-white text-xs font-semibold rounded-xl hover:bg-[#4d5275] transition-colors disabled:opacity-50"
             >
-              Pagar o valor (${requested.total.toFixed(2)})
+              Receber em dinheiro (${requested.total.toFixed(2)})
             </button>
             <button
               onClick={() => runAction('choose_offer')}

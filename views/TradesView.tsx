@@ -8,7 +8,7 @@ import CardModal from '../components/CardModal';
 import FriendFolderBrowser from '../components/FriendFolderBrowser';
 import TradeActionModal from '../components/TradeActionModal';
 
-const TRADE_POLL_INTERVAL_MS = 15000;
+const TRADE_POLL_INTERVAL_FAST_MS = 3000;
 
 function needsMyAction(trade: Trade, myId: string): boolean {
   if (trade.status === 'completed' || trade.status === 'cancelled') return false;
@@ -44,14 +44,20 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   const [activeTradeModal, setActiveTradeModal] = useState<Trade | null>(null);
   const [dismissedTradeIds, setDismissedTradeIds] = useState<Set<string>>(new Set());
 
+  // Enquanto a aba Trocas estiver aberta, verifica com frequência pra refletir
+  // a resposta do outro lado quase na hora (mais rápido ainda com um popup aberto).
   useEffect(() => {
     let cancelled = false;
+    let interval: ReturnType<typeof setInterval>;
+
     const poll = async () => {
       const trades = await getMyTrades();
       if (!cancelled) setMyTrades(trades);
     };
+
     poll();
-    const interval = setInterval(poll, TRADE_POLL_INTERVAL_MS);
+    interval = setInterval(poll, TRADE_POLL_INTERVAL_FAST_MS);
+
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -72,6 +78,27 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
       setActiveTradeModal(actionableTrades[0]);
     }
   }, [actionableTrades, activeTradeModal]);
+
+  // Mantém o popup aberto sempre com o status mais recente vindo do polling, e
+  // fecha automaticamente (com atualização da coleção) assim que a troca conclui
+  // ou é cancelada, sem precisar de nenhuma ação manual do usuário.
+  useEffect(() => {
+    if (!activeTradeModal) return;
+    const latest = myTrades.find((t) => t.id === activeTradeModal.id);
+    if (!latest || latest.updatedAt === activeTradeModal.updatedAt) return;
+
+    if (latest.status === 'completed' || latest.status === 'cancelled') {
+      setActiveTradeModal(null);
+      if (latest.status === 'completed') {
+        fetchCurrentUser().then((freshUser) => {
+          if (freshUser) onUpdateUser(freshUser);
+        });
+      }
+    } else {
+      setActiveTradeModal(latest);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myTrades]);
 
   const handleTradeChanged = async (updated: Trade) => {
     setMyTrades((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
@@ -1195,7 +1222,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
           <div className="bg-white border border-slate-100 w-full max-w-xs rounded-2xl shadow-2xl p-6">
             <h3 className="text-sm font-semibold text-slate-800 mb-1">Confirmar Pedido de Troca</h3>
             <p className="text-[10px] text-slate-400 mb-4">
-              Você está pedindo <span className="font-semibold text-slate-600">{pendingTradeConfirm.items.length} carta(s)</span> de {selectedFriend.username}.
+              Você está pedindo <span className="font-semibold text-slate-600">{pendingTradeConfirm.items.reduce((sum, i) => sum + i.quantity, 0)} carta(s)</span> de {selectedFriend.username}.
             </p>
             <div className="bg-slate-50 rounded-xl p-4 text-center mb-4 border border-slate-100">
               <p className="text-[9px] text-slate-400 uppercase tracking-widest">Valor total</p>
@@ -1228,7 +1255,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                   if (trade) {
                     setPendingTradeConfirm(null);
                     setTradeSuccessMessage(
-                      `Pedido enviado! ${pendingTradeConfirm.items.length} carta(s) por $${pendingTradeConfirm.totalValue.toFixed(2)}, aguardando ${selectedFriend.username}.`
+                      `Pedido enviado! ${pendingTradeConfirm.items.reduce((sum, i) => sum + i.quantity, 0)} carta(s) por $${pendingTradeConfirm.totalValue.toFixed(2)}, aguardando ${selectedFriend.username}.`
                     );
                   }
                 }}

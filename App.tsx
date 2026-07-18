@@ -174,7 +174,7 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-16">
+      <main className="flex-1 overflow-y-auto pt-4 pb-16">
         {renderContent()}
       </main>
 

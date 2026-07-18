@@ -54,7 +54,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   const getSetLogoForSeries = useCallback((seriesName: string) => {
     const logoOverrides: Record<string, string> = {
       'Diamond & Pearl': 'https://images.pokemontcg.io/dp1/logo.png',
-      'HeartGold & SoulSilver': 'https://images.pokemontcg.io/hs1/logo.png',
+      'HeartGold & SoulSilver': 'https://images.pokemontcg.io/hgss1/logo.png',
       'Black & White': 'https://images.pokemontcg.io/bw1/logo.png',
       'XY': 'https://images.pokemontcg.io/xy1/logo.png',
       'Sun & Moon': 'https://images.pokemontcg.io/sm1/logo.png',
@@ -363,7 +363,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   if (selectedSet) {
     return (
       <div className="animate-in slide-in-from-right duration-300 px-4 pb-10">
-        <div className="flex items-center justify-center mb-6 pt-2">
+        <div className="flex items-center justify-center mb-6">
             <span className="text-sm text-slate-500 text-center font-medium uppercase tracking-wider">
                 {selectedSet.releaseDate.split('-')[0]} — {selectedSet.name}
             </span>
@@ -468,8 +468,8 @@ const HomeView: React.FC<HomeViewProps> = ({
         </div>
 
         {/* Scrollable Content Layer */}
-        <div className="relative z-10 p-4">
-            <div className="flex items-center justify-center mb-6 pt-2">
+        <div className="relative z-10 px-4 pb-4">
+            <div className="flex items-center justify-center mb-6">
                 <span className="text-xs text-slate-500 uppercase tracking-[0.2em] font-semibold">{selectedSeries}</span>
             </div>
            
@@ -537,7 +537,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   }
 
   return (
-    <div className="bg-white px-8 pb-10 flex flex-col items-center gap-6 animate-in fade-in duration-500 pt-4">
+    <div className="bg-white px-8 pb-10 flex flex-col items-center gap-6 animate-in fade-in duration-500">
       {searchQuery.trim() !== '' ? (
         // Se houver pesquisa, exibe os resultados globais de busca
         <div className="w-full space-y-4">

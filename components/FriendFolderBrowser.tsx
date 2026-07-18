@@ -19,7 +19,7 @@ interface ResolvedLine {
   card: Card | null;
   variation: string;
   condition: string;
-  quantity: number;
+  availableQuantity: number;
   price: number;
 }
 
@@ -38,7 +38,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
   const [folders, setFolders] = useState<VisibleFolder[]>([]);
   const [cardsById, setCardsById] = useState<Record<string, Card>>({});
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
-  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [selectedQuantities, setSelectedQuantities] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const load = async () => {
@@ -79,7 +79,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
           card: cardsById[card.cardId] || null,
           variation: item.variation,
           condition: item.condition,
-          quantity: item.quantity,
+          availableQuantity: item.quantity,
           price: item.price,
         });
       }
@@ -87,25 +87,31 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
     return result;
   }, [selectedFolder, cardsById]);
 
-  const toggleLine = (line: ResolvedLine) => {
+  const setLineQuantity = (line: ResolvedLine, quantity: number) => {
     const key = selectionKey(line.cardId, line.variation, line.condition);
-    setSelectedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+    const clamped = Math.max(0, Math.min(quantity, line.availableQuantity));
+    setSelectedQuantities((prev) => {
+      const next = { ...prev };
+      if (clamped === 0) delete next[key];
+      else next[key] = clamped;
       return next;
     });
   };
 
-  const selectedLines = lines.filter((line) => selectedKeys.has(selectionKey(line.cardId, line.variation, line.condition)));
-  const totalValue = selectedLines.reduce((sum, line) => sum + line.quantity * line.price, 0);
+  const selectedLines = lines
+    .map((line) => ({ line, quantity: selectedQuantities[selectionKey(line.cardId, line.variation, line.condition)] || 0 }))
+    .filter((entry) => entry.quantity > 0);
+
+  const totalValue = selectedLines.reduce((sum, { line, quantity }) => sum + quantity * line.price, 0);
+  const totalCards = selectedLines.reduce((sum, { quantity }) => sum + quantity, 0);
 
   const handleSubmit = () => {
     if (!selectedFolder) return;
-    const items: TradeItemSelection[] = selectedLines.map((line) => ({
+    const items: TradeItemSelection[] = selectedLines.map(({ line, quantity }) => ({
       cardId: line.cardId,
       variation: line.variation,
       condition: line.condition,
+      quantity,
     }));
     onSubmit(selectedFolder.id, items, totalValue);
   };
@@ -175,6 +181,8 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
         <span className="text-xs font-semibold text-slate-700 truncate max-w-[180px]">{selectedFolder.name}</span>
       </div>
 
+      {helperText && <p className="text-[10px] text-slate-400">{helperText}</p>}
+
       {lines.length === 0 ? (
         <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-100">
           <p className="text-slate-400 text-sm">Nenhuma carta disponível nesta pasta.</p>
@@ -183,14 +191,13 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
         <div className="grid gap-3">
           {lines.map((line) => {
             const key = selectionKey(line.cardId, line.variation, line.condition);
-            const isSelected = selectedKeys.has(key);
+            const qty = selectedQuantities[key] || 0;
+            const isSelected = qty > 0;
             return (
               <div
                 key={key}
-                onClick={() => toggleLine(line)}
-                className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${isSelected ? 'border-[#646B99]/40 bg-[#646B99]/5' : 'border-slate-100 bg-white hover:bg-slate-50'}`}
+                className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${isSelected ? 'border-[#646B99]/40 bg-[#646B99]/5' : 'border-slate-100 bg-white'}`}
               >
-                <input type="checkbox" checked={isSelected} onChange={() => {}} className="w-4 h-4 text-[#646B99] border-slate-300 rounded flex-shrink-0" />
                 {line.card && (
                   <img src={line.card.imageUrl} className="w-12 h-16 rounded-lg object-contain bg-slate-50 border border-slate-100/40 flex-shrink-0" />
                 )}
@@ -201,22 +208,43 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                   <p className="text-[9px] text-slate-400">
                     {line.card ? `#${getCompleteCardNumber(line.card)} · ` : ''}{line.variation} · {line.condition}
                   </p>
-                  <p className="text-[9px] text-slate-400">Qtd: {line.quantity}</p>
+                  <p className="text-[9px] text-slate-400">
+                    Disponível: {line.availableQuantity} · ${line.price.toFixed(2)}/un
+                  </p>
                 </div>
-                <span className="text-xs font-bold text-[#646B99] flex-shrink-0">
-                  ${(line.quantity * line.price).toFixed(2)}
-                </span>
+                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                  <div className="flex items-center bg-slate-50 border border-slate-200 rounded-full overflow-hidden h-8">
+                    <button
+                      onClick={() => setLineQuantity(line, qty - 1)}
+                      disabled={qty === 0}
+                      className="w-7 h-full flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors disabled:opacity-30"
+                    >
+                      -
+                    </button>
+                    <span className="w-6 text-center text-[11px] text-[#646B99] tabular-nums">{qty}</span>
+                    <button
+                      onClick={() => setLineQuantity(line, qty + 1)}
+                      disabled={qty >= line.availableQuantity}
+                      className="w-7 h-full flex items-center justify-center text-slate-400 hover:text-emerald-500 transition-colors disabled:opacity-30"
+                    >
+                      +
+                    </button>
+                  </div>
+                  {isSelected && (
+                    <span className="text-xs font-bold text-[#646B99]">${(qty * line.price).toFixed(2)}</span>
+                  )}
+                </div>
               </div>
             );
           })}
         </div>
       )}
 
-      {selectedKeys.size > 0 && (
+      {totalCards > 0 && (
         <div className="fixed bottom-16 left-0 right-0 z-40 flex justify-center px-4">
           <div className="w-full max-w-lg bg-white border border-slate-200 shadow-2xl rounded-2xl p-4 flex items-center justify-between gap-3">
             <div>
-              <p className="text-[9px] text-slate-400 uppercase tracking-widest">{selectedKeys.size} carta(s) selecionada(s)</p>
+              <p className="text-[9px] text-slate-400 uppercase tracking-widest">{totalCards} carta(s) selecionada(s)</p>
               <p className="text-lg font-bold text-[#646B99]">${totalValue.toFixed(2)}</p>
             </div>
             <button

@@ -30,6 +30,7 @@ export interface TradeItemSelection {
   cardId: string;
   variation: string;
   condition: string;
+  quantity: number;
 }
 
 export const createTradeRequest = async (

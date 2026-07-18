@@ -32,6 +32,7 @@ const itemSelectionSchema = z.object({
   cardId: z.string().regex(cardIdPattern),
   variation: z.string().min(1).max(40),
   condition: z.string().min(1).max(10),
+  quantity: z.number().int().positive().max(9999),
 });
 
 const createTradeSchema = z.object({
@@ -56,8 +57,9 @@ function serializeTrade(trade: Trade) {
   };
 }
 
-// Resolve as seleções (cardId/variação/condição) do request contra os dados reais
-// do dono, capturando quantidade e preço no momento da negociação.
+// Resolve as seleções (cardId/variação/condição/quantidade) do request contra os
+// dados reais do dono, validando disponibilidade e capturando o preço daquela
+// condição específica no momento da negociação.
 function resolveItems(ownerId: string, selections: z.infer<typeof itemSelectionSchema>[]): TradeItem[] {
   return selections.map((sel) => {
     const entries = getVariationEntries(ownerId, sel.cardId);
@@ -65,11 +67,16 @@ function resolveItems(ownerId: string, selections: z.infer<typeof itemSelectionS
     if (!match) {
       throw new Error(`Carta ${sel.cardId} (${sel.variation}/${sel.condition}) indisponível.`);
     }
+    if (sel.quantity > match.quantity) {
+      throw new Error(
+        `Só há ${match.quantity} unidade(s) de ${sel.cardId} (${sel.variation}/${sel.condition}) disponível(is).`
+      );
+    }
     return {
       cardId: sel.cardId,
       variation: sel.variation,
       condition: sel.condition,
-      quantity: match.quantity,
+      quantity: sel.quantity,
       unitPrice: match.price,
     };
   });

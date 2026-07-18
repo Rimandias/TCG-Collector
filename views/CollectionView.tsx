@@ -54,6 +54,10 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
     };
   }, [user.ownedCards]);
 
+  const totalCollectibleCards = useMemo(() => {
+    return sets.reduce((acc, set) => acc + (set.total || 0), 0);
+  }, [sets]);
+
   const sortedSets = useMemo(() => {
     return [...sets].sort((a, b) => a.releaseDate.localeCompare(b.releaseDate));
   }, [sets]);
@@ -71,11 +75,15 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
     <div className="animate-in fade-in duration-500 px-6 pb-20">
       <div className="mb-10 flex items-end justify-between border-b border-slate-50 pb-6">
         <div>
-          <h2 className="text-2xl text-slate-800 tracking-tight leading-none">Minha Pasta</h2>
+          <h2 className="text-2xl text-slate-800 tracking-tight leading-none">Minha Coleção</h2>
           <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-2">Status do Mestre Treinador</p>
         </div>
         <div className="text-right">
-          <div className="text-3xl text-[#646B99] leading-none">{globalStats.totalOwned}</div>
+          <div className="text-3xl text-[#646B99] leading-none">
+            {globalStats.uniqueOwned}<span className="text-lg text-slate-300">/{totalCollectibleCards}</span>
+          </div>
+          <div className="text-[9px] uppercase text-slate-300 tracking-widest mt-1">unitárias</div>
+          <div className="text-sm text-slate-500 leading-none mt-2">{globalStats.totalOwned}</div>
           <div className="text-[9px] uppercase text-slate-300 tracking-widest mt-1">Total de Cartas</div>
         </div>
       </div>
