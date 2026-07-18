@@ -5,6 +5,7 @@ import { db } from '../db.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { assembleFullUser } from '../userStore.js';
 import { normalizeFriendCode } from '../friendCode.js';
+import { areFriends, getVisibleFolders } from '../tradeStore.js';
 
 export const friendsRouter = Router();
 
@@ -61,6 +62,18 @@ friendsRouter.post('/', requireAuth, (req: AuthedRequest, res) => {
 
   const user = assembleFullUser(myId);
   return res.status(201).json({ user });
+});
+
+friendsRouter.get('/:friendUserId/folders', requireAuth, (req: AuthedRequest, res) => {
+  const { friendUserId } = req.params;
+  const myId = req.userId!;
+
+  if (!areFriends(myId, friendUserId)) {
+    return res.status(403).json({ error: 'Vocês não são amigos.' });
+  }
+
+  const folders = getVisibleFolders(friendUserId);
+  return res.json({ folders });
 });
 
 friendsRouter.delete('/:friendUserId', requireAuth, (req: AuthedRequest, res) => {

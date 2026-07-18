@@ -72,6 +72,19 @@ db.exec(`
     data TEXT NOT NULL,
     updated_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS trades (
+    id TEXT PRIMARY KEY,
+    initiator_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    requested_items TEXT NOT NULL DEFAULT '[]',
+    offered_items TEXT NOT NULL DEFAULT '[]',
+    initiator_confirmed INTEGER NOT NULL DEFAULT 0,
+    recipient_confirmed INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
 `);
 
 // --- Migrações leves para bancos criados por versões anteriores do schema ---

@@ -9,6 +9,7 @@ import { authRouter } from './routes/auth.js';
 import { tcgRouter } from './routes/tcg.js';
 import { usersRouter } from './routes/users.js';
 import { friendsRouter } from './routes/friends.js';
+import { tradesRouter } from './routes/trades.js';
 
 // Preenche friend_code para usuários criados antes desse recurso existir.
 const usersMissingCode = db.prepare('SELECT id FROM users WHERE friend_code IS NULL').all() as { id: string }[];
@@ -24,7 +25,7 @@ app.use(helmet());
 app.use(
   cors({
     origin: env.clientOrigin,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   })
 );
 app.use(express.json({ limit: '1mb' }));
@@ -43,6 +44,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/tcg', tcgRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/friends', friendsRouter);
+app.use('/api/trades', tradesRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Rota não encontrada.' });
