@@ -2,9 +2,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, PokemonSet, Card, UserCardData } from '../types';
 import { fetchSets, fetchCardsBySet } from '../api';
-import CardItem from '../components/CardItem';
+import CardItem, { CardViewMode } from '../components/CardItem';
+import CardViewModeSelector from '../components/CardViewModeSelector';
 import CardModal from '../components/CardModal';
-import { getCardTotalQuantity, getCompleteCardNumber } from '../db';
+import { getCardTotalQuantity, getCompleteCardNumber, getCardEstimatedValue } from '../db';
+import { getInitialCardViewMode, saveCardViewMode, getCardGridClassName } from '../viewMode';
 
 interface HomeViewProps {
   user: User;
@@ -36,6 +38,11 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [filterTab, setFilterTab] = useState<'tudo' | 'restantes'>('tudo');
   const [allCards, setAllCards] = useState<Card[]>([]);
   const [loadingAllCards, setLoadingAllCards] = useState(false);
+  const [viewMode, setViewMode] = useState<CardViewMode>(getInitialCardViewMode);
+
+  useEffect(() => {
+    saveCardViewMode(viewMode);
+  }, [viewMode]);
 
   const calculateProgress = useCallback((setId: string, total: number) => {
     const ownedInSet = Object.keys(user.ownedCards).filter(id => 
@@ -258,8 +265,7 @@ const HomeView: React.FC<HomeViewProps> = ({
     
     const estimatedValue = ownedCardsInSet.reduce((acc, card) => {
       const userData = user.ownedCards[card.id];
-      const totalQty = getCardTotalQuantity(userData.variations);
-      return acc + (card.marketPrice * totalQty);
+      return acc + getCardEstimatedValue(userData.variations);
     }, 0);
 
     return {
@@ -394,36 +400,40 @@ const HomeView: React.FC<HomeViewProps> = ({
         </div>
 
         {/* Abas de Filtro */}
-        <div className="flex mb-4 bg-slate-50 p-1 rounded-xl border border-slate-100">
-          <button 
-            onClick={() => setFilterTab('tudo')}
-            className={`flex-1 py-2 rounded-lg text-xs uppercase tracking-widest transition-all ${filterTab === 'tudo' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400'}`}
-          >
-            Tudo
-          </button>
-          <button 
-            onClick={() => setFilterTab('restantes')}
-            className={`flex-1 py-2 rounded-lg text-xs uppercase tracking-widest transition-all ${filterTab === 'restantes' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400'}`}
-          >
-            Restantes
-          </button>
+        <div className="flex items-center gap-2 mb-4">
+          <div className="flex flex-1 bg-slate-50 p-1 rounded-xl border border-slate-100">
+            <button
+              onClick={() => setFilterTab('tudo')}
+              className={`flex-1 py-2 rounded-lg text-xs uppercase tracking-widest transition-all ${filterTab === 'tudo' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400'}`}
+            >
+              Tudo
+            </button>
+            <button
+              onClick={() => setFilterTab('restantes')}
+              className={`flex-1 py-2 rounded-lg text-xs uppercase tracking-widest transition-all ${filterTab === 'restantes' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400'}`}
+            >
+              Restantes
+            </button>
+          </div>
+          <CardViewModeSelector viewMode={viewMode} onChange={setViewMode} />
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className={getCardGridClassName(viewMode)}>
           {loadingCards ? (
             [...Array(6)].map((_, i) => <div key={i} className="aspect-[2/2.8] bg-slate-100 animate-pulse rounded-xl" />)
           ) : filteredCards.length === 0 ? (
-            <div className="col-span-3 py-20 text-center">
+            <div className="col-span-full py-20 text-center">
               <p className="text-slate-400 text-xs uppercase tracking-widest">Nenhuma carta encontrada</p>
             </div>
           ) : (
             filteredCards.map(card => (
-              <CardItem 
-                key={card.id} 
-                card={card} 
-                user={user} 
-                onUpdateUser={onUpdateUser} 
-                onShowInfo={setInfoCard} 
+              <CardItem
+                key={card.id}
+                card={card}
+                user={user}
+                onUpdateUser={onUpdateUser}
+                onShowInfo={setInfoCard}
+                viewMode={viewMode}
               />
             ))
           )}
@@ -465,25 +475,27 @@ const HomeView: React.FC<HomeViewProps> = ({
            
            {searchQuery.trim() !== '' ? (
              <div className="space-y-4">
-               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+               <div className="flex items-center justify-between border-b border-slate-100 pb-2 gap-2">
                  <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
                    Cartas encontradas ({searchResults.length})
                  </h3>
+                 <CardViewModeSelector viewMode={viewMode} onChange={setViewMode} />
                </div>
-               
+
                {searchResults.length === 0 ? (
                  <div className="py-20 text-center bg-white/80 rounded-2xl border border-slate-100">
                    <p className="text-slate-400 text-xs uppercase tracking-widest">Nenhuma carta encontrada nesta era</p>
                  </div>
                ) : (
-                 <div className="grid grid-cols-3 gap-3 bg-white/80 p-3 rounded-2xl border border-slate-100">
+                 <div className={`${getCardGridClassName(viewMode)} bg-white/80 p-3 rounded-2xl border border-slate-100`}>
                    {searchResults.map(card => (
-                     <CardItem 
-                       key={card.id} 
-                       card={card} 
-                       user={user} 
-                       onUpdateUser={onUpdateUser} 
-                       onShowInfo={setInfoCard} 
+                     <CardItem
+                       key={card.id}
+                       card={card}
+                       user={user}
+                       onUpdateUser={onUpdateUser}
+                       onShowInfo={setInfoCard}
+                       viewMode={viewMode}
                      />
                    ))}
                  </div>
@@ -529,28 +541,32 @@ const HomeView: React.FC<HomeViewProps> = ({
       {searchQuery.trim() !== '' ? (
         // Se houver pesquisa, exibe os resultados globais de busca
         <div className="w-full space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2 gap-2">
             <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
               Resultados da Pesquisa ({searchResults.length})
             </h3>
-            {loadingAllCards && (
-              <span className="text-[10px] text-slate-400 animate-pulse">Carregando banco...</span>
-            )}
+            <div className="flex items-center gap-2">
+              {loadingAllCards && (
+                <span className="text-[10px] text-slate-400 animate-pulse">Carregando banco...</span>
+              )}
+              <CardViewModeSelector viewMode={viewMode} onChange={setViewMode} />
+            </div>
           </div>
-          
+
           {searchResults.length === 0 ? (
             <div className="py-20 text-center">
               <p className="text-slate-400 text-xs uppercase tracking-widest">Nenhuma carta encontrada</p>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-3">
+            <div className={getCardGridClassName(viewMode)}>
               {searchResults.map(card => (
-                <CardItem 
-                  key={card.id} 
-                  card={card} 
-                  user={user} 
-                  onUpdateUser={onUpdateUser} 
-                  onShowInfo={setInfoCard} 
+                <CardItem
+                  key={card.id}
+                  card={card}
+                  user={user}
+                  onUpdateUser={onUpdateUser}
+                  onShowInfo={setInfoCard}
+                  viewMode={viewMode}
                 />
               ))}
             </div>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Card, User, CardCondition, VARIATION_TYPES } from '../types';
-import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber } from '../db';
+import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, getCardEstimatedValue } from '../db';
 
 interface CardModalProps {
   card: Card;
@@ -37,6 +37,8 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
   };
 
   const totalQty = getCardTotalQuantity(cardData.variations);
+  const estimatedValue = getCardEstimatedValue(cardData.variations);
+  const averageUnitPrice = totalQty > 0 ? estimatedValue / totalQty : 0;
 
   const getVariationSubtotal = (variationData: Record<CardCondition, { quantity: number; price: string }>) => {
     return Object.values(variationData).reduce((sum, cond) => sum + (cond.quantity || 0), 0);
@@ -210,11 +212,13 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
           ) : (
             <div className="space-y-4 p-2 text-center">
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
-                <p className="text-slate-400 text-[10px] mb-1.5 uppercase tracking-[0.2em] font-bold">Mercado</p>
+                <p className="text-slate-400 text-[10px] mb-1.5 uppercase tracking-[0.2em] font-bold">Valor Total</p>
                 <div className="text-3xl font-extrabold text-emerald-500">
-                    {card.marketPrice > 0 ? `$${card.marketPrice.toFixed(2)}` : 'N/A'}
+                    {estimatedValue > 0 ? `$${estimatedValue.toFixed(2)}` : 'N/A'}
                 </div>
-                <p className="text-[9px] text-slate-300 mt-3 uppercase tracking-wider">TCGPlayer Market Price</p>
+                <p className="text-[9px] text-slate-300 mt-3 uppercase tracking-wider">
+                  {totalQty > 0 ? `Preço médio: $${averageUnitPrice.toFixed(2)} por unidade` : 'Baseado nos preços que você informou'}
+                </p>
               </div>
             </div>
           )}
