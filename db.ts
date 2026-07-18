@@ -130,6 +130,23 @@ export const updateCardStatus = (user: User, cardId: string, updates: Partial<Us
   return newUser;
 };
 
+// Valor estimado de uma carta = soma de (quantidade * preço) que o próprio usuário
+// preencheu em cada combinação de variação/condição. Não usa nenhum preço de mercado externo.
+export const getCardEstimatedValue = (variations: Record<string, any>): number => {
+  const normalized = getNormalizedVariations(variations);
+  let total = 0;
+  for (const varType in normalized) {
+    for (const cond in normalized[varType]) {
+      const details = normalized[varType][cond as CardCondition];
+      const price = parseFloat(details.price);
+      if (details.quantity > 0 && !isNaN(price)) {
+        total += details.quantity * price;
+      }
+    }
+  }
+  return total;
+};
+
 export const getCompleteCardNumber = (card: Card): string => {
   if (card.set && card.set.printedTotal) {
     return `${card.number}/${card.set.printedTotal}`;

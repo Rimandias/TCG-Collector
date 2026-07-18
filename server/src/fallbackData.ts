@@ -46,21 +46,21 @@ export const FALLBACK_SETS = [
 
 export const FALLBACK_CARDS: Record<string, any[]> = {
   base1: [
-    { id: 'base1-4', name: 'Charizard', imageUrl: 'https://images.pokemontcg.io/base1/4.png', imageUrlHiRes: 'https://images.pokemontcg.io/base1/4_hires.png', number: '4', rarity: 'Rare Holo', isSecret: false, marketPrice: 350.0, set: { id: 'base1', name: 'Base Set', printedTotal: 102 } },
-    { id: 'base1-2', name: 'Blastoise', imageUrl: 'https://images.pokemontcg.io/base1/2.png', imageUrlHiRes: 'https://images.pokemontcg.io/base1/2_hires.png', number: '2', rarity: 'Rare Holo', isSecret: false, marketPrice: 120.0, set: { id: 'base1', name: 'Base Set', printedTotal: 102 } },
-    { id: 'base1-15', name: 'Venusaur', imageUrl: 'https://images.pokemontcg.io/base1/15.png', imageUrlHiRes: 'https://images.pokemontcg.io/base1/15_hires.png', number: '15', rarity: 'Rare Holo', isSecret: false, marketPrice: 85.0, set: { id: 'base1', name: 'Base Set', printedTotal: 102 } },
-    { id: 'base1-58', name: 'Pikachu', imageUrl: 'https://images.pokemontcg.io/base1/58.png', imageUrlHiRes: 'https://images.pokemontcg.io/base1/58_hires.png', number: '58', rarity: 'Common', isSecret: false, marketPrice: 2.5, set: { id: 'base1', name: 'Base Set', printedTotal: 102 } },
-    { id: 'base1-10', name: 'Mewtwo', imageUrl: 'https://images.pokemontcg.io/base1/10.png', imageUrlHiRes: 'https://images.pokemontcg.io/base1/10_hires.png', number: '10', rarity: 'Rare Holo', isSecret: false, marketPrice: 35.0, set: { id: 'base1', name: 'Base Set', printedTotal: 102 } },
-    { id: 'base1-1', name: 'Alakazam', imageUrl: 'https://images.pokemontcg.io/base1/1.png', imageUrlHiRes: 'https://images.pokemontcg.io/base1/1_hires.png', number: '1', rarity: 'Rare Holo', isSecret: false, marketPrice: 42.0, set: { id: 'base1', name: 'Base Set', printedTotal: 102 } },
-    { id: 'base1-6', name: 'Gyarados', imageUrl: 'https://images.pokemontcg.io/base1/6.png', imageUrlHiRes: 'https://images.pokemontcg.io/base1/6_hires.png', number: '6', rarity: 'Rare Holo', isSecret: false, marketPrice: 28.0, set: { id: 'base1', name: 'Base Set', printedTotal: 102 } },
+    { id: 'base1-4', name: 'Charizard', imageUrl: 'https://images.pokemontcg.io/base1/4.png', imageUrlHiRes: 'https://images.pokemontcg.io/base1/4_hires.png', number: '4', rarity: 'Rare Holo', isSecret: false, set: { id: 'base1', name: 'Base Set', printedTotal: 102 } },
+    { id: 'base1-2', name: 'Blastoise', imageUrl: 'https://images.pokemontcg.io/base1/2.png', imageUrlHiRes: 'https://images.pokemontcg.io/base1/2_hires.png', number: '2', rarity: 'Rare Holo', isSecret: false, set: { id: 'base1', name: 'Base Set', printedTotal: 102 } },
+    { id: 'base1-15', name: 'Venusaur', imageUrl: 'https://images.pokemontcg.io/base1/15.png', imageUrlHiRes: 'https://images.pokemontcg.io/base1/15_hires.png', number: '15', rarity: 'Rare Holo', isSecret: false, set: { id: 'base1', name: 'Base Set', printedTotal: 102 } },
+    { id: 'base1-58', name: 'Pikachu', imageUrl: 'https://images.pokemontcg.io/base1/58.png', imageUrlHiRes: 'https://images.pokemontcg.io/base1/58_hires.png', number: '58', rarity: 'Common', isSecret: false, set: { id: 'base1', name: 'Base Set', printedTotal: 102 } },
+    { id: 'base1-10', name: 'Mewtwo', imageUrl: 'https://images.pokemontcg.io/base1/10.png', imageUrlHiRes: 'https://images.pokemontcg.io/base1/10_hires.png', number: '10', rarity: 'Rare Holo', isSecret: false, set: { id: 'base1', name: 'Base Set', printedTotal: 102 } },
+    { id: 'base1-1', name: 'Alakazam', imageUrl: 'https://images.pokemontcg.io/base1/1.png', imageUrlHiRes: 'https://images.pokemontcg.io/base1/1_hires.png', number: '1', rarity: 'Rare Holo', isSecret: false, set: { id: 'base1', name: 'Base Set', printedTotal: 102 } },
+    { id: 'base1-6', name: 'Gyarados', imageUrl: 'https://images.pokemontcg.io/base1/6.png', imageUrlHiRes: 'https://images.pokemontcg.io/base1/6_hires.png', number: '6', rarity: 'Rare Holo', isSecret: false, set: { id: 'base1', name: 'Base Set', printedTotal: 102 } },
   ],
   sv3pt5: [
-    { id: 'sv3pt5-1', name: 'Bulbasaur', imageUrl: 'https://images.pokemontcg.io/sv3pt5/1.png', imageUrlHiRes: 'https://images.pokemontcg.io/sv3pt5/1_hires.png', number: '1', rarity: 'Common', isSecret: false, marketPrice: 0.5, set: { id: 'sv3pt5', name: '151', printedTotal: 165 } },
-    { id: 'sv3pt5-4', name: 'Charmander', imageUrl: 'https://images.pokemontcg.io/sv3pt5/4.png', imageUrlHiRes: 'https://images.pokemontcg.io/sv3pt5/4_hires.png', number: '4', rarity: 'Common', isSecret: false, marketPrice: 1.2, set: { id: 'sv3pt5', name: '151', printedTotal: 165 } },
-    { id: 'sv3pt5-7', name: 'Squirtle', imageUrl: 'https://images.pokemontcg.io/sv3pt5/7.png', imageUrlHiRes: 'https://images.pokemontcg.io/sv3pt5/7_hires.png', number: '7', rarity: 'Common', isSecret: false, marketPrice: 0.8, set: { id: 'sv3pt5', name: '151', printedTotal: 165 } },
-    { id: 'sv3pt5-25', name: 'Pikachu', imageUrl: 'https://images.pokemontcg.io/sv3pt5/25.png', imageUrlHiRes: 'https://images.pokemontcg.io/sv3pt5/25_hires.png', number: '25', rarity: 'Common', isSecret: false, marketPrice: 1.5, set: { id: 'sv3pt5', name: '151', printedTotal: 165 } },
-    { id: 'sv3pt5-199', name: 'Charizard ex', imageUrl: 'https://images.pokemontcg.io/sv3pt5/199.png', imageUrlHiRes: 'https://images.pokemontcg.io/sv3pt5/199_hires.png', number: '199', rarity: 'Rare Special Illustration', isSecret: true, marketPrice: 120.0, set: { id: 'sv3pt5', name: '151', printedTotal: 165 } },
-    { id: 'sv3pt5-205', name: 'Mew ex', imageUrl: 'https://images.pokemontcg.io/sv3pt5/205.png', imageUrlHiRes: 'https://images.pokemontcg.io/sv3pt5/205_hires.png', number: '205', rarity: 'Rare Hyper', isSecret: true, marketPrice: 85.0, set: { id: 'sv3pt5', name: '151', printedTotal: 165 } },
+    { id: 'sv3pt5-1', name: 'Bulbasaur', imageUrl: 'https://images.pokemontcg.io/sv3pt5/1.png', imageUrlHiRes: 'https://images.pokemontcg.io/sv3pt5/1_hires.png', number: '1', rarity: 'Common', isSecret: false, set: { id: 'sv3pt5', name: '151', printedTotal: 165 } },
+    { id: 'sv3pt5-4', name: 'Charmander', imageUrl: 'https://images.pokemontcg.io/sv3pt5/4.png', imageUrlHiRes: 'https://images.pokemontcg.io/sv3pt5/4_hires.png', number: '4', rarity: 'Common', isSecret: false, set: { id: 'sv3pt5', name: '151', printedTotal: 165 } },
+    { id: 'sv3pt5-7', name: 'Squirtle', imageUrl: 'https://images.pokemontcg.io/sv3pt5/7.png', imageUrlHiRes: 'https://images.pokemontcg.io/sv3pt5/7_hires.png', number: '7', rarity: 'Common', isSecret: false, set: { id: 'sv3pt5', name: '151', printedTotal: 165 } },
+    { id: 'sv3pt5-25', name: 'Pikachu', imageUrl: 'https://images.pokemontcg.io/sv3pt5/25.png', imageUrlHiRes: 'https://images.pokemontcg.io/sv3pt5/25_hires.png', number: '25', rarity: 'Common', isSecret: false, set: { id: 'sv3pt5', name: '151', printedTotal: 165 } },
+    { id: 'sv3pt5-199', name: 'Charizard ex', imageUrl: 'https://images.pokemontcg.io/sv3pt5/199.png', imageUrlHiRes: 'https://images.pokemontcg.io/sv3pt5/199_hires.png', number: '199', rarity: 'Rare Special Illustration', isSecret: true, set: { id: 'sv3pt5', name: '151', printedTotal: 165 } },
+    { id: 'sv3pt5-205', name: 'Mew ex', imageUrl: 'https://images.pokemontcg.io/sv3pt5/205.png', imageUrlHiRes: 'https://images.pokemontcg.io/sv3pt5/205_hires.png', number: '205', rarity: 'Rare Hyper', isSecret: true, set: { id: 'sv3pt5', name: '151', printedTotal: 165 } },
   ],
 };
 
@@ -73,7 +73,6 @@ export function generateMockCards(setId: string, setName: string, total = 9) {
     const name = pokemonNames[(i - 1) % pokemonNames.length];
     const isSecret = i > Math.floor(total * 0.85);
     const rarity = isSecret ? 'Rare Secret' : rarities[(i - 1) % rarities.length];
-    const price = isSecret ? 120.0 + i * 12.5 : 1.5 + i * 2.2;
     const numStr = String(i);
 
     cards.push({
@@ -84,7 +83,6 @@ export function generateMockCards(setId: string, setName: string, total = 9) {
       number: numStr,
       rarity,
       isSecret,
-      marketPrice: parseFloat(price.toFixed(2)),
       set: { id: setId, name: setName, printedTotal: total },
     });
   }

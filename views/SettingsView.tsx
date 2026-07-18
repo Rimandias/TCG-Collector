@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { User } from '../types';
+import { addFriendByCode, removeFriend as removeFriendRequest } from '../auth';
 
 interface SettingsViewProps {
   user: User;
@@ -8,11 +9,27 @@ interface SettingsViewProps {
   onLogout: () => void;
 }
 
+const formatFriendCode = (code: string) => (code ? `${code.slice(0, 4)}-${code.slice(4)}` : '');
+
+const formatAddedAt = (iso: string) => {
+  try {
+    return new Date(iso).toLocaleDateString('pt-BR');
+  } catch {
+    return '';
+  }
+};
+
 const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogout }) => {
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState(user.username);
   const [newPassword, setNewPassword] = useState('');
   const [showPwdMsg, setShowPwdMsg] = useState(false);
+
+  const [showAddFriend, setShowAddFriend] = useState(false);
+  const [friendCodeInput, setFriendCodeInput] = useState('');
+  const [addFriendError, setAddFriendError] = useState<string | null>(null);
+  const [addingFriend, setAddingFriend] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
 
   const handleChangeAvatar = () => {
     const newAvatar = `https://picsum.photos/seed/${Math.random()}/200`;
@@ -33,9 +50,46 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
     }
   };
 
-  const removeFriend = (friendName: string) => {
-    onUpdateUser({ ...user, friends: user.friends.filter(f => f !== friendName) });
+  const handleCopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(user.friendCode);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
+    } catch {
+      // Clipboard indisponível, ignora silenciosamente
+    }
   };
+
+  const handleAddFriend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!friendCodeInput.trim()) return;
+    setAddingFriend(true);
+    setAddFriendError(null);
+
+    const { user: updatedUser, error } = await addFriendByCode(friendCodeInput.trim());
+    setAddingFriend(false);
+
+    if (error) {
+      setAddFriendError(error);
+      return;
+    }
+    if (updatedUser) {
+      onUpdateUser(updatedUser);
+      setShowAddFriend(false);
+      setFriendCodeInput('');
+    }
+  };
+
+  const handleRemoveFriend = async (friendUserId: string) => {
+    const updatedUser = await removeFriendRequest(friendUserId);
+    if (updatedUser) {
+      onUpdateUser(updatedUser);
+    }
+  };
+
+  const friendsSortedByDate = [...user.friends].sort(
+    (a, b) => new Date(a.addedAt).getTime() - new Date(b.addedAt).getTime()
+  );
 
   return (
     <div className="animate-in fade-in duration-500 px-6">
@@ -49,7 +103,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
           <div className="flex items-center gap-6 mb-8">
              <div className="relative group">
                <img src={user.avatarUrl} alt="User Avatar" className="w-20 h-20 rounded-2xl object-cover border-4 border-white shadow-sm" />
-               <button 
+               <button
                  onClick={handleChangeAvatar}
                  className="absolute bottom-0 right-0 p-2 bg-[#646B99] text-white rounded-lg shadow-md hover:scale-105 transition-transform"
                >
@@ -59,10 +113,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
              <div className="flex-1">
                {editingName ? (
                  <div className="flex gap-2">
-                    <input 
-                      type="text" 
-                      value={newName} 
-                      onChange={(e) => setNewName(e.target.value)} 
+                    <input
+                      type="text"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
                       className="bg-white border border-slate-100 rounded-lg px-3 py-1.5 text-slate-700 w-full outline-none focus:ring-1 focus:ring-[#646B99]"
                     />
                     <button onClick={handleSaveName} className="p-1.5 bg-emerald-500 text-white rounded-lg">
@@ -84,14 +138,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
           <form onSubmit={handleUpdatePassword} className="space-y-4">
             <h4 className="text-[10px] text-slate-300 uppercase tracking-widest">Alterar Senha</h4>
             <div className="flex gap-3">
-              <input 
-                type="password" 
-                placeholder="Nova senha..." 
+              <input
+                type="password"
+                placeholder="Nova senha..."
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 className="flex-1 bg-white border border-slate-100 rounded-xl px-4 py-2 text-sm text-slate-700 focus:ring-1 focus:ring-[#646B99] outline-none"
               />
-              <button 
+              <button
                 type="submit"
                 className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl text-slate-600 text-sm transition-colors"
               >
@@ -105,33 +159,102 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
         </section>
 
         <section className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
-           <h4 className="text-[10px] text-slate-300 uppercase tracking-widest mb-4">Gerenciar Amigos ({user.friends.length})</h4>
-           <div className="space-y-2">
-             {user.friends.length === 0 ? (
-               <p className="text-slate-400 italic text-xs">Nenhum amigo adicionado.</p>
-             ) : (
-               user.friends.map(friend => (
-                 <div key={friend} className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
-                    <span className="text-slate-700 text-sm">{friend}</span>
-                    <button 
-                      onClick={() => removeFriend(friend)}
-                      className="text-red-400 hover:text-red-500 text-[10px] uppercase tracking-widest px-2 py-1"
-                    >
-                      Remover
-                    </button>
-                 </div>
-               ))
-             )}
-           </div>
+          <h4 className="text-[10px] text-slate-300 uppercase tracking-widest mb-3">Seu Código de Amigo</h4>
+          <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm mb-6">
+            <span className="text-sm font-mono font-semibold text-[#646B99] tracking-widest">{formatFriendCode(user.friendCode)}</span>
+            <button
+              onClick={handleCopyCode}
+              className="text-[10px] uppercase tracking-widest font-medium text-slate-400 hover:text-[#646B99] px-2 py-1"
+            >
+              {codeCopied ? 'Copiado!' : 'Copiar'}
+            </button>
+          </div>
+          <p className="text-[10px] text-slate-400 mb-4">Compartilhe esse código para que outros treinadores te adicionem.</p>
+
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-[10px] text-slate-300 uppercase tracking-widest">Gerenciar Amigos ({user.friends.length})</h4>
+            <button
+              onClick={() => { setShowAddFriend(true); setAddFriendError(null); }}
+              className="text-[11px] font-medium text-[#646B99] hover:text-[#4d5275] flex items-center gap-1 bg-white border border-slate-100 px-2.5 py-1 rounded-lg transition-colors shadow-sm"
+            >
+              + Adicionar Amigo
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {friendsSortedByDate.length === 0 ? (
+              <p className="text-slate-400 italic text-xs">Nenhum amigo adicionado.</p>
+            ) : (
+              friendsSortedByDate.map(friend => (
+                <div key={friend.userId} className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-[#646B99]/10 flex items-center justify-center text-[#646B99] font-bold text-xs flex-shrink-0">
+                      {friend.username[0]?.toUpperCase()}
+                    </div>
+                    <div>
+                      <span className="text-slate-700 text-sm block">{friend.username}</span>
+                      <span className="text-slate-400 text-[10px]">Adicionado em {formatAddedAt(friend.addedAt)}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveFriend(friend.userId)}
+                    className="text-red-400 hover:text-red-500 text-[10px] uppercase tracking-widest px-2 py-1"
+                  >
+                    Remover
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
         </section>
 
-        <button 
+        <button
           onClick={onLogout}
           className="w-full py-4 bg-white text-red-400 rounded-2xl border border-red-50 shadow-sm hover:bg-red-50 transition-all uppercase tracking-[0.2em] text-[10px]"
         >
           Sair da Conta
         </button>
       </div>
+
+      {showAddFriend && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-100 w-full max-w-xs rounded-2xl shadow-2xl p-6">
+            <h3 className="text-sm font-semibold text-slate-800 mb-1">Adicionar Amigo</h3>
+            <p className="text-[10px] text-slate-400 mb-4">Peça o código de amigo dele(a) e insira abaixo.</p>
+
+            <form onSubmit={handleAddFriend}>
+              <input
+                type="text"
+                placeholder="Ex: K7M2-XQPR"
+                value={friendCodeInput}
+                onChange={(e) => setFriendCodeInput(e.target.value)}
+                autoFocus
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs text-slate-700 uppercase tracking-widest outline-none focus:ring-1 focus:ring-[#646B99] mb-2"
+              />
+              {addFriendError && (
+                <p className="text-red-500 text-[10px] mb-2">{addFriendError}</p>
+              )}
+
+              <div className="flex gap-3 mt-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowAddFriend(false); setFriendCodeInput(''); setAddFriendError(null); }}
+                  className="flex-1 py-2 bg-slate-50 text-slate-400 text-xs rounded-lg hover:bg-slate-100 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!friendCodeInput.trim() || addingFriend}
+                  className="flex-1 py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors disabled:opacity-50"
+                >
+                  {addingFriend ? 'Adicionando...' : 'Confirmar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

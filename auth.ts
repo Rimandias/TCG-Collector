@@ -69,7 +69,6 @@ export const persistUser = async (user: User): Promise<User | null> => {
     username: user.username,
     avatarUrl: user.avatarUrl,
     ownedCards: user.ownedCards,
-    friends: user.friends,
     folders: user.folders || [],
     wishlist: user.wishlist || [],
   };
@@ -88,6 +87,41 @@ export const persistUser = async (user: User): Promise<User | null> => {
     return null;
   }
 
+  const body = await response.json();
+  return body.user;
+};
+
+export const addFriendByCode = async (code: string): Promise<{ user?: User; error?: string }> => {
+  const token = getToken();
+  if (!token) return { error: 'Sessão expirada, faça login novamente.' };
+
+  const response = await fetch(`${API_BASE}/friends`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ code }),
+  });
+
+  if (!response.ok) {
+    return { error: await parseErrorMessage(response, 'Não foi possível adicionar o amigo.') };
+  }
+
+  const body = await response.json();
+  return { user: body.user };
+};
+
+export const removeFriend = async (friendUserId: string): Promise<User | null> => {
+  const token = getToken();
+  if (!token) return null;
+
+  const response = await fetch(`${API_BASE}/friends/${encodeURIComponent(friendUserId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) return null;
   const body = await response.json();
   return body.user;
 };

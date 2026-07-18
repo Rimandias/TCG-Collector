@@ -8,6 +8,7 @@ import { db } from '../db.js';
 import { env } from '../env.js';
 import { assembleFullUser } from '../userStore.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
+import { generateUniqueFriendCode } from '../friendCode.js';
 
 export const authRouter = Router();
 
@@ -31,8 +32,8 @@ const loginSchema = z.object({
 });
 
 const insertUser = db.prepare(`
-  INSERT INTO users (id, username, email, password_hash, avatar_url, created_at)
-  VALUES (?, ?, ?, ?, ?, ?)
+  INSERT INTO users (id, username, email, password_hash, avatar_url, created_at, friend_code)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
 `);
 const findByEmail = db.prepare(`SELECT id, password_hash FROM users WHERE email = ?`);
 
@@ -55,8 +56,9 @@ authRouter.post('/register', authLimiter, (req, res) => {
   const id = crypto.randomUUID();
   const passwordHash = bcrypt.hashSync(password, 12);
   const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(email)}`;
+  const friendCode = generateUniqueFriendCode();
 
-  insertUser.run(id, username, email, passwordHash, avatarUrl, Date.now());
+  insertUser.run(id, username, email, passwordHash, avatarUrl, Date.now(), friendCode);
 
   const token = issueToken(id);
   const user = assembleFullUser(id);

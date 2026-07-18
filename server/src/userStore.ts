@@ -1,25 +1,41 @@
 import { db } from './db.js';
 
+export interface FriendEntry {
+  userId: string;
+  username: string;
+  avatarUrl: string;
+  addedAt: string;
+}
+
 export interface FullUser {
   id: string;
   username: string;
   email: string;
   avatarUrl: string;
+  friendCode: string;
   ownedCards: Record<string, { cardId: string; isOwned: boolean; isForTrade: boolean; variations: Record<string, any> }>;
-  friends: string[];
-  folders: { id: string; name: string; cardIds: string[] }[];
+  friends: FriendEntry[];
+  folders: { id: string; name: string; cardIds: string[]; visibleToFriends: boolean }[];
   wishlist: string[];
 }
 
-const getUserRow = db.prepare(`SELECT id, username, email, avatar_url FROM users WHERE id = ?`);
+const getUserRow = db.prepare(`SELECT id, username, email, avatar_url, friend_code FROM users WHERE id = ?`);
 const getUserCards = db.prepare(`SELECT card_id, is_owned, is_for_trade, variations FROM user_cards WHERE user_id = ?`);
-const getFriends = db.prepare(`SELECT friend_name FROM friends WHERE user_id = ?`);
-const getFolders = db.prepare(`SELECT id, name FROM trade_folders WHERE user_id = ?`);
+const getFriends = db.prepare(`
+  SELECT u.id as userId, u.username as username, u.avatar_url as avatarUrl, f.added_at as addedAt
+  FROM friends f
+  JOIN users u ON u.id = f.friend_user_id
+  WHERE f.user_id = ?
+  ORDER BY f.added_at ASC
+`);
+const getFolders = db.prepare(`SELECT id, name, visible_to_friends FROM trade_folders WHERE user_id = ?`);
 const getFolderCards = db.prepare(`SELECT card_id FROM trade_folder_cards WHERE folder_id = ?`);
 const getWishlist = db.prepare(`SELECT card_id FROM wishlist WHERE user_id = ?`);
 
 export function assembleFullUser(userId: string): FullUser | null {
-  const userRow = getUserRow.get(userId) as { id: string; username: string; email: string; avatar_url: string } | undefined;
+  const userRow = getUserRow.get(userId) as
+    | { id: string; username: string; email: string; avatar_url: string; friend_code: string }
+    | undefined;
   if (!userRow) return null;
 
   const ownedCards: FullUser['ownedCards'] = {};
@@ -32,11 +48,17 @@ export function assembleFullUser(userId: string): FullUser | null {
     };
   }
 
-  const friends = (getFriends.all(userId) as any[]).map((r) => r.friend_name);
+  const friends: FriendEntry[] = (getFriends.all(userId) as any[]).map((r) => ({
+    userId: r.userId,
+    username: r.username,
+    avatarUrl: r.avatarUrl,
+    addedAt: new Date(r.addedAt).toISOString(),
+  }));
 
   const folders = (getFolders.all(userId) as any[]).map((f) => ({
     id: f.id as string,
     name: f.name as string,
+    visibleToFriends: !!f.visible_to_friends,
     cardIds: (getFolderCards.all(f.id) as any[]).map((c) => c.card_id as string),
   }));
 
@@ -47,6 +69,7 @@ export function assembleFullUser(userId: string): FullUser | null {
     username: userRow.username,
     email: userRow.email,
     avatarUrl: userRow.avatar_url,
+    friendCode: userRow.friend_code,
     ownedCards,
     friends,
     folders,
@@ -54,12 +77,14 @@ export function assembleFullUser(userId: string): FullUser | null {
   };
 }
 
+// Amigos são relações entre contas reais (validadas por código) e não podem ser
+// substituídas livremente pelo cliente via este "replace" genérico — só são
+// alterados pelas rotas dedicadas em routes/friends.ts.
 export interface UserDataInput {
   username?: string;
   avatarUrl?: string;
   ownedCards?: Record<string, { isOwned?: boolean; isForTrade?: boolean; variations?: Record<string, any> }>;
-  friends?: string[];
-  folders?: { id: string; name: string; cardIds: string[] }[];
+  folders?: { id: string; name: string; cardIds: string[]; visibleToFriends?: boolean }[];
   wishlist?: string[];
 }
 
@@ -70,10 +95,10 @@ const insertUserCard = db.prepare(`
 `);
 const deleteWishlist = db.prepare(`DELETE FROM wishlist WHERE user_id = ?`);
 const insertWishlist = db.prepare(`INSERT INTO wishlist (user_id, card_id) VALUES (?, ?)`);
-const deleteFriends = db.prepare(`DELETE FROM friends WHERE user_id = ?`);
-const insertFriend = db.prepare(`INSERT OR IGNORE INTO friends (user_id, friend_name) VALUES (?, ?)`);
 const deleteFolders = db.prepare(`DELETE FROM trade_folders WHERE user_id = ?`);
-const insertFolder = db.prepare(`INSERT INTO trade_folders (id, user_id, name) VALUES (?, ?, ?)`);
+const insertFolder = db.prepare(`
+  INSERT INTO trade_folders (id, user_id, name, visible_to_friends) VALUES (?, ?, ?, ?)
+`);
 const insertFolderCard = db.prepare(`INSERT OR IGNORE INTO trade_folder_cards (folder_id, card_id) VALUES (?, ?)`);
 
 export function replaceUserData(userId: string, data: UserDataInput) {
@@ -97,15 +122,10 @@ export function replaceUserData(userId: string, data: UserDataInput) {
       insertWishlist.run(userId, cardId);
     }
 
-    deleteFriends.run(userId);
-    for (const name of data.friends || []) {
-      insertFriend.run(userId, name);
-    }
-
     // trade_folder_cards cascade-deletes via FK when trade_folders rows are removed
     deleteFolders.run(userId);
     for (const folder of data.folders || []) {
-      insertFolder.run(folder.id, userId, folder.name);
+      insertFolder.run(folder.id, userId, folder.name, folder.visibleToFriends ? 1 : 0);
       for (const cardId of folder.cardIds || []) {
         insertFolderCard.run(folder.id, cardId);
       }

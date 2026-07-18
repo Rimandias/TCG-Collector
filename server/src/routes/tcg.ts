@@ -72,7 +72,6 @@ function mapCard(raw: any) {
     number: raw.number,
     rarity: raw.rarity || 'Common',
     isSecret: parseInt(raw.number) > (raw.set?.printedTotal || 0),
-    marketPrice: raw.tcgplayer?.prices?.holofoil?.market || raw.tcgplayer?.prices?.normal?.market || 0,
     set: {
       id: raw.set?.id,
       name: raw.set?.name,

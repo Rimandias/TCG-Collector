@@ -17,13 +17,13 @@ const folderSchema = z.object({
   id: z.string().min(1).max(80),
   name: z.string().min(1).max(80),
   cardIds: z.array(z.string().regex(cardIdPattern)).max(5000),
+  visibleToFriends: z.boolean().default(false),
 });
 
 const userDataSchema = z.object({
   username: z.string().trim().min(1).max(40),
   avatarUrl: z.string().trim().max(2000),
   ownedCards: z.record(z.string().regex(cardIdPattern), userCardSchema).default({}),
-  friends: z.array(z.string().trim().min(1).max(60)).max(500).default([]),
   folders: z.array(folderSchema).max(200).default([]),
   wishlist: z.array(z.string().regex(cardIdPattern)).max(5000).default([]),
 });

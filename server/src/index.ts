@@ -3,10 +3,19 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { env } from './env.js';
-import './db.js';
+import { db } from './db.js';
+import { generateUniqueFriendCode } from './friendCode.js';
 import { authRouter } from './routes/auth.js';
 import { tcgRouter } from './routes/tcg.js';
 import { usersRouter } from './routes/users.js';
+import { friendsRouter } from './routes/friends.js';
+
+// Preenche friend_code para usuários criados antes desse recurso existir.
+const usersMissingCode = db.prepare('SELECT id FROM users WHERE friend_code IS NULL').all() as { id: string }[];
+const setFriendCode = db.prepare('UPDATE users SET friend_code = ? WHERE id = ?');
+for (const { id } of usersMissingCode) {
+  setFriendCode.run(generateUniqueFriendCode(), id);
+}
 
 const app = express();
 
@@ -33,6 +42,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRouter);
 app.use('/api/tcg', tcgRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/friends', friendsRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Rota não encontrada.' });

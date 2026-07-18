@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, PokemonSet, UserCardData } from '../types';
 import { fetchSets } from '../api';
-import { getCardTotalQuantity } from '../db';
+import { getCardTotalQuantity, getCardEstimatedValue } from '../db';
 
 interface CollectionViewProps {
   user: User;
@@ -42,10 +42,15 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
       if (!d.isOwned) return acc;
       return acc + getCardTotalQuantity(d.variations);
     }, 0);
+    const totalValue = ownedCards.reduce((acc, d) => {
+      if (!d.isOwned) return acc;
+      return acc + getCardEstimatedValue(d.variations);
+    }, 0);
 
     return {
       totalOwned: totalPhysicalCards,
-      uniqueOwned: ownedCards.filter(d => d.isOwned).length
+      uniqueOwned: ownedCards.filter(d => d.isOwned).length,
+      totalValue
     };
   }, [user.ownedCards]);
 
@@ -72,6 +77,17 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
         <div className="text-right">
           <div className="text-3xl text-[#646B99] leading-none">{globalStats.totalOwned}</div>
           <div className="text-[9px] uppercase text-slate-300 tracking-widest mt-1">Total de Cartas</div>
+        </div>
+      </div>
+
+      <div className="mb-6 bg-gradient-to-r from-[#646B99] to-[#4d5275] rounded-3xl p-6 shadow-lg flex items-center justify-between">
+        <div>
+          <p className="text-[10px] text-white/60 uppercase tracking-widest">Valor Total da Coleção</p>
+          <p className="text-3xl text-white font-semibold mt-1">${globalStats.totalValue.toFixed(2)}</p>
+          <p className="text-[9px] text-white/50 mt-1">Soma de todas as coleções, baseada nos preços que você informou</p>
+        </div>
+        <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center flex-shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         </div>
       </div>
 

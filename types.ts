@@ -31,7 +31,6 @@ export interface Card {
   number: string;
   rarity: string;
   isSecret: boolean;
-  marketPrice: number;
   set: {
     id: string;
     name: string;
@@ -58,13 +57,21 @@ export interface UserCardData {
   variations: Record<string, any>;
 }
 
+export interface Friend {
+  userId: string;
+  username: string;
+  avatarUrl: string;
+  addedAt: string;
+}
+
 export interface User {
   id: string;
   username: string;
   email: string;
   avatarUrl: string;
+  friendCode: string;
   ownedCards: Record<string, UserCardData>;
-  friends: string[];
+  friends: Friend[];
   folders?: TradeFolder[];
   wishlist?: string[];
 }
@@ -73,6 +80,7 @@ export interface TradeFolder {
   id: string;
   name: string;
   cardIds: string[];
+  visibleToFriends: boolean;
 }
 
 export enum AppTab {
