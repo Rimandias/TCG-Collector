@@ -28,6 +28,13 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
   const requested = describeItems(trade.requestedItems);
   const offered = describeItems(trade.offeredItems);
   const diff = requested.total - offered.total;
+  // requested = cartas do recipient (que o initiator está levando); offered = cartas do initiator.
+  // Quem está levando cartas de valor maior deve pagar a diferença para equilibrar a troca.
+  const payerIsInitiator = diff > 0;
+  const payerName = diff > 0 ? trade.initiatorUsername : diff < 0 ? trade.recipientUsername : null;
+  const receiverName = diff > 0 ? trade.recipientUsername : diff < 0 ? trade.initiatorUsername : null;
+  const payerIsMe = diff !== 0 && (payerIsInitiator ? isInitiator : isRecipient);
+  const receiverIsMe = diff !== 0 && !payerIsMe;
 
   const runAction = async (action: 'choose_payment' | 'choose_offer' | 'confirm' | 'cancel') => {
     setBusy(true);
@@ -118,7 +125,7 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
         <div className={cardClass}>
           <h3 className="text-sm font-semibold text-slate-800 mb-1">Há uma troca disponível!</h3>
           <p className="text-[10px] text-slate-400 mb-4">
-            <span className="font-semibold text-slate-600">{trade.initiatorUsername}</span> quer {requested.count} carta(s) sua(s), no valor de ${requested.total.toFixed(2)}.
+            <span className="font-semibold text-slate-600">{trade.initiatorUsername}</span> quer {requested.count} carta(s) sua(s), no valor de R${requested.total.toFixed(2)}.
           </p>
           {error && <p className="text-red-500 text-[10px] mb-3">{error}</p>}
           <div className="space-y-2">
@@ -127,7 +134,7 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
               disabled={busy}
               className="w-full py-2.5 bg-[#646B99] text-white text-xs font-semibold rounded-xl hover:bg-[#4d5275] transition-colors disabled:opacity-50"
             >
-              Receber em dinheiro (${requested.total.toFixed(2)})
+              Receber em dinheiro (R${requested.total.toFixed(2)})
             </button>
             <button
               onClick={() => runAction('choose_offer')}
@@ -159,8 +166,8 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
           </h3>
           <p className="text-[10px] text-slate-400 mb-4">
             {isInitiator
-              ? `Você paga $${requested.total.toFixed(2)} para ${counterpartName} e recebe ${requested.count} carta(s).`
-              : `Você recebe $${requested.total.toFixed(2)} de ${counterpartName} e entrega ${requested.count} carta(s).`}
+              ? `Você paga R$${requested.total.toFixed(2)} para ${counterpartName} e recebe ${requested.count} carta(s).`
+              : `Você recebe R$${requested.total.toFixed(2)} de ${counterpartName} e entrega ${requested.count} carta(s).`}
           </p>
           {myConfirmed ? (
             <p className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded-lg p-3 mb-4">
@@ -207,17 +214,23 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
           <div className="bg-slate-50 rounded-xl p-4 mb-4 border border-slate-100 space-y-1">
             <div className="flex justify-between text-[10px] text-slate-500">
               <span>Cartas de {trade.recipientUsername}</span>
-              <span className="font-semibold text-slate-700">${requested.total.toFixed(2)}</span>
+              <span className="font-semibold text-slate-700">R${requested.total.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-[10px] text-slate-500">
               <span>Cartas de {trade.initiatorUsername}</span>
-              <span className="font-semibold text-slate-700">${offered.total.toFixed(2)}</span>
+              <span className="font-semibold text-slate-700">R${offered.total.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-xs pt-2 border-t border-slate-200">
               <span className="text-slate-600 font-semibold">Diferença</span>
-              <span className={`font-bold ${diff === 0 ? 'text-emerald-500' : 'text-amber-600'}`}>${Math.abs(diff).toFixed(2)}</span>
+              <span className={`font-bold ${diff === 0 ? 'text-emerald-500' : 'text-amber-600'}`}>R${Math.abs(diff).toFixed(2)}</span>
             </div>
           </div>
+          {payerName && receiverName && (
+            <p className="text-[11px] text-slate-600 bg-[#646B99]/5 border border-[#646B99]/10 rounded-lg p-3 mb-4">
+              <span className="font-semibold">{payerIsMe ? 'Você' : payerName}</span> deve pagar <span className="font-semibold">R${Math.abs(diff).toFixed(2)}</span> para{' '}
+              <span className="font-semibold">{receiverIsMe ? 'você' : receiverName}</span> para equilibrar a troca.
+            </p>
+          )}
           {myConfirmed ? (
             <p className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded-lg p-3 mb-4">
               Aguardando {counterpartName} confirmar também.
@@ -259,7 +272,7 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
         <div className={cardClass}>
           <h3 className="text-sm font-semibold text-slate-800 mb-1">Aguardando resposta</h3>
           <p className="text-[10px] text-slate-400 mb-4">
-            Seu pedido de {requested.count} carta(s) (${requested.total.toFixed(2)}) para {counterpartName} ainda não foi respondido.
+            Seu pedido de {requested.count} carta(s) (R${requested.total.toFixed(2)}) para {counterpartName} ainda não foi respondido.
           </p>
           {error && <p className="text-red-500 text-[10px] mb-3">{error}</p>}
           <div className="flex gap-3">

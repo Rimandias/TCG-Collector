@@ -82,16 +82,16 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
           <div className="text-3xl text-[#646B99] leading-none">
             {globalStats.uniqueOwned}<span className="text-lg text-slate-300">/{totalCollectibleCards}</span>
           </div>
-          <div className="text-[9px] uppercase text-slate-300 tracking-widest mt-1">unitárias</div>
+          <div className="text-[9px] uppercase text-slate-300 tracking-widest mt-1">colecionadas</div>
           <div className="text-sm text-slate-500 leading-none mt-2">{globalStats.totalOwned}</div>
-          <div className="text-[9px] uppercase text-slate-300 tracking-widest mt-1">Total de Cartas</div>
+          <div className="text-[9px] uppercase text-slate-300 tracking-widest mt-1">Total de cartas (com repetidas)</div>
         </div>
       </div>
 
       <div className="mb-6 bg-gradient-to-r from-[#646B99] to-[#4d5275] rounded-3xl p-6 shadow-lg flex items-center justify-between">
         <div>
           <p className="text-[10px] text-white/60 uppercase tracking-widest">Valor Total da Coleção</p>
-          <p className="text-3xl text-white font-semibold mt-1">${globalStats.totalValue.toFixed(2)}</p>
+          <p className="text-3xl text-white font-semibold mt-1">R${globalStats.totalValue.toFixed(2)}</p>
           <p className="text-[9px] text-white/50 mt-1">Soma de todas as coleções, baseada nos preços que você informou</p>
         </div>
         <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center flex-shrink-0">

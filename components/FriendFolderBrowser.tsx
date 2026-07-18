@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, VisibleFolder } from '../types';
+import { Card, PokemonSet, VisibleFolder } from '../types';
 import { getCompleteCardNumber } from '../db';
-import { fetchCardsBySet } from '../api';
+import { fetchCardsBySet, fetchSets } from '../api';
 import { getFriendVisibleFolders, TradeItemSelection } from '../trades';
+import Pagination, { PAGE_SIZE } from './Pagination';
 
 interface FriendFolderBrowserProps {
   friendUserId: string;
@@ -37,14 +38,25 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
   const [loading, setLoading] = useState(true);
   const [folders, setFolders] = useState<VisibleFolder[]>([]);
   const [cardsById, setCardsById] = useState<Record<string, Card>>({});
+  const [sets, setSets] = useState<PokemonSet[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [selectedQuantities, setSelectedQuantities] = useState<Record<string, number>>({});
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<'cards' | 'collections'>('cards');
+  const [selectedEra, setSelectedEra] = useState<string | null>(null);
+  const [selectedSetId, setSelectedSetId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const visibleFolders = await getFriendVisibleFolders(friendUserId);
+      const [visibleFolders, setsList] = await Promise.all([
+        getFriendVisibleFolders(friendUserId),
+        fetchSets(),
+      ]);
       setFolders(visibleFolders);
+      setSets(setsList || []);
 
       const allCardIds = Array.from(new Set(visibleFolders.flatMap((f) => f.cards.map((c) => c.cardId))));
       const setIds = Array.from(new Set(allCardIds.map((id) => id.split('-')[0])));
@@ -69,6 +81,15 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
 
   const selectedFolder = folders.find((f) => f.id === selectedFolderId) || null;
 
+  // O card retornado pela API não inclui a série/era diretamente, então a era
+  // precisa ser resolvida procurando o set completo na lista de sets carregada.
+  const getCardEra = (card: Card | null): string | undefined => {
+    if (!card) return undefined;
+    return sets.find((s) => s.id === card.set.id)?.series;
+  };
+
+  const eras = useMemo(() => Array.from(new Set(sets.map((s) => s.series))), [sets]);
+
   const lines: ResolvedLine[] = useMemo(() => {
     if (!selectedFolder) return [];
     const result: ResolvedLine[] = [];
@@ -86,6 +107,26 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
     }
     return result;
   }, [selectedFolder, cardsById]);
+
+  const filteredLines = useMemo(() => {
+    if (!searchQuery.trim()) return lines;
+    const q = searchQuery.toLowerCase().trim();
+    return lines.filter((line) => {
+      if (!line.card) return line.cardId.toLowerCase().includes(q);
+      const fullNum = getCompleteCardNumber(line.card).toLowerCase();
+      return (
+        line.card.name.toLowerCase().includes(q) ||
+        line.card.number.toLowerCase().includes(q) ||
+        fullNum.includes(q) ||
+        line.card.set.name.toLowerCase().includes(q)
+      );
+    });
+  }, [lines, searchQuery]);
+
+  // Reseta a página sempre que a lista filtrada ou a navegação de coleção mudam
+  useEffect(() => {
+    setPage(1);
+  }, [filteredLines, selectedSetId]);
 
   const setLineQuantity = (line: ResolvedLine, quantity: number) => {
     const key = selectionKey(line.cardId, line.variation, line.condition);
@@ -114,6 +155,64 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
       quantity,
     }));
     onSubmit(selectedFolder.id, items, totalValue);
+  };
+
+  const openFolder = (folderId: string) => {
+    setSelectedFolderId(folderId);
+    setSearchQuery('');
+    setViewMode('cards');
+    setSelectedEra(null);
+    setSelectedSetId(null);
+    setPage(1);
+  };
+
+  const renderLine = (line: ResolvedLine) => {
+    const key = selectionKey(line.cardId, line.variation, line.condition);
+    const qty = selectedQuantities[key] || 0;
+    const isSelected = qty > 0;
+    return (
+      <div
+        key={key}
+        className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${isSelected ? 'border-[#646B99]/40 bg-[#646B99]/5' : 'border-slate-100 bg-white'}`}
+      >
+        {line.card && (
+          <img src={line.card.imageUrl} className="w-12 h-16 rounded-lg object-contain bg-slate-50 border border-slate-100/40 flex-shrink-0" />
+        )}
+        <div className="flex-1 min-w-0">
+          <h4 className="text-xs font-semibold text-slate-800 truncate">
+            {line.card ? line.card.name : line.cardId}
+          </h4>
+          <p className="text-[9px] text-slate-400">
+            {line.card ? `#${getCompleteCardNumber(line.card)} · ` : ''}{line.variation} · {line.condition}
+          </p>
+          <p className="text-[9px] text-slate-400">
+            Disponível: {line.availableQuantity} · R${line.price.toFixed(2)}/un
+          </p>
+        </div>
+        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+          <div className="flex items-center bg-slate-50 border border-slate-200 rounded-full overflow-hidden h-8">
+            <button
+              onClick={() => setLineQuantity(line, qty - 1)}
+              disabled={qty === 0}
+              className="w-7 h-full flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors disabled:opacity-30"
+            >
+              -
+            </button>
+            <span className="w-6 text-center text-[11px] text-[#646B99] tabular-nums">{qty}</span>
+            <button
+              onClick={() => setLineQuantity(line, qty + 1)}
+              disabled={qty >= line.availableQuantity}
+              className="w-7 h-full flex items-center justify-center text-slate-400 hover:text-emerald-500 transition-colors disabled:opacity-30"
+            >
+              +
+            </button>
+          </div>
+          {isSelected && (
+            <span className="text-xs font-bold text-[#646B99]">R${(qty * line.price).toFixed(2)}</span>
+          )}
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
@@ -149,7 +248,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
             {folders.map((folder) => (
               <button
                 key={folder.id}
-                onClick={() => setSelectedFolderId(folder.id)}
+                onClick={() => openFolder(folder.id)}
                 className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:border-[#646B99]/30 transition-all group text-left"
               >
                 <div className="flex items-center gap-4">
@@ -188,56 +287,133 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
           <p className="text-slate-400 text-sm">Nenhuma carta disponível nesta pasta.</p>
         </div>
       ) : (
-        <div className="grid gap-3">
-          {lines.map((line) => {
-            const key = selectionKey(line.cardId, line.variation, line.condition);
-            const qty = selectedQuantities[key] || 0;
-            const isSelected = qty > 0;
-            return (
-              <div
-                key={key}
-                className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${isSelected ? 'border-[#646B99]/40 bg-[#646B99]/5' : 'border-slate-100 bg-white'}`}
+        <>
+          <div className="space-y-2">
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              </span>
+              <input
+                type="text"
+                placeholder="Buscar por nome, número ou set..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#646B99] transition-all shadow-sm"
+              />
+            </div>
+            <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+              <button
+                onClick={() => { setViewMode('cards'); setSelectedEra(null); setSelectedSetId(null); }}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${viewMode === 'cards' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
               >
-                {line.card && (
-                  <img src={line.card.imageUrl} className="w-12 h-16 rounded-lg object-contain bg-slate-50 border border-slate-100/40 flex-shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-xs font-semibold text-slate-800 truncate">
-                    {line.card ? line.card.name : line.cardId}
-                  </h4>
-                  <p className="text-[9px] text-slate-400">
-                    {line.card ? `#${getCompleteCardNumber(line.card)} · ` : ''}{line.variation} · {line.condition}
-                  </p>
-                  <p className="text-[9px] text-slate-400">
-                    Disponível: {line.availableQuantity} · ${line.price.toFixed(2)}/un
-                  </p>
-                </div>
-                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                  <div className="flex items-center bg-slate-50 border border-slate-200 rounded-full overflow-hidden h-8">
+                Todas as Cartas
+              </button>
+              <button
+                onClick={() => { setViewMode('collections'); setSelectedEra(null); setSelectedSetId(null); }}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${viewMode === 'collections' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                Coleções
+              </button>
+            </div>
+          </div>
+
+          {viewMode === 'cards' ? (
+            filteredLines.length === 0 ? (
+              <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-100">
+                <p className="text-slate-400 text-sm">Nenhuma carta encontrada.</p>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {filteredLines.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map(renderLine)}
+                <Pagination page={page} totalPages={Math.max(1, Math.ceil(filteredLines.length / PAGE_SIZE))} onPageChange={setPage} />
+              </div>
+            )
+          ) : selectedSetId !== null ? (
+            (() => {
+              const setLines = filteredLines.filter((line) => line.card?.set.id === selectedSetId);
+              return (
+                <div className="grid gap-3">
+                  <div className="flex items-center gap-2 mb-1">
                     <button
-                      onClick={() => setLineQuantity(line, qty - 1)}
-                      disabled={qty === 0}
-                      className="w-7 h-full flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors disabled:opacity-30"
+                      onClick={() => setSelectedSetId(null)}
+                      className="text-xs font-semibold text-slate-400 hover:text-slate-600 flex items-center gap-1"
                     >
-                      -
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                      Voltar para Coleções
                     </button>
-                    <span className="w-6 text-center text-[11px] text-[#646B99] tabular-nums">{qty}</span>
-                    <button
-                      onClick={() => setLineQuantity(line, qty + 1)}
-                      disabled={qty >= line.availableQuantity}
-                      className="w-7 h-full flex items-center justify-center text-slate-400 hover:text-emerald-500 transition-colors disabled:opacity-30"
-                    >
-                      +
-                    </button>
+                    <span className="text-slate-300">/</span>
+                    <span className="text-xs font-semibold text-slate-700 truncate max-w-[140px]">
+                      {sets.find((s) => s.id === selectedSetId)?.name}
+                    </span>
                   </div>
-                  {isSelected && (
-                    <span className="text-xs font-bold text-[#646B99]">${(qty * line.price).toFixed(2)}</span>
+                  {setLines.length === 0 ? (
+                    <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-100">
+                      <p className="text-slate-400 text-sm">Nenhuma carta encontrada.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {setLines.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map(renderLine)}
+                      <Pagination page={page} totalPages={Math.max(1, Math.ceil(setLines.length / PAGE_SIZE))} onPageChange={setPage} />
+                    </>
                   )}
                 </div>
+              );
+            })()
+          ) : selectedEra !== null ? (
+            <div className="space-y-3">
+              <button
+                onClick={() => setSelectedEra(null)}
+                className="text-xs font-semibold text-slate-400 hover:text-slate-600 flex items-center gap-1"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                Voltar para Eras
+              </button>
+              <div className="grid grid-cols-2 gap-3">
+                {sets
+                  .filter((s) => s.series === selectedEra)
+                  .sort((a, b) => a.releaseDate.localeCompare(b.releaseDate))
+                  .map((set) => {
+                    const count = new Set(filteredLines.filter((line) => line.card?.set.id === set.id).map((l) => l.cardId)).size;
+                    if (count === 0) return null;
+                    return (
+                      <button
+                        key={set.id}
+                        onClick={() => setSelectedSetId(set.id)}
+                        className="flex flex-col items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-[#646B99]/30 transition-all group min-h-[110px]"
+                      >
+                        <div className="h-10 w-full flex items-center justify-center mb-1">
+                          <img src={set.logoUrl} className="max-h-full max-w-full object-contain group-hover:scale-110 transition-transform" />
+                        </div>
+                        <p className="text-[10px] font-medium text-slate-600 line-clamp-1 text-center">{set.name}</p>
+                        <p className="text-[9px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2 py-0.5 rounded-full mt-1">
+                          {count} {count === 1 ? 'carta' : 'cartas'}
+                        </p>
+                      </button>
+                    );
+                  })}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {eras.map((era) => {
+                const count = new Set(filteredLines.filter((line) => getCardEra(line.card) === era).map((l) => l.cardId)).size;
+                if (count === 0) return null;
+                return (
+                  <button
+                    key={era}
+                    onClick={() => setSelectedEra(era)}
+                    className="w-full flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-[#646B99]/30 transition-all"
+                  >
+                    <span className="text-xs font-semibold text-slate-700">{era}</span>
+                    <span className="text-[10px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2.5 py-1 rounded-full border border-[#646B99]/10">
+                      {count} {count === 1 ? 'carta' : 'cartas'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
 
       {totalCards > 0 && (
@@ -245,7 +421,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
           <div className="w-full max-w-lg bg-white border border-slate-200 shadow-2xl rounded-2xl p-4 flex items-center justify-between gap-3">
             <div>
               <p className="text-[9px] text-slate-400 uppercase tracking-widest">{totalCards} carta(s) selecionada(s)</p>
-              <p className="text-lg font-bold text-[#646B99]">${totalValue.toFixed(2)}</p>
+              <p className="text-lg font-bold text-[#646B99]">R${totalValue.toFixed(2)}</p>
             </div>
             <button
               onClick={handleSubmit}

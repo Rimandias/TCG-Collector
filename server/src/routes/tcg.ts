@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { db } from '../db.js';
 import { env } from '../env.js';
 import { FALLBACK_CARDS, FALLBACK_SETS, generateMockCards, mapSetSeries } from '../fallbackData.js';
+import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 
 export const tcgRouter = Router();
 
@@ -142,4 +143,66 @@ tcgRouter.get('/cards/:setId', async (req, res) => {
 
     return res.json({ data: generateMockCards(setId, setName), source: 'mock' });
   }
+});
+
+const cardIdSchema = z.string().trim().regex(/^[a-zA-Z0-9._-]+$/).min(1).max(60);
+
+// Guarda user_id junto com as variações só para permitir, no futuro, uma feature de
+// "quem informou este preço" (ex.: para o dono decidir se confia na fonte). Por ora o
+// endpoint abaixo nunca expõe esse campo na resposta — só os números agregados.
+const getCardPriceRowsStmt = db.prepare(`SELECT user_id, variations FROM user_cards WHERE card_id = ?`);
+
+interface PriceStat {
+  avg: number;
+  min: number;
+  max: number;
+  count: number;
+}
+
+tcgRouter.get('/card-stats/:cardId', requireAuth, (req: AuthedRequest, res) => {
+  const parsed = cardIdSchema.safeParse(req.params.cardId);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'ID de carta inválido.' });
+  }
+  const cardId = parsed.data;
+
+  const rows = getCardPriceRowsStmt.all(cardId) as { user_id: string; variations: string }[];
+
+  // variation -> condition -> lista de preços informados por usuários (sem guardar quem)
+  const buckets: Record<string, Record<string, number[]>> = {};
+  for (const row of rows) {
+    let variations: any;
+    try {
+      variations = JSON.parse(row.variations || '{}');
+    } catch {
+      continue;
+    }
+    for (const [variation, conditions] of Object.entries<any>(variations || {})) {
+      if (!conditions || typeof conditions !== 'object') continue;
+      for (const [condition, details] of Object.entries<any>(conditions)) {
+        const quantity = typeof details?.quantity === 'number' ? details.quantity : 0;
+        const price = parseFloat(details?.price);
+        if (quantity <= 0 || !isFinite(price) || price <= 0) continue;
+        buckets[variation] ??= {};
+        buckets[variation][condition] ??= [];
+        buckets[variation][condition].push(price);
+      }
+    }
+  }
+
+  const stats: Record<string, Record<string, PriceStat>> = {};
+  for (const [variation, conditions] of Object.entries(buckets)) {
+    stats[variation] = {};
+    for (const [condition, prices] of Object.entries(conditions)) {
+      const sum = prices.reduce((a, b) => a + b, 0);
+      stats[variation][condition] = {
+        avg: sum / prices.length,
+        min: Math.min(...prices),
+        max: Math.max(...prices),
+        count: prices.length,
+      };
+    }
+  }
+
+  return res.json({ stats });
 });

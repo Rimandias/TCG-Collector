@@ -383,7 +383,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                 <div className="flex flex-col items-center">
                     <p className="text-[9px] text-slate-400 leading-tight">Valor estimado</p>
-                    <p className="text-[10px] text-[#646B99]">${setStats?.value.toFixed(2) ?? '0.00'}</p>
+                    <p className="text-[10px] text-[#646B99]">R${setStats?.value.toFixed(2) ?? '0.00'}</p>
                 </div>
              </div>
           </div>
@@ -532,6 +532,15 @@ const HomeView: React.FC<HomeViewProps> = ({
            </div>
           )}
         </div>
+
+        {infoCard && (
+          <CardModal
+            card={infoCard}
+            user={user}
+            onUpdateUser={onUpdateUser}
+            onClose={() => setInfoCard(null)}
+          />
+        )}
       </div>
     );
   }
@@ -602,6 +611,15 @@ const HomeView: React.FC<HomeViewProps> = ({
             ))}
           </div>
         </>
+      )}
+
+      {infoCard && (
+        <CardModal
+          card={infoCard}
+          user={user}
+          onUpdateUser={onUpdateUser}
+          onClose={() => setInfoCard(null)}
+        />
       )}
     </div>
   );

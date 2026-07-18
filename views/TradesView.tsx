@@ -7,6 +7,7 @@ import { fetchCurrentUser } from '../auth';
 import CardModal from '../components/CardModal';
 import FriendFolderBrowser from '../components/FriendFolderBrowser';
 import TradeActionModal from '../components/TradeActionModal';
+import Pagination, { PAGE_SIZE } from '../components/Pagination';
 
 const TRADE_POLL_INTERVAL_FAST_MS = 3000;
 
@@ -121,6 +122,10 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [showManageCards, setShowManageCards] = useState(false);
+  const [manageSearchQuery, setManageSearchQuery] = useState('');
+  const [manageViewMode, setManageViewMode] = useState<'cards' | 'collections'>('cards');
+  const [manageSelectedEra, setManageSelectedEra] = useState<string | null>(null);
+  const [manageSelectedSetId, setManageSelectedSetId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [tradeCards, setTradeCards] = useState<{card: Card, data: UserCardData}[]>([]);
   const [editingCard, setEditingCard] = useState<Card | null>(null);
@@ -137,6 +142,8 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
   // Search/Filters states inside folders
   const [searchQuery, setSearchQuery] = useState('');
+  const [folderCardsPage, setFolderCardsPage] = useState(1);
+  const [setCardsPage, setSetCardsPage] = useState(1);
   const [filterRarity, setFilterRarity] = useState('all');
   const [filterSet, setFilterSet] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
@@ -182,37 +189,52 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     }
   }, [user.ownedCards, activeTab]);
 
-  // Carrega as coleções e todas as cartas das coleções em paralelo para a Lista de Desejos
+  // Carrega os metadados de todas as coleções (leve, cacheado) para a navegação por Era/Coleção
   useEffect(() => {
-    const loadSetsAndAllCards = async () => {
-      setLoadingWishlist(true);
+    const loadSets = async () => {
       try {
         const setsList = await fetchSets();
-        if (setsList) {
-          setSets(setsList);
-          
-          const allCards: Card[] = [];
-          const promises = setsList.map(async (s) => {
+        if (setsList) setSets(setsList);
+      } catch (err) {
+        console.warn("Error loading sets (handled with fallback/mock data):", err);
+      }
+    };
+    loadSets();
+  }, []);
+
+  // Carrega as cartas apenas das coleções que têm alguma carta na Lista de Desejos
+  // (evita buscar as cartas de TODAS as coleções do catálogo a cada visita à aba).
+  useEffect(() => {
+    const wishlistIds = user.wishlist || [];
+    if (wishlistIds.length === 0) {
+      setAllSetCards([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadWishlistCards = async () => {
+      setLoadingWishlist(true);
+      try {
+        const setIds: string[] = Array.from(new Set(wishlistIds.map((id) => id.split('-')[0])));
+        const results = await Promise.all(
+          setIds.map(async (setId) => {
             try {
-              return await fetchCardsBySet(s.id);
+              return await fetchCardsBySet(setId);
             } catch (e) {
               return [];
             }
-          });
-          const results = await Promise.all(promises);
-          results.forEach(cards => {
-            allCards.push(...cards);
-          });
-          setAllSetCards(allCards);
-        }
-      } catch (err) {
-        console.warn("Error loading wishlist sets/cards (handled with fallback/mock cards):", err);
+          })
+        );
+        if (!cancelled) setAllSetCards(results.flat());
       } finally {
-        setLoadingWishlist(false);
+        if (!cancelled) setLoadingWishlist(false);
       }
     };
-    loadSetsAndAllCards();
-  }, []);
+    loadWishlistCards();
+    return () => {
+      cancelled = true;
+    };
+  }, [user.wishlist]);
 
   // Lista de Desejos: Cartas adicionadas manualmente via coração pelo usuário
   const wishlistCards = useMemo(() => {
@@ -251,6 +273,12 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     
     return styles[safeIndex % styles.length];
   }, [eras]);
+
+  // O card retornado pela API não inclui a série/era diretamente (só id/name/printedTotal do set),
+  // então a era precisa ser resolvida procurando o set completo na lista de sets carregada.
+  const getCardEra = useCallback((card: Card) => {
+    return sets.find(s => s.id === card.set.id)?.series;
+  }, [sets]);
 
   const getSetLogoForSeries = useCallback((seriesName: string) => {
     const seriesSets = sets.filter(s => s.series === seriesName);
@@ -338,6 +366,42 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     s.forEach(set => unique.set(set.id, set.name));
     return Array.from(unique.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [activeFolderCards]);
+
+  // Paginação (20 por página) da lista "Todas as Cartas" da pasta ativa
+  useEffect(() => {
+    setFolderCardsPage(1);
+  }, [filteredFolderCards]);
+
+  // Paginação (20 por página) da lista de cartas de uma coleção específica (modo "Coleções")
+  useEffect(() => {
+    setSetCardsPage(1);
+  }, [selectedFolderSetId, filteredFolderCards]);
+
+  // Busca/paginação dentro do modal "Gerenciar Pasta"
+  const manageFilteredCards = useMemo(() => {
+    if (!manageSearchQuery.trim()) return tradeCards;
+    const q = manageSearchQuery.toLowerCase().trim();
+    return tradeCards.filter(({ card }) => {
+      const fullNum = getCompleteCardNumber(card).toLowerCase();
+      return (
+        card.name.toLowerCase().includes(q) ||
+        card.number.toLowerCase().includes(q) ||
+        fullNum.includes(q) ||
+        card.set.name.toLowerCase().includes(q)
+      );
+    });
+  }, [tradeCards, manageSearchQuery]);
+
+  const [managePage, setManagePage] = useState(1);
+  useEffect(() => {
+    setManagePage(1);
+  }, [manageFilteredCards, manageSelectedSetId]);
+
+  const folderCardsTotalPages = Math.max(1, Math.ceil(filteredFolderCards.length / PAGE_SIZE));
+  const paginatedFolderCards = useMemo(() => {
+    const start = (folderCardsPage - 1) * PAGE_SIZE;
+    return filteredFolderCards.slice(start, start + PAGE_SIZE);
+  }, [filteredFolderCards, folderCardsPage]);
 
   // Reseta filtros e navegação ao voltar/fechar uma pasta
   const handleExitFolder = () => {
@@ -656,7 +720,13 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
                   {!isDuplicates && !isWishlist && (
                     <button
-                      onClick={() => setShowManageCards(true)}
+                      onClick={() => {
+                        setManageSearchQuery('');
+                        setManageViewMode('cards');
+                        setManageSelectedEra(null);
+                        setManageSelectedSetId(null);
+                        setShowManageCards(true);
+                      }}
                       className="text-[11px] font-medium text-[#646B99] hover:bg-[#646B99]/5 border border-[#646B99]/20 px-2.5 py-1 rounded-lg transition-colors uppercase tracking-wider"
                     >
                       Gerenciar
@@ -822,7 +892,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                     </div>
                   ) : (
                     <div className="grid gap-3">
-                      {filteredFolderCards.map(({ card, data }) => (
+                      {paginatedFolderCards.map(({ card, data }) => (
                         <div key={card.id} className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
                           <img 
                             src={card.imageUrl} 
@@ -858,7 +928,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                         >
                                           {isOnlyOne && <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />}
                                           {varType} {cond}: {details.quantity}
-                                          {details.price ? ` ($${details.price})` : ''}
+                                          {details.price ? ` (R$${details.price})` : ''}
                                           {isOnlyOne && ' (Única!)'}
                                         </span>
                                       );
@@ -886,7 +956,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
                           <div className="flex flex-col items-end gap-1">
                             <span className="text-[10px] font-semibold text-emerald-500">
-                              ${getCardEstimatedValue(data.variations).toFixed(2)}
+                              R${getCardEstimatedValue(data.variations).toFixed(2)}
                             </span>
                             
                             {isWishlist ? (
@@ -921,6 +991,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                           </div>
                         </div>
                       ))}
+                      <Pagination page={folderCardsPage} totalPages={folderCardsTotalPages} onPageChange={setFolderCardsPage} />
                     </div>
                   )
                 ) : (
@@ -929,6 +1000,8 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                     if (selectedFolderSetId !== null) {
                       // --- SHOW SET DETAILS CARD LIST ---
                       const setCardsInFolder = filteredFolderCards.filter(tc => tc.card.set.id === selectedFolderSetId);
+                      const setCardsTotalPages = Math.max(1, Math.ceil(setCardsInFolder.length / PAGE_SIZE));
+                      const paginatedSetCards = setCardsInFolder.slice((setCardsPage - 1) * PAGE_SIZE, setCardsPage * PAGE_SIZE);
                       return (
                         <div className="space-y-4">
                           <div className="flex items-center gap-2 mb-4 bg-slate-50 p-2 rounded-xl border border-slate-100">
@@ -952,7 +1025,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                             </div>
                           ) : (
                             <div className="grid gap-3">
-                              {setCardsInFolder.map(({ card, data }) => (
+                              {paginatedSetCards.map(({ card, data }) => (
                                 <div key={card.id} className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
                                   <img 
                                     src={card.imageUrl} 
@@ -1015,7 +1088,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
                                   <div className="flex flex-col items-end gap-1">
                                     <span className="text-[10px] font-semibold text-emerald-500">
-                                      ${getCardEstimatedValue(data.variations).toFixed(2)}
+                                      R${getCardEstimatedValue(data.variations).toFixed(2)}
                                     </span>
                                     {isWishlist ? (
                                       <button 
@@ -1049,6 +1122,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                   </div>
                                 </div>
                               ))}
+                              <Pagination page={setCardsPage} totalPages={setCardsTotalPages} onPageChange={setSetCardsPage} />
                             </div>
                           )}
                         </div>
@@ -1108,7 +1182,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                           <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold text-center mb-2">Selecione a Era</p>
                           <div className="grid gap-3">
                             {eras.map(era => {
-                              const count = filteredFolderCards.filter(tc => sets.find(s => s.id === tc.card.set.id)?.series === era).length;
+                              const count = filteredFolderCards.filter(tc => getCardEra(tc.card) === era).length;
                               if (count === 0 && !isWishlist) return null; // Hide empty eras
                               return (
                                 <button
@@ -1226,7 +1300,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
             </p>
             <div className="bg-slate-50 rounded-xl p-4 text-center mb-4 border border-slate-100">
               <p className="text-[9px] text-slate-400 uppercase tracking-widest">Valor total</p>
-              <p className="text-2xl font-bold text-[#646B99]">${pendingTradeConfirm.totalValue.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-[#646B99]">R${pendingTradeConfirm.totalValue.toFixed(2)}</p>
             </div>
             {tradeError && <p className="text-red-500 text-[10px] mb-3">{tradeError}</p>}
             <div className="flex gap-3">
@@ -1255,7 +1329,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                   if (trade) {
                     setPendingTradeConfirm(null);
                     setTradeSuccessMessage(
-                      `Pedido enviado! ${pendingTradeConfirm.items.reduce((sum, i) => sum + i.quantity, 0)} carta(s) por $${pendingTradeConfirm.totalValue.toFixed(2)}, aguardando ${selectedFriend.username}.`
+                      `Pedido enviado! ${pendingTradeConfirm.items.reduce((sum, i) => sum + i.quantity, 0)} carta(s) por R$${pendingTradeConfirm.totalValue.toFixed(2)}, aguardando ${selectedFriend.username}.`
                     );
                   }
                 }}
@@ -1313,6 +1387,29 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
           const currentFolder = folders.find(f => f.id === selectedFolderId);
           if (!currentFolder) return null;
 
+          const renderCardRow = (card: Card) => {
+            const isInFolder = currentFolder.cardIds.includes(card.id);
+            return (
+              <div
+                key={card.id}
+                onClick={() => handleToggleCardInFolder(currentFolder.id, card.id)}
+                className={`flex items-center gap-3 p-2 rounded-xl border cursor-pointer transition-all ${isInFolder ? 'border-[#646B99]/30 bg-[#646B99]/5' : 'border-slate-100 hover:bg-slate-50'}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isInFolder}
+                  onChange={() => {}} // Controlled via onClick on div
+                  className="w-3.5 h-3.5 text-[#646B99] border-slate-300 rounded focus:ring-[#646B99]"
+                />
+                <img src={card.imageUrl} className="w-10 h-14 object-contain rounded bg-white border border-slate-100/50" />
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-[11px] font-semibold text-slate-700 truncate">{card.name}</h4>
+                  <p className="text-[9px] text-slate-400 truncate">{card.rarity} • #{card.number} ({card.set.name})</p>
+                </div>
+              </div>
+            );
+          };
+
           return (
             <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
                <div className="bg-white border border-slate-100 w-full max-w-sm rounded-2xl shadow-2xl p-6 max-h-[85vh] flex flex-col">
@@ -1327,34 +1424,126 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                       <p className="text-[9px] text-slate-300 uppercase mt-1">Marque-as primeiro na aba Home</p>
                     </div>
                   ) : (
-                    <div className="flex-1 overflow-y-auto space-y-2 pr-1 my-2 max-h-[45vh]">
-                      {tradeCards.map(({ card }) => {
-                        const isInFolder = currentFolder.cardIds.includes(card.id);
-                        return (
-                          <div 
-                            key={card.id}
-                            onClick={() => handleToggleCardInFolder(currentFolder.id, card.id)}
-                            className={`flex items-center gap-3 p-2 rounded-xl border cursor-pointer transition-all ${isInFolder ? 'border-[#646B99]/30 bg-[#646B99]/5' : 'border-slate-100 hover:bg-slate-50'}`}
+                    <>
+                      <div className="space-y-2 mb-2">
+                        <div className="relative">
+                          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="Buscar por nome, número ou set..."
+                            value={manageSearchQuery}
+                            onChange={(e) => setManageSearchQuery(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#646B99] transition-all"
+                          />
+                        </div>
+                        <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+                          <button
+                            onClick={() => { setManageViewMode('cards'); setManageSelectedEra(null); setManageSelectedSetId(null); }}
+                            className={`flex-1 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all ${manageViewMode === 'cards' ? 'bg-[#646B99] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                           >
-                            <input 
-                              type="checkbox" 
-                              checked={isInFolder}
-                              onChange={() => {}} // Controlled via onClick on div
-                              className="w-3.5 h-3.5 text-[#646B99] border-slate-300 rounded focus:ring-[#646B99]"
-                            />
-                            <img src={card.imageUrl} className="w-10 h-14 object-contain rounded bg-white border border-slate-100/50" />
-                            <div className="flex-1 min-w-0">
-                              <h4 className="text-[11px] font-semibold text-slate-700 truncate">{card.name}</h4>
-                              <p className="text-[9px] text-slate-400 truncate">{card.rarity} • #{card.number}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                            Todas as Cartas
+                          </button>
+                          <button
+                            onClick={() => { setManageViewMode('collections'); setManageSelectedEra(null); setManageSelectedSetId(null); }}
+                            className={`flex-1 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all ${manageViewMode === 'collections' ? 'bg-[#646B99] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                          >
+                            Coleções
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto space-y-2 pr-1 my-2 max-h-[42vh]">
+                        {manageViewMode === 'cards' ? (
+                          manageFilteredCards.length === 0 ? (
+                            <p className="text-xs text-slate-400 text-center py-8">Nenhuma carta encontrada.</p>
+                          ) : (
+                            <>
+                              {manageFilteredCards.slice((managePage - 1) * PAGE_SIZE, managePage * PAGE_SIZE).map(({ card }) => renderCardRow(card))}
+                              <Pagination
+                                page={managePage}
+                                totalPages={Math.max(1, Math.ceil(manageFilteredCards.length / PAGE_SIZE))}
+                                onPageChange={setManagePage}
+                              />
+                            </>
+                          )
+                        ) : manageSelectedSetId !== null ? (
+                          (() => {
+                            const setCards = manageFilteredCards.filter(({ card }) => card.set.id === manageSelectedSetId);
+                            return (
+                              <>
+                                <button
+                                  onClick={() => setManageSelectedSetId(null)}
+                                  className="text-[10px] font-semibold text-slate-400 hover:text-slate-600 flex items-center gap-1 mb-1"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                                  Voltar para Coleções
+                                </button>
+                                {setCards.length === 0 ? (
+                                  <p className="text-xs text-slate-400 text-center py-8">Nenhuma carta encontrada.</p>
+                                ) : (
+                                  <>
+                                    {setCards.slice((managePage - 1) * PAGE_SIZE, managePage * PAGE_SIZE).map(({ card }) => renderCardRow(card))}
+                                    <Pagination
+                                      page={managePage}
+                                      totalPages={Math.max(1, Math.ceil(setCards.length / PAGE_SIZE))}
+                                      onPageChange={setManagePage}
+                                    />
+                                  </>
+                                )}
+                              </>
+                            );
+                          })()
+                        ) : manageSelectedEra !== null ? (
+                          <>
+                            <button
+                              onClick={() => setManageSelectedEra(null)}
+                              className="text-[10px] font-semibold text-slate-400 hover:text-slate-600 flex items-center gap-1 mb-1"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                              Voltar para Eras
+                            </button>
+                            {sets
+                              .filter(s => s.series === manageSelectedEra)
+                              .sort((a, b) => a.releaseDate.localeCompare(b.releaseDate))
+                              .map(set => {
+                                const count = manageFilteredCards.filter(({ card }) => card.set.id === set.id).length;
+                                if (count === 0) return null;
+                                return (
+                                  <button
+                                    key={set.id}
+                                    onClick={() => setManageSelectedSetId(set.id)}
+                                    className="w-full flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm hover:border-[#646B99]/30 transition-all"
+                                  >
+                                    <span className="text-[11px] font-semibold text-slate-700 truncate">{set.name}</span>
+                                    <span className="text-[9px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2 py-0.5 rounded-full">{count}</span>
+                                  </button>
+                                );
+                              })}
+                          </>
+                        ) : (
+                          eras.map(era => {
+                            const count = manageFilteredCards.filter(({ card }) => getCardEra(card) === era).length;
+                            if (count === 0) return null;
+                            return (
+                              <button
+                                key={era}
+                                onClick={() => setManageSelectedEra(era)}
+                                className="w-full flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm hover:border-[#646B99]/30 transition-all"
+                              >
+                                <span className="text-[11px] font-semibold text-slate-700 truncate">{era}</span>
+                                <span className="text-[9px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2 py-0.5 rounded-full">{count}</span>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </>
                   )}
 
                   <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
-                    <button 
+                    <button
                       onClick={() => setShowManageCards(false)}
                       className="w-full py-2.5 bg-[#646B99] hover:bg-[#4d5275] text-white text-xs font-semibold rounded-xl transition-colors"
                     >
