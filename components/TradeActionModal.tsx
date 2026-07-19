@@ -143,9 +143,14 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, ca
       <div className={wrapperClass}>
         <div className={cardClass}>
           <h3 className="text-sm font-semibold text-slate-800 mb-1">Há uma troca disponível!</h3>
-          <p className="text-[10px] text-slate-400 mb-4">
+          <p className="text-[10px] text-slate-400 mb-3">
             <span className="font-semibold text-slate-600">{trade.initiatorUsername}</span> quer {requested.count} carta(s) sua(s), no valor de R${requested.total.toFixed(2)}.
           </p>
+          <div className="space-y-1.5 mb-4 max-h-40 overflow-y-auto pr-1">
+            {trade.requestedItems.map((item) => (
+              <TradeCardLine key={`req-${item.cardId}-${item.variation}-${item.condition}`} item={item} card={cardsById[item.cardId]} />
+            ))}
+          </div>
           {error && <p className="text-red-500 text-[10px] mb-3">{error}</p>}
           <div className="space-y-2">
             <button
