@@ -26,7 +26,7 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
     // Se não tiver nenhuma, ao clicar na carta marcamos como possuída (Foil NM x1)
     if (totalQuantity === 0) {
       const normalized = getNormalizedVariations(cardData.variations);
-      normalized['Foil'][CardCondition.NM].quantity = 1;
+      normalized['Standard'][CardCondition.NM].quantity = 1;
       onUpdateUser(updateCardStatus(user, card.id, { isOwned: true, variations: normalized }));
     } else {
       // Se já tem, o clique na carta apenas alterna a visualização (colorida/p&b) via isOwned se solicitado,
@@ -38,8 +38,8 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
 
   const adjustQuantity = (delta: number) => {
     const normalized = getNormalizedVariations(cardData.variations);
-    const currentNM = normalized['Foil'][CardCondition.NM].quantity || 0;
-    normalized['Foil'][CardCondition.NM].quantity = Math.max(0, currentNM + delta);
+    const currentNM = normalized['Standard'][CardCondition.NM].quantity || 0;
+    normalized['Standard'][CardCondition.NM].quantity = Math.max(0, currentNM + delta);
     const hasCards = getCardTotalQuantity(normalized) > 0;
     onUpdateUser(updateCardStatus(user, card.id, { variations: normalized, isOwned: hasCards }));
   };
@@ -176,14 +176,12 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
           </div>
 
           {/* Botão + Info */}
-          {!isCompact && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onShowInfo(card); }}
-              className="flex-[1.2] text-[9px] text-slate-500 tracking-tight h-full hover:bg-slate-100 transition-colors"
-            >
-              + Info
-            </button>
-          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); onShowInfo(card); }}
+            className={`flex-[1.2] text-slate-500 tracking-tight h-full hover:bg-slate-100 transition-colors ${isCompact ? 'text-[7px]' : 'text-[9px]'}`}
+          >
+            + Info
+          </button>
         </div>
 
         {/* Botão de Troca e Nome */}

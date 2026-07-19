@@ -1,8 +1,27 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { User, Card, UserCardData, TradeFolder, Friend, CardCondition, VARIATION_TYPES } from '../types';
+import { User, Card, UserCardData, TradeFolder, Friend, Trade, CardCondition, VARIATION_TYPES } from '../types';
 import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getCardEstimatedValue } from '../db';
 import { fetchCardsBySet, fetchSets } from '../api';
+import { createTradeRequest, getMyTrades, TradeItemSelection } from '../trades';
+import { fetchCurrentUser } from '../auth';
 import CardModal from '../components/CardModal';
+import FriendFolderBrowser from '../components/FriendFolderBrowser';
+import TradeActionModal from '../components/TradeActionModal';
+import TradeItemsList from '../components/TradeItemsList';
+import Pagination, { PAGE_SIZE } from '../components/Pagination';
+
+const TRADE_POLL_INTERVAL_MS = 15000;
+
+function needsMyAction(trade: Trade, myId: string): boolean {
+  if (trade.status === 'completed' || trade.status === 'cancelled') return false;
+  const isInitiator = trade.initiatorId === myId;
+  const isRecipient = trade.recipientId === myId;
+  if (trade.status === 'pending_response' || trade.status === 'selecting_offer') return isRecipient;
+  if (trade.status === 'awaiting_payment_confirmation' || trade.status === 'awaiting_value_diff_confirmation') {
+    return isInitiator ? !trade.initiatorConfirmed : !trade.recipientConfirmed;
+  }
+  return false;
+}
 
 interface TradesViewProps {
   user: User;
@@ -15,7 +34,135 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
   // Friend detail states
   const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
-  const [selectedFriendFolderId, setSelectedFriendFolderId] = useState<string | null>(null);
+
+  // Pedido de troca (escolhendo cartas de um amigo)
+  const [pendingTradeConfirm, setPendingTradeConfirm] = useState<{ folderId: string; items: TradeItemSelection[]; totalValue: number } | null>(null);
+  const [creatingTrade, setCreatingTrade] = useState(false);
+  const [tradeError, setTradeError] = useState<string | null>(null);
+  const [tradeSuccessMessage, setTradeSuccessMessage] = useState<string | null>(null);
+
+  // Negociações de troca (notificação, resposta, pagamento/oferta)
+  const [myTrades, setMyTrades] = useState<Trade[]>([]);
+  const [activeTradeModal, setActiveTradeModal] = useState<Trade | null>(null);
+  const [dismissedTradeIds, setDismissedTradeIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      const trades = await getMyTrades();
+      if (!cancelled) setMyTrades(trades);
+    };
+    poll();
+    const interval = setInterval(poll, TRADE_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const actionableTrades = useMemo(
+    () => myTrades.filter((t) => needsMyAction(t, user.id) && !dismissedTradeIds.has(t.id)),
+    [myTrades, user.id, dismissedTradeIds]
+  );
+  const activeTrades = useMemo(
+    () => myTrades.filter((t) => t.status !== 'completed' && t.status !== 'cancelled'),
+    [myTrades]
+  );
+
+  useEffect(() => {
+    if (!activeTradeModal && actionableTrades.length > 0) {
+      setActiveTradeModal(actionableTrades[0]);
+    }
+  }, [actionableTrades, activeTradeModal]);
+
+  // Mantém o pop-up aberto sincronizado com o polling: sem isso, o modal ficava "congelado"
+  // com os dados de quando foi aberto, mesmo depois da outra pessoa confirmar e a troca
+  // avançar (ex.: usuário via "Aguardando confirmação" indefinidamente mesmo já concluída).
+  useEffect(() => {
+    setActiveTradeModal((current) => {
+      if (!current) return current;
+      const fresh = myTrades.find((t) => t.id === current.id);
+      if (!fresh) return current;
+      if (fresh.status === current.status && fresh.updatedAt === current.updatedAt) return current;
+      if (fresh.status === 'completed' && current.status !== 'completed') {
+        fetchCurrentUser().then((freshUser) => {
+          if (freshUser) onUpdateUser(freshUser);
+        });
+      }
+      if (fresh.status === 'cancelled') return null;
+      return fresh;
+    });
+  }, [myTrades]);
+
+  const handleTradeChanged = async (updated: Trade) => {
+    setMyTrades((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+    if (updated.status === 'cancelled') {
+      setActiveTradeModal(null);
+      return;
+    }
+    // Em 'completed' mantemos o pop-up aberto (sem auto-close) para o usuário ver
+    // quais cartas foram trocadas antes de fechar manualmente e ajustar a pasta física.
+    setActiveTradeModal(updated);
+    if (updated.status === 'completed') {
+      const freshUser = await fetchCurrentUser();
+      if (freshUser) onUpdateUser(freshUser);
+    }
+  };
+
+  const closeTradeModal = () => {
+    if (activeTradeModal) {
+      setDismissedTradeIds((prev) => new Set(prev).add(activeTradeModal.id));
+    }
+    setActiveTradeModal(null);
+  };
+
+  // --- Histórico de Trocas (dentro do toggle "Pasta de Amigos") ---
+  const [friendsSubTab, setFriendsSubTab] = useState<'friends' | 'history'>('friends');
+  const [historyCardsById, setHistoryCardsById] = useState<Record<string, Card>>({});
+  const [loadingHistoryCards, setLoadingHistoryCards] = useState(false);
+
+  const historyTrades = useMemo(
+    () =>
+      myTrades
+        .filter((t) => t.status === 'completed' || t.status === 'cancelled')
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    [myTrades]
+  );
+
+  // Carrega os dados das cartas do histórico só quando o usuário abre essa aba (evita
+  // requisições desnecessárias de todas as coleções toda vez que a tela de trocas monta).
+  useEffect(() => {
+    if (friendsSubTab !== 'history' || historyTrades.length === 0) return;
+    let cancelled = false;
+    const load = async () => {
+      const allCardIds: string[] = Array.from(
+        new Set(historyTrades.flatMap((t) => [...t.requestedItems, ...t.offeredItems].map((i) => i.cardId)))
+      );
+      const missingIds = allCardIds.filter((id) => !historyCardsById[id]);
+      if (missingIds.length === 0) return;
+      setLoadingHistoryCards(true);
+      const setIds: string[] = Array.from(new Set(missingIds.map((id) => id.split('-')[0])));
+      const map: Record<string, Card> = {};
+      await Promise.all(
+        setIds.map(async (setId) => {
+          try {
+            const cards = await fetchCardsBySet(setId);
+            for (const card of cards) map[card.id] = card;
+          } catch {
+            // Ignora falhas isoladas de coleção
+          }
+        })
+      );
+      if (!cancelled) {
+        setHistoryCardsById((prev) => ({ ...prev, ...map }));
+        setLoadingHistoryCards(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [friendsSubTab, historyTrades]);
 
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -81,37 +228,46 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     }
   }, [user.ownedCards, activeTab]);
 
-  // Carrega as coleções e todas as cartas das coleções em paralelo para a Lista de Desejos
+  // Carrega os metadados das coleções (leve, uma única chamada) sempre.
   useEffect(() => {
-    const loadSetsAndAllCards = async () => {
+    fetchSets().then((setsList) => {
+      if (setsList) setSets(setsList);
+    });
+  }, []);
+
+  // Carrega as cartas da Lista de Desejos: busca somente as coleções realmente referenciadas
+  // pelo wishlist do usuário (via prefixo do cardId), em vez de TODAS as ~200 coleções do
+  // catálogo. Buscar tudo a cada montagem da tela de Trocas gerava dezenas/centenas de
+  // requisições concorrentes desnecessárias, deixando toda a aplicação lenta (inclusive
+  // travando por vários segundos outras chamadas importantes, como carregar as trocas).
+  useEffect(() => {
+    const loadWishlistCards = async () => {
+      const wishlistIds = user.wishlist || [];
+      const neededSetIds: string[] = Array.from(new Set(wishlistIds.map((id) => id.split('-')[0])));
+      if (neededSetIds.length === 0) {
+        setAllSetCards([]);
+        return;
+      }
       setLoadingWishlist(true);
       try {
-        const setsList = await fetchSets();
-        if (setsList) {
-          setSets(setsList);
-          
-          const allCards: Card[] = [];
-          const promises = setsList.map(async (s) => {
+        const allCards: Card[] = [];
+        await Promise.all(
+          neededSetIds.map(async (setId) => {
             try {
-              return await fetchCardsBySet(s.id);
+              const cards = await fetchCardsBySet(setId);
+              allCards.push(...cards);
             } catch (e) {
-              return [];
+              // Ignora falhas isoladas de coleção; a carta some da lista de desejos exibida
             }
-          });
-          const results = await Promise.all(promises);
-          results.forEach(cards => {
-            allCards.push(...cards);
-          });
-          setAllSetCards(allCards);
-        }
-      } catch (err) {
-        console.warn("Error loading wishlist sets/cards (handled with fallback/mock cards):", err);
+          })
+        );
+        setAllSetCards(allCards);
       } finally {
         setLoadingWishlist(false);
       }
     };
-    loadSetsAndAllCards();
-  }, []);
+    loadWishlistCards();
+  }, [user.wishlist]);
 
   // Lista de Desejos: Cartas adicionadas manualmente via coração pelo usuário
   const wishlistCards = useMemo(() => {
@@ -121,8 +277,8 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
   // Estrutura de Eras/Coleções idêntica à Home
   const eras = useMemo(() => {
-    const uniqueSeries = Array.from(new Set(sets.map(s => s.series)));
-    
+    const uniqueSeries: string[] = Array.from(new Set(sets.map(s => s.series)));
+
     const getEraOldestReleaseDate = (eraName: string) => {
       const eraSets = sets.filter(s => s.series === eraName);
       if (eraSets.length === 0) return '9999-99-99';
@@ -154,6 +310,11 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   const getSetLogoForSeries = useCallback((seriesName: string) => {
     const seriesSets = sets.filter(s => s.series === seriesName);
     if (seriesSets.length === 0) return '';
+    // Prefere a coleção-base com o mesmo nome da era, em vez da mais antiga por data de
+    // lançamento — os "X Black Star Promos" costumam sair no mesmo dia ou antes da coleção
+    // base e "venciam" o sort por data, mostrando o logo do promo em vez do oficial.
+    const baseSet = seriesSets.find(s => s.name.trim().toLowerCase() === seriesName.trim().toLowerCase());
+    if (baseSet) return baseSet.logoUrl || '';
     const sorted = [...seriesSets].sort((a, b) => a.releaseDate.localeCompare(b.releaseDate));
     return sorted[0]?.logoUrl || '';
   }, [sets]);
@@ -193,7 +354,8 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
         const matchesName = card.name.toLowerCase().includes(q);
         const matchesNum = card.number.toLowerCase() === q || fullNum === q || card.number.toLowerCase().includes(q) || fullNum.includes(q);
         const matchesSet = card.set.name.toLowerCase().includes(q);
-        if (!matchesName && !matchesNum && !matchesSet) return false;
+        const matchesArtist = (card.artist || '').toLowerCase().includes(q);
+        if (!matchesName && !matchesNum && !matchesSet && !matchesArtist) return false;
       }
 
       // 2. Filtro de Raridade (campo da API)
@@ -237,6 +399,60 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     s.forEach(set => unique.set(set.id, set.name));
     return Array.from(unique.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [activeFolderCards]);
+
+  // Paginação (20 por página) da lista "Todas as Cartas" da pasta ativa
+  const [folderCardsPage, setFolderCardsPage] = useState(1);
+  useEffect(() => {
+    setFolderCardsPage(1);
+  }, [filteredFolderCards]);
+  const paginatedFolderCards = useMemo(() => {
+    const start = (folderCardsPage - 1) * PAGE_SIZE;
+    return filteredFolderCards.slice(start, start + PAGE_SIZE);
+  }, [filteredFolderCards, folderCardsPage]);
+
+  // Paginação (20 por página) da lista de cartas de uma coleção específica (modo "Coleções")
+  const [setCardsPage, setSetCardsPage] = useState(1);
+  useEffect(() => {
+    setSetCardsPage(1);
+  }, [selectedFolderSetId, filteredFolderCards]);
+
+  // Busca/paginação dentro do modal "Gerenciar Pasta"
+  const [manageSearchQuery, setManageSearchQuery] = useState('');
+  const [managePage, setManagePage] = useState(1);
+  const manageFilteredCards = useMemo(() => {
+    if (!manageSearchQuery.trim()) return tradeCards;
+    const q = manageSearchQuery.toLowerCase().trim();
+    return tradeCards.filter(({ card }) => {
+      const fullNum = getCompleteCardNumber(card).toLowerCase();
+      return (
+        card.name.toLowerCase().includes(q) ||
+        card.number.toLowerCase().includes(q) ||
+        fullNum.includes(q) ||
+        card.set.name.toLowerCase().includes(q) ||
+        (card.artist || '').toLowerCase().includes(q)
+      );
+    });
+  }, [tradeCards, manageSearchQuery]);
+  useEffect(() => {
+    setManagePage(1);
+  }, [manageFilteredCards]);
+  const paginatedManageCards = useMemo(() => {
+    const start = (managePage - 1) * PAGE_SIZE;
+    return manageFilteredCards.slice(start, start + PAGE_SIZE);
+  }, [manageFilteredCards, managePage]);
+
+  // Toggle "Todas as Cartas" vs "Coleções" dentro do modal "Gerenciar Pasta"
+  const [manageViewMode, setManageViewMode] = useState<'cards' | 'collections'>('cards');
+  const [manageSelectedSeries, setManageSelectedSeries] = useState<string | null>(null);
+  const [manageSelectedSetId, setManageSelectedSetId] = useState<string | null>(null);
+
+  const manageSetCardsInSet = useMemo(() => {
+    if (!manageSelectedSetId) return [];
+    return manageFilteredCards.filter(({ card }) => card.set.id === manageSelectedSetId);
+  }, [manageFilteredCards, manageSelectedSetId]);
+  useEffect(() => {
+    setManagePage(1);
+  }, [manageSelectedSetId]);
 
   // Reseta filtros e navegação ao voltar/fechar uma pasta
   const handleExitFolder = () => {
@@ -335,31 +551,51 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   };
 
   return (
-    <div className="animate-in fade-in duration-500 px-6 max-w-lg mx-auto pb-8">
+    <div className="animate-in fade-in duration-500 px-6 max-w-lg mx-auto pb-8 pt-4">
       <div className="mb-6 flex flex-col gap-4">
         <div>
           <h2 className="text-2xl text-slate-800">Central de Trocas</h2>
           <p className="text-slate-400 text-xs">Gerencie suas pastas ou explore os álbuns dos seus amigos.</p>
         </div>
 
+        {(actionableTrades.length > 0 || activeTrades.length > 0) && (
+          <button
+            onClick={() => setActiveTradeModal(actionableTrades[0] || activeTrades[0])}
+            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border text-left transition-colors ${
+              actionableTrades.length > 0
+                ? 'bg-amber-50 border-amber-200 hover:bg-amber-100'
+                : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 ${actionableTrades.length > 0 ? 'text-amber-600' : 'text-slate-400'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
+              <span className={`text-xs font-semibold ${actionableTrades.length > 0 ? 'text-amber-700' : 'text-slate-500'}`}>
+                {actionableTrades.length > 0
+                  ? `${actionableTrades.length} troca(s) esperando sua resposta`
+                  : `${activeTrades.length} troca(s) em andamento`}
+              </span>
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        )}
+
         <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
-          <button 
+          <button
             onClick={() => {
               setActiveTab('my');
               handleExitFolder();
               setSelectedFriend(null);
-              setSelectedFriendFolderId(null);
             }}
             className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'my' ? 'bg-white text-[#646B99] shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
           >
             Minhas Pastas
           </button>
-          <button 
+          <button
             onClick={() => {
               setActiveTab('friends');
               handleExitFolder();
               setSelectedFriend(null);
-              setSelectedFriendFolderId(null);
+              setFriendsSubTab('friends');
             }}
             className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'friends' ? 'bg-white text-[#646B99] shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
           >
@@ -536,7 +772,13 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
                   {!isDuplicates && !isWishlist && (
                     <button
-                      onClick={() => setShowManageCards(true)}
+                      onClick={() => {
+                        setManageSearchQuery('');
+                        setManageViewMode('cards');
+                        setManageSelectedSeries(null);
+                        setManageSelectedSetId(null);
+                        setShowManageCards(true);
+                      }}
                       className="text-[11px] font-medium text-[#646B99] hover:bg-[#646B99]/5 border border-[#646B99]/20 px-2.5 py-1 rounded-lg transition-colors uppercase tracking-wider"
                     >
                       Gerenciar
@@ -561,46 +803,22 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                   </div>
                 </div>
 
-                {/* Toggle visual: Cartas vs Coleção */}
-                <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
-                  <button 
-                    onClick={() => {
-                      setFolderViewMode('cards');
-                      setSelectedFolderSeries(null);
-                      setSelectedFolderSetId(null);
-                    }}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${folderViewMode === 'cards' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                  >
-                    Cartas
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setFolderViewMode('collections');
-                      setSelectedFolderSeries(null);
-                      setSelectedFolderSetId(null);
-                    }}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${folderViewMode === 'collections' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                  >
-                    Coleção
-                  </button>
-                </div>
-
-                {/* Search Bar & Advanced Filters (rendered in 'cards' view or when a set is active in 'collections' view) */}
-                {(folderViewMode === 'cards' || selectedFolderSetId !== null) && (
-                  <div className="space-y-3 bg-slate-50/50 p-3 rounded-xl border border-slate-100 animate-in slide-in-from-top duration-200">
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                        </span>
-                        <input
-                          type="text"
-                          placeholder="Buscar por nome, número ou set..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#646B99] transition-all shadow-sm"
-                        />
-                      </div>
+                {/* Campo de busca interno da pasta (sempre visível) */}
+                <div className="space-y-3 bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="Buscar por nome, número ou set..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#646B99] transition-all shadow-sm"
+                      />
+                    </div>
+                    {(folderViewMode === 'cards' || selectedFolderSetId !== null) && (
                       <button
                         onClick={() => setShowFolderFilters(!showFolderFilters)}
                         className={`px-3 py-2 border rounded-xl flex items-center gap-1.5 text-xs font-semibold transition-all ${showFolderFilters ? 'bg-[#646B99] text-white border-[#646B99]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
@@ -608,9 +826,34 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                         <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                         Filtros
                       </button>
-                    </div>
+                    )}
+                  </div>
 
-                    {showFolderFilters && (
+                  {/* Toggle visual: todas as cartas vs coleções */}
+                  <div className="flex bg-white p-1 rounded-xl border border-slate-200">
+                    <button
+                      onClick={() => {
+                        setFolderViewMode('cards');
+                        setSelectedFolderSeries(null);
+                        setSelectedFolderSetId(null);
+                      }}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${folderViewMode === 'cards' ? 'bg-[#646B99] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      Todas as Cartas
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFolderViewMode('collections');
+                        setSelectedFolderSeries(null);
+                        setSelectedFolderSetId(null);
+                      }}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${folderViewMode === 'collections' ? 'bg-[#646B99] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      Coleções
+                    </button>
+                  </div>
+
+                  {(folderViewMode === 'cards' || selectedFolderSetId !== null) && showFolderFilters && (
                       <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 animate-in fade-in duration-200">
                         <div className="flex flex-col gap-1">
                           <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Raridade</span>
@@ -687,7 +930,6 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                       </div>
                     )}
                   </div>
-                )}
 
                 {/* Folder Rendering - Based on visual toggles */}
                 {folderViewMode === 'cards' ? (
@@ -702,16 +944,16 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                     </div>
                   ) : (
                     <div className="grid gap-3">
-                      {filteredFolderCards.map(({ card, data }) => (
+                      {paginatedFolderCards.map(({ card, data }) => (
                         <div key={card.id} className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
-                          <img 
-                            src={card.imageUrl} 
+                          <img
+                            src={card.imageUrl}
                             onClick={() => setEditingCard(card)}
-                            className="w-14 h-20 rounded-lg object-contain bg-slate-50/50 border border-slate-100/40 cursor-pointer hover:scale-105 transition-transform" 
+                            className="w-14 h-20 rounded-lg object-contain bg-slate-50/50 border border-slate-100/40 cursor-pointer hover:scale-105 transition-transform"
                           />
-                          
+
                           <div className="flex-1 min-w-0">
-                            <h4 
+                            <h4
                               onClick={() => setEditingCard(card)}
                               className="text-slate-800 font-semibold truncate text-xs cursor-pointer hover:text-[#646B99] transition-colors"
                             >
@@ -738,7 +980,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                         >
                                           {isOnlyOne && <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />}
                                           {varType} {cond}: {details.quantity}
-                                          {details.price ? ` ($${details.price})` : ''}
+                                          {details.price ? ` (R$${details.price})` : ''}
                                           {isOnlyOne && ' (Única!)'}
                                         </span>
                                       );
@@ -766,7 +1008,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
                           <div className="flex flex-col items-end gap-1">
                             <span className="text-[10px] font-semibold text-emerald-500">
-                              ${getCardEstimatedValue(data.variations).toFixed(2)}
+                              R${getCardEstimatedValue(data.variations).toFixed(2)}
                             </span>
                             
                             {isWishlist ? (
@@ -801,6 +1043,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                           </div>
                         </div>
                       ))}
+                      <Pagination page={folderCardsPage} totalPages={Math.max(1, Math.ceil(filteredFolderCards.length / PAGE_SIZE))} onPageChange={setFolderCardsPage} />
                     </div>
                   )
                 ) : (
@@ -832,7 +1075,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                             </div>
                           ) : (
                             <div className="grid gap-3">
-                              {setCardsInFolder.map(({ card, data }) => (
+                              {setCardsInFolder.slice((setCardsPage - 1) * PAGE_SIZE, setCardsPage * PAGE_SIZE).map(({ card, data }) => (
                                 <div key={card.id} className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
                                   <img 
                                     src={card.imageUrl} 
@@ -895,7 +1138,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
                                   <div className="flex flex-col items-end gap-1">
                                     <span className="text-[10px] font-semibold text-emerald-500">
-                                      ${getCardEstimatedValue(data.variations).toFixed(2)}
+                                      R${getCardEstimatedValue(data.variations).toFixed(2)}
                                     </span>
                                     {isWishlist ? (
                                       <button 
@@ -929,6 +1172,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                   </div>
                                 </div>
                               ))}
+                              <Pagination page={setCardsPage} totalPages={Math.max(1, Math.ceil(setCardsInFolder.length / PAGE_SIZE))} onPageChange={setSetCardsPage} />
                             </div>
                           )}
                         </div>
@@ -988,7 +1232,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                           <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold text-center mb-2">Selecione a Era</p>
                           <div className="grid gap-3">
                             {eras.map(era => {
-                              const count = filteredFolderCards.filter(tc => tc.card.set.series === era).length;
+                              const count = filteredFolderCards.filter(tc => sets.find(s => s.id === tc.card.set.id)?.series === era).length;
                               if (count === 0 && !isWishlist) return null; // Hide empty eras
                               return (
                                 <button
@@ -1032,66 +1276,203 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
         // --- FRIENDS TAB VIEW ---
         selectedFriend === null ? (
           <div className="space-y-6">
-            <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Amigos Conectados</span>
+            <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+              <button
+                onClick={() => setFriendsSubTab('friends')}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${friendsSubTab === 'friends' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                Amigos
+              </button>
+              <button
+                onClick={() => setFriendsSubTab('history')}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${friendsSubTab === 'history' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                Histórico de Trocas
+              </button>
+            </div>
 
-            <div className="grid gap-3">
-               {user.friends.length === 0 ? (
-                 <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-100">
-                   <p className="text-slate-400 text-sm">Você ainda não adicionou nenhum amigo.</p>
-                   <p className="text-[10px] text-slate-300 uppercase tracking-wider mt-1">Adicione amigos pela aba Opções</p>
-                 </div>
-               ) : (
-                 user.friends.map((friend) => (
-                   <div
-                     key={friend.userId}
-                     onClick={() => {
-                       setSelectedFriend(friend);
-                       setSelectedFriendFolderId(null);
-                     }}
-                     className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 cursor-pointer hover:border-[#646B99]/30 hover:shadow-md transition-all shadow-sm group"
-                   >
-                     <div className="flex items-center gap-4">
-                       <div className="w-10 h-10 rounded-xl bg-[#646B99]/10 flex items-center justify-center text-[#646B99] font-bold text-sm">
-                         {friend.username[0]?.toUpperCase()}
-                       </div>
-                       <div>
-                         <span className="text-sm font-semibold text-slate-700 group-hover:text-[#646B99] transition-colors">{friend.username}</span>
-                         <p className="text-[10px] text-slate-400">Ver coleções compartilhadas</p>
-                       </div>
-                     </div>
-                     <div className="flex items-center gap-2">
-                       <span className="text-[9px] text-slate-400 uppercase tracking-widest font-semibold">Ver Pastas</span>
-                       <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-slate-300 group-hover:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                     </div>
+            {friendsSubTab === 'friends' ? (
+              <div className="grid gap-3">
+                 {user.friends.length === 0 ? (
+                   <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-100">
+                     <p className="text-slate-400 text-sm">Você ainda não adicionou nenhum amigo.</p>
+                     <p className="text-[10px] text-slate-300 uppercase tracking-wider mt-1">Adicione amigos pela aba Opções</p>
                    </div>
-                 ))
-               )}
+                 ) : (
+                   user.friends.map((friend) => (
+                     <div
+                       key={friend.userId}
+                       onClick={() => {
+                         setSelectedFriend(friend);
+                         setTradeError(null);
+                         setTradeSuccessMessage(null);
+                       }}
+                       className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 cursor-pointer hover:border-[#646B99]/30 hover:shadow-md transition-all shadow-sm group"
+                     >
+                       <div className="flex items-center gap-4">
+                         <div className="w-10 h-10 rounded-xl bg-[#646B99]/10 flex items-center justify-center text-[#646B99] font-bold text-sm">
+                           {friend.username[0]?.toUpperCase()}
+                         </div>
+                         <div>
+                           <span className="text-sm font-semibold text-slate-700 group-hover:text-[#646B99] transition-colors">{friend.username}</span>
+                           <p className="text-[10px] text-slate-400">Ver coleções compartilhadas</p>
+                         </div>
+                       </div>
+                       <div className="flex items-center gap-2">
+                         <span className="text-[9px] text-slate-400 uppercase tracking-widest font-semibold">Ver Pastas</span>
+                         <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-slate-300 group-hover:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                       </div>
+                     </div>
+                   ))
+                 )}
+              </div>
+            ) : (
+              // --- HISTÓRICO DE TROCAS: trocas concluídas ou canceladas ---
+              <div className="space-y-3">
+                {historyTrades.length === 0 ? (
+                  <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-100">
+                    <p className="text-slate-400 text-sm">Nenhuma troca concluída ou cancelada ainda.</p>
+                  </div>
+                ) : (
+                  <>
+                    {loadingHistoryCards && (
+                      <p className="text-[10px] text-slate-400 uppercase tracking-widest text-center">Carregando detalhes das cartas...</p>
+                    )}
+                    {historyTrades.map((trade) => {
+                      const isInitiator = trade.initiatorId === user.id;
+                      const counterpartName = isInitiator ? trade.recipientUsername : trade.initiatorUsername;
+                      const isCompleted = trade.status === 'completed';
+                      const iGave = isInitiator ? trade.offeredItems : trade.requestedItems;
+                      const iReceived = isInitiator ? trade.requestedItems : trade.offeredItems;
+                      const diff = trade.requestedValue - trade.offeredValue;
+
+                      return (
+                        <div key={trade.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-700">Troca com {counterpartName}</p>
+                              <p className="text-[9px] text-slate-400 uppercase tracking-widest mt-0.5">
+                                {new Date(trade.updatedAt).toLocaleDateString('pt-BR')}
+                              </p>
+                            </div>
+                            <span className={`text-[9px] font-semibold uppercase tracking-widest px-2 py-1 rounded-full ${isCompleted ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>
+                              {isCompleted ? 'Concluída' : 'Cancelada'}
+                            </span>
+                          </div>
+
+                          {isCompleted ? (
+                            <>
+                              {iGave.length > 0 && (
+                                <div>
+                                  <p className="text-[9px] uppercase tracking-widest text-red-500 font-semibold mb-1.5">Você entregou</p>
+                                  <TradeItemsList items={iGave} cardsById={historyCardsById} />
+                                </div>
+                              )}
+                              {iReceived.length > 0 && (
+                                <div>
+                                  <p className="text-[9px] uppercase tracking-widest text-emerald-600 font-semibold mb-1.5">Você recebeu</p>
+                                  <TradeItemsList items={iReceived} cardsById={historyCardsById} />
+                                </div>
+                              )}
+                              {diff !== 0 && iGave.length === 0 && !isInitiator && (
+                                <p className="text-[11px] text-slate-500 bg-slate-50 rounded-lg p-2.5">Você recebeu R${Math.abs(diff).toFixed(2)} em dinheiro.</p>
+                              )}
+                              {diff !== 0 && iGave.length === 0 && isInitiator && (
+                                <p className="text-[11px] text-slate-500 bg-slate-50 rounded-lg p-2.5">Você pagou R${Math.abs(diff).toFixed(2)} em dinheiro.</p>
+                              )}
+                            </>
+                          ) : (
+                            <div>
+                              <p className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-1.5">Cartas pedidas (não concretizado)</p>
+                              <TradeItemsList items={trade.requestedItems} cardsById={historyCardsById} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        ) : tradeSuccessMessage ? (
+          <div className="space-y-4 animate-in fade-in duration-300">
+            <div className="p-10 text-center bg-emerald-50 rounded-2xl border border-emerald-100">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10 mx-auto text-emerald-500 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+              <p className="text-emerald-700 text-sm font-medium">{tradeSuccessMessage}</p>
+              <button
+                onClick={() => { setTradeSuccessMessage(null); setSelectedFriend(null); }}
+                className="mt-4 px-4 py-2 bg-white border border-emerald-200 text-emerald-700 text-xs font-semibold rounded-xl hover:bg-emerald-50 transition-colors"
+              >
+                Voltar para amigos
+              </button>
             </div>
           </div>
         ) : (
-          // --- VIEWING A FRIEND'S FOLDERS (em breve: seleção de cartas e negociação) ---
-          <div className="space-y-4 animate-in fade-in duration-300">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-              <button
-                onClick={() => setSelectedFriend(null)}
-                className="text-xs font-semibold text-slate-400 hover:text-slate-600 flex items-center gap-1"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-                Amigos
-              </button>
-              <span className="text-slate-300">/</span>
-              <span className="text-xs font-semibold text-slate-700">Pastas de {selectedFriend.username}</span>
-            </div>
+          // --- VIEWING A FRIEND'S FOLDERS: escolher cartas para pedir em troca ---
+          <FriendFolderBrowser
+            friendUserId={selectedFriend.userId}
+            friendUsername={selectedFriend.username}
+            onBack={() => setSelectedFriend(null)}
+            submitLabel="Trocar"
+            submitting={creatingTrade}
+            helperText="Selecione as cartas que você quer pedir para essa pessoa."
+            onSubmit={(folderId, items, totalValue) => setPendingTradeConfirm({ folderId, items, totalValue })}
+          />
+        )
+      )}
 
-            <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-100">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10 mx-auto text-slate-300 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-              <p className="text-slate-500 text-sm font-medium">Em breve</p>
-              <p className="text-[10px] text-slate-400 mt-1 max-w-xs mx-auto">
-                A visualização e negociação das pastas de {selectedFriend.username} está sendo desenvolvida.
-              </p>
+      {/* --- MODAL: CONFIRMAR PEDIDO DE TROCA --- */}
+      {pendingTradeConfirm && selectedFriend && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-100 w-full max-w-xs rounded-2xl shadow-2xl p-6">
+            <h3 className="text-sm font-semibold text-slate-800 mb-1">Confirmar Pedido de Troca</h3>
+            <p className="text-[10px] text-slate-400 mb-4">
+              Você está pedindo <span className="font-semibold text-slate-600">{pendingTradeConfirm.items.length} carta(s)</span> de {selectedFriend.username}.
+            </p>
+            <div className="bg-slate-50 rounded-xl p-4 text-center mb-4 border border-slate-100">
+              <p className="text-[9px] text-slate-400 uppercase tracking-widest">Valor total</p>
+              <p className="text-2xl font-bold text-[#646B99]">R${pendingTradeConfirm.totalValue.toFixed(2)}</p>
+            </div>
+            {tradeError && <p className="text-red-500 text-[10px] mb-3">{tradeError}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setPendingTradeConfirm(null); setTradeError(null); }}
+                className="flex-1 py-2 bg-slate-50 text-slate-400 text-xs rounded-lg hover:bg-slate-100 transition-colors"
+                disabled={creatingTrade}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  if (!pendingTradeConfirm || !selectedFriend) return;
+                  setCreatingTrade(true);
+                  setTradeError(null);
+                  const { trade, error } = await createTradeRequest(
+                    selectedFriend.userId,
+                    pendingTradeConfirm.folderId,
+                    pendingTradeConfirm.items
+                  );
+                  setCreatingTrade(false);
+                  if (error) {
+                    setTradeError(error);
+                    return;
+                  }
+                  if (trade) {
+                    setPendingTradeConfirm(null);
+                    setTradeSuccessMessage(
+                      `Pedido enviado! ${pendingTradeConfirm.items.length} carta(s) por R$${pendingTradeConfirm.totalValue.toFixed(2)}, aguardando ${selectedFriend.username}.`
+                    );
+                  }
+                }}
+                disabled={creatingTrade}
+                className="flex-1 py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors disabled:opacity-50"
+              >
+                {creatingTrade ? 'Enviando...' : 'Confirmar'}
+              </button>
             </div>
           </div>
-        )
+        </div>
       )}
 
       {/* --- MODAL: CREATE NEW FOLDER --- */}
@@ -1138,6 +1519,53 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
           const currentFolder = folders.find(f => f.id === selectedFolderId);
           if (!currentFolder) return null;
 
+          const renderManageRow = ({ card, data }: { card: Card, data: UserCardData }) => {
+            const isInFolder = currentFolder.cardIds.includes(card.id);
+            const normalized = getNormalizedVariations(data.variations);
+            const badges: React.ReactNode[] = [];
+            Object.entries(normalized).forEach(([varType, conditionsObj]) => {
+              Object.entries(conditionsObj).forEach(([cond, details]) => {
+                if (details.quantity > 0) {
+                  const isOnlyOne = details.quantity === 1;
+                  badges.push(
+                    <span
+                      key={`${varType}-${cond}`}
+                      className={`px-1.5 py-0.5 border rounded text-[8px] font-medium flex items-center gap-1 ${
+                        isOnlyOne
+                          ? 'bg-amber-50 border-amber-200 text-amber-700 font-semibold'
+                          : 'bg-slate-50 border-slate-100 text-[#646B99]'
+                      }`}
+                    >
+                      {isOnlyOne && <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />}
+                      {varType} {cond}: {details.quantity}
+                      {isOnlyOne && ' (Única!)'}
+                    </span>
+                  );
+                }
+              });
+            });
+            return (
+              <div
+                key={card.id}
+                onClick={() => handleToggleCardInFolder(currentFolder.id, card.id)}
+                className={`flex items-center gap-3 p-2 rounded-xl border cursor-pointer transition-all ${isInFolder ? 'border-[#646B99]/30 bg-[#646B99]/5' : 'border-slate-100 hover:bg-slate-50'}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isInFolder}
+                  onChange={() => {}} // Controlled via onClick on div
+                  className="w-3.5 h-3.5 text-[#646B99] border-slate-300 rounded focus:ring-[#646B99]"
+                />
+                <img src={card.imageUrl} className="w-10 h-14 object-contain rounded bg-white border border-slate-100/50 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-[11px] font-semibold text-slate-700 truncate">{card.name}</h4>
+                  <p className="text-[9px] text-slate-400 truncate">{card.rarity} • #{card.number}</p>
+                  {badges.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{badges}</div>}
+                </div>
+              </div>
+            );
+          };
+
           return (
             <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
                <div className="bg-white border border-slate-100 w-full max-w-sm rounded-2xl shadow-2xl p-6 max-h-[85vh] flex flex-col">
@@ -1152,34 +1580,135 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                       <p className="text-[9px] text-slate-300 uppercase mt-1">Marque-as primeiro na aba Home</p>
                     </div>
                   ) : (
-                    <div className="flex-1 overflow-y-auto space-y-2 pr-1 my-2 max-h-[45vh]">
-                      {tradeCards.map(({ card }) => {
-                        const isInFolder = currentFolder.cardIds.includes(card.id);
-                        return (
-                          <div 
-                            key={card.id}
-                            onClick={() => handleToggleCardInFolder(currentFolder.id, card.id)}
-                            className={`flex items-center gap-3 p-2 rounded-xl border cursor-pointer transition-all ${isInFolder ? 'border-[#646B99]/30 bg-[#646B99]/5' : 'border-slate-100 hover:bg-slate-50'}`}
-                          >
-                            <input 
-                              type="checkbox" 
-                              checked={isInFolder}
-                              onChange={() => {}} // Controlled via onClick on div
-                              className="w-3.5 h-3.5 text-[#646B99] border-slate-300 rounded focus:ring-[#646B99]"
-                            />
-                            <img src={card.imageUrl} className="w-10 h-14 object-contain rounded bg-white border border-slate-100/50" />
-                            <div className="flex-1 min-w-0">
-                              <h4 className="text-[11px] font-semibold text-slate-700 truncate">{card.name}</h4>
-                              <p className="text-[9px] text-slate-400 truncate">{card.rarity} • #{card.number}</p>
+                    <>
+                      <div className="relative mb-2">
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                        </span>
+                        <input
+                          type="text"
+                          placeholder="Buscar por nome, número ou set..."
+                          value={manageSearchQuery}
+                          onChange={(e) => setManageSearchQuery(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#646B99] transition-all"
+                        />
+                      </div>
+
+                      <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100 mb-2">
+                        <button
+                          onClick={() => { setManageViewMode('cards'); setManageSelectedSeries(null); setManageSelectedSetId(null); }}
+                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all ${manageViewMode === 'cards' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                        >
+                          Todas as Cartas
+                        </button>
+                        <button
+                          onClick={() => { setManageViewMode('collections'); setManageSelectedSeries(null); setManageSelectedSetId(null); }}
+                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all ${manageViewMode === 'collections' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                        >
+                          Coleções
+                        </button>
+                      </div>
+
+                    {manageViewMode === 'cards' ? (
+                      <>
+                        <div className="flex-1 overflow-y-auto space-y-2 pr-1 my-2 max-h-[45vh]">
+                          {manageFilteredCards.length === 0 ? (
+                            <div className="py-10 text-center bg-slate-50 rounded-xl border border-slate-100">
+                              <p className="text-xs text-slate-400">Nenhuma carta encontrada.</p>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          ) : (
+                            paginatedManageCards.map(renderManageRow)
+                          )}
+                        </div>
+                        <Pagination page={managePage} totalPages={Math.max(1, Math.ceil(manageFilteredCards.length / PAGE_SIZE))} onPageChange={setManagePage} />
+                      </>
+                    ) : manageSelectedSetId !== null ? (
+                      <>
+                        <div className="flex items-center gap-2 mb-2">
+                          <button
+                            onClick={() => setManageSelectedSetId(null)}
+                            className="text-[10px] font-semibold text-slate-400 hover:text-slate-600 flex items-center gap-1"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                            Voltar
+                          </button>
+                          <span className="text-slate-300 text-[10px]">/</span>
+                          <span className="text-[10px] font-semibold text-slate-700 truncate">
+                            {sets.find(s => s.id === manageSelectedSetId)?.name}
+                          </span>
+                        </div>
+                        <div className="flex-1 overflow-y-auto space-y-2 pr-1 my-2 max-h-[40vh]">
+                          {manageSetCardsInSet.length === 0 ? (
+                            <div className="py-10 text-center bg-slate-50 rounded-xl border border-slate-100">
+                              <p className="text-xs text-slate-400">Nenhuma carta encontrada.</p>
+                            </div>
+                          ) : (
+                            manageSetCardsInSet.slice((managePage - 1) * PAGE_SIZE, managePage * PAGE_SIZE).map(renderManageRow)
+                          )}
+                        </div>
+                        <Pagination page={managePage} totalPages={Math.max(1, Math.ceil(manageSetCardsInSet.length / PAGE_SIZE))} onPageChange={setManagePage} />
+                      </>
+                    ) : manageSelectedSeries !== null ? (
+                      <div className="flex-1 overflow-y-auto my-2 max-h-[45vh]">
+                        <div className="flex items-center gap-2 mb-2">
+                          <button
+                            onClick={() => setManageSelectedSeries(null)}
+                            className="text-[10px] font-semibold text-slate-400 hover:text-slate-600 flex items-center gap-1"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                            Voltar para Eras
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {sets
+                            .filter(s => s.series === manageSelectedSeries)
+                            .sort((a, b) => a.releaseDate.localeCompare(b.releaseDate))
+                            .map(set => {
+                              const count = manageFilteredCards.filter(({ card }) => card.set.id === set.id).length;
+                              if (count === 0) return null;
+                              return (
+                                <button
+                                  key={set.id}
+                                  onClick={() => setManageSelectedSetId(set.id)}
+                                  className="flex flex-col items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:border-[#646B99]/30 transition-all min-h-[110px]"
+                                >
+                                  <div className="h-9 w-full flex items-center justify-center mb-1">
+                                    <img src={set.logoUrl} className="max-h-full max-w-full object-contain" />
+                                  </div>
+                                  <p className="text-[9px] font-medium text-slate-600 line-clamp-1 text-center">{set.name}</p>
+                                  <p className="text-[8px] font-semibold text-[#646B99] bg-[#646B99]/5 px-1.5 py-0.5 rounded-full mt-1">
+                                    {count} {count === 1 ? 'carta' : 'cartas'}
+                                  </p>
+                                </button>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex-1 overflow-y-auto space-y-2 my-2 max-h-[45vh]">
+                        {eras.map(era => {
+                          const count = manageFilteredCards.filter(({ card }) => sets.find(s => s.id === card.set.id)?.series === era).length;
+                          if (count === 0) return null;
+                          return (
+                            <button
+                              key={era}
+                              onClick={() => setManageSelectedSeries(era)}
+                              className="w-full flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm hover:border-[#646B99]/30 transition-all"
+                            >
+                              <span className="text-[11px] font-semibold text-slate-700">{era}</span>
+                              <span className="text-[9px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2 py-0.5 rounded-full border border-[#646B99]/10">
+                                {count} {count === 1 ? 'carta' : 'cartas'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    </>
                   )}
 
                   <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
-                    <button 
+                    <button
                       onClick={() => setShowManageCards(false)}
                       className="w-full py-2.5 bg-[#646B99] hover:bg-[#4d5275] text-white text-xs font-semibold rounded-xl transition-colors"
                     >
@@ -1198,6 +1727,20 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
           onUpdateUser={onUpdateUser}
           onClose={() => setEditingCard(null)}
           showWarnings={true}
+        />
+      )}
+      {activeTradeModal && (
+        <TradeActionModal
+          trade={activeTradeModal}
+          myUserId={user.id}
+          onClose={closeTradeModal}
+          onChanged={handleTradeChanged}
+          onStartNewTrade={() => {
+            closeTradeModal();
+            setActiveTab('friends');
+            setFriendsSubTab('friends');
+            setSelectedFriend(null);
+          }}
         />
       )}
     </div>

@@ -1,4 +1,4 @@
-import { db } from './db.js';
+import { supabase } from './supabase.js';
 
 export interface FriendEntry {
   userId: string;
@@ -19,57 +19,80 @@ export interface FullUser {
   wishlist: string[];
 }
 
-const getUserRow = db.prepare(`SELECT id, username, email, avatar_url, friend_code FROM users WHERE id = ?`);
-const getUserCards = db.prepare(`SELECT card_id, is_owned, is_for_trade, variations FROM user_cards WHERE user_id = ?`);
-const getFriends = db.prepare(`
-  SELECT u.id as userId, u.username as username, u.avatar_url as avatarUrl, f.added_at as addedAt
-  FROM friends f
-  JOIN users u ON u.id = f.friend_user_id
-  WHERE f.user_id = ?
-  ORDER BY f.added_at ASC
-`);
-const getFolders = db.prepare(`SELECT id, name, visible_to_friends FROM trade_folders WHERE user_id = ?`);
-const getFolderCards = db.prepare(`SELECT card_id FROM trade_folder_cards WHERE folder_id = ?`);
-const getWishlist = db.prepare(`SELECT card_id FROM wishlist WHERE user_id = ?`);
+export async function assembleFullUser(userId: string, email: string): Promise<FullUser | null> {
+  const { data: profile, error: profileErr } = await supabase
+    .from('profiles')
+    .select('id, username, avatar_url, friend_code')
+    .eq('id', userId)
+    .maybeSingle();
+  if (profileErr) throw profileErr;
+  if (!profile) return null;
 
-export function assembleFullUser(userId: string): FullUser | null {
-  const userRow = getUserRow.get(userId) as
-    | { id: string; username: string; email: string; avatar_url: string; friend_code: string }
-    | undefined;
-  if (!userRow) return null;
+  const [cardsRes, friendsRes, foldersRes, wishlistRes] = await Promise.all([
+    supabase.from('user_cards').select('card_id, is_owned, is_for_trade, variations').eq('user_id', userId),
+    supabase.from('friends').select('friend_user_id, added_at').eq('user_id', userId).order('added_at', { ascending: true }),
+    supabase.from('trade_folders').select('id, name, visible_to_friends').eq('user_id', userId),
+    supabase.from('wishlist').select('card_id').eq('user_id', userId),
+  ]);
+  if (cardsRes.error) throw cardsRes.error;
+  if (friendsRes.error) throw friendsRes.error;
+  if (foldersRes.error) throw foldersRes.error;
+  if (wishlistRes.error) throw wishlistRes.error;
 
   const ownedCards: FullUser['ownedCards'] = {};
-  for (const row of getUserCards.all(userId) as any[]) {
+  for (const row of cardsRes.data || []) {
     ownedCards[row.card_id] = {
       cardId: row.card_id,
-      isOwned: !!row.is_owned,
-      isForTrade: !!row.is_for_trade,
-      variations: JSON.parse(row.variations || '{}'),
+      isOwned: row.is_owned,
+      isForTrade: row.is_for_trade,
+      variations: row.variations || {},
     };
   }
 
-  const friends: FriendEntry[] = (getFriends.all(userId) as any[]).map((r) => ({
-    userId: r.userId,
-    username: r.username,
-    avatarUrl: r.avatarUrl,
-    addedAt: new Date(r.addedAt).toISOString(),
+  const friendIds = (friendsRes.data || []).map((r) => r.friend_user_id);
+  let friendProfiles: Record<string, { username: string; avatar_url: string }> = {};
+  if (friendIds.length > 0) {
+    const { data: profRows, error: profErr } = await supabase
+      .from('profiles')
+      .select('id, username, avatar_url')
+      .in('id', friendIds);
+    if (profErr) throw profErr;
+    friendProfiles = Object.fromEntries((profRows || []).map((p) => [p.id, { username: p.username, avatar_url: p.avatar_url }]));
+  }
+  const friends: FriendEntry[] = (friendsRes.data || []).map((r) => ({
+    userId: r.friend_user_id,
+    username: friendProfiles[r.friend_user_id]?.username || '???',
+    avatarUrl: friendProfiles[r.friend_user_id]?.avatar_url || '',
+    addedAt: r.added_at,
   }));
 
-  const folders = (getFolders.all(userId) as any[]).map((f) => ({
-    id: f.id as string,
-    name: f.name as string,
-    visibleToFriends: !!f.visible_to_friends,
-    cardIds: (getFolderCards.all(f.id) as any[]).map((c) => c.card_id as string),
+  const folderIds = (foldersRes.data || []).map((f) => f.id);
+  const folderCardsByFolder: Record<string, string[]> = {};
+  if (folderIds.length > 0) {
+    const { data: fcRows, error: fcErr } = await supabase
+      .from('trade_folder_cards')
+      .select('folder_id, card_id')
+      .in('folder_id', folderIds);
+    if (fcErr) throw fcErr;
+    for (const row of fcRows || []) {
+      (folderCardsByFolder[row.folder_id] ||= []).push(row.card_id);
+    }
+  }
+  const folders = (foldersRes.data || []).map((f) => ({
+    id: f.id,
+    name: f.name,
+    visibleToFriends: f.visible_to_friends,
+    cardIds: folderCardsByFolder[f.id] || [],
   }));
 
-  const wishlist = (getWishlist.all(userId) as any[]).map((r) => r.card_id);
+  const wishlist = (wishlistRes.data || []).map((r) => r.card_id);
 
   return {
-    id: userRow.id,
-    username: userRow.username,
-    email: userRow.email,
-    avatarUrl: userRow.avatar_url,
-    friendCode: userRow.friend_code,
+    id: profile.id,
+    username: profile.username,
+    email,
+    avatarUrl: profile.avatar_url,
+    friendCode: profile.friend_code,
     ownedCards,
     friends,
     folders,
@@ -88,52 +111,49 @@ export interface UserDataInput {
   wishlist?: string[];
 }
 
-const updateProfile = db.prepare(`UPDATE users SET username = ?, avatar_url = ? WHERE id = ?`);
-const deleteUserCards = db.prepare(`DELETE FROM user_cards WHERE user_id = ?`);
-const insertUserCard = db.prepare(`
-  INSERT INTO user_cards (user_id, card_id, is_owned, is_for_trade, variations) VALUES (?, ?, ?, ?, ?)
-`);
-const deleteWishlist = db.prepare(`DELETE FROM wishlist WHERE user_id = ?`);
-const insertWishlist = db.prepare(`INSERT INTO wishlist (user_id, card_id) VALUES (?, ?)`);
-const deleteFolders = db.prepare(`DELETE FROM trade_folders WHERE user_id = ?`);
-const insertFolder = db.prepare(`
-  INSERT INTO trade_folders (id, user_id, name, visible_to_friends) VALUES (?, ?, ?, ?)
-`);
-const insertFolderCard = db.prepare(`INSERT OR IGNORE INTO trade_folder_cards (folder_id, card_id) VALUES (?, ?)`);
+export async function replaceUserData(userId: string, data: UserDataInput): Promise<void> {
+  const { error: profileErr } = await supabase
+    .from('profiles')
+    .update({ username: data.username ?? '', avatar_url: data.avatarUrl ?? '' })
+    .eq('id', userId);
+  if (profileErr) throw profileErr;
 
-export function replaceUserData(userId: string, data: UserDataInput) {
-  db.exec('BEGIN');
-  try {
-    updateProfile.run(data.username ?? '', data.avatarUrl ?? '', userId);
+  const { error: deleteCardsErr } = await supabase.from('user_cards').delete().eq('user_id', userId);
+  if (deleteCardsErr) throw deleteCardsErr;
+  const cardRows = Object.entries(data.ownedCards || {}).map(([cardId, card]) => ({
+    user_id: userId,
+    card_id: cardId,
+    is_owned: !!card.isOwned,
+    is_for_trade: !!card.isForTrade,
+    variations: card.variations || {},
+  }));
+  if (cardRows.length > 0) {
+    const { error } = await supabase.from('user_cards').insert(cardRows);
+    if (error) throw error;
+  }
 
-    deleteUserCards.run(userId);
-    for (const [cardId, card] of Object.entries(data.ownedCards || {})) {
-      insertUserCard.run(
-        userId,
-        cardId,
-        card.isOwned ? 1 : 0,
-        card.isForTrade ? 1 : 0,
-        JSON.stringify(card.variations || {})
-      );
+  const { error: deleteWishlistErr } = await supabase.from('wishlist').delete().eq('user_id', userId);
+  if (deleteWishlistErr) throw deleteWishlistErr;
+  const wishlistRows = (data.wishlist || []).map((cardId) => ({ user_id: userId, card_id: cardId }));
+  if (wishlistRows.length > 0) {
+    const { error } = await supabase.from('wishlist').insert(wishlistRows);
+    if (error) throw error;
+  }
+
+  // trade_folder_cards é removido em cascata quando as linhas de trade_folders são apagadas
+  const { error: deleteFoldersErr } = await supabase.from('trade_folders').delete().eq('user_id', userId);
+  if (deleteFoldersErr) throw deleteFoldersErr;
+  const folders = data.folders || [];
+  if (folders.length > 0) {
+    const { error: foldersInsertErr } = await supabase
+      .from('trade_folders')
+      .insert(folders.map((f) => ({ id: f.id, user_id: userId, name: f.name, visible_to_friends: !!f.visibleToFriends })));
+    if (foldersInsertErr) throw foldersInsertErr;
+
+    const folderCardRows = folders.flatMap((f) => (f.cardIds || []).map((cardId) => ({ folder_id: f.id, card_id: cardId })));
+    if (folderCardRows.length > 0) {
+      const { error: fcErr } = await supabase.from('trade_folder_cards').insert(folderCardRows);
+      if (fcErr) throw fcErr;
     }
-
-    deleteWishlist.run(userId);
-    for (const cardId of data.wishlist || []) {
-      insertWishlist.run(userId, cardId);
-    }
-
-    // trade_folder_cards cascade-deletes via FK when trade_folders rows are removed
-    deleteFolders.run(userId);
-    for (const folder of data.folders || []) {
-      insertFolder.run(folder.id, userId, folder.name, folder.visibleToFriends ? 1 : 0);
-      for (const cardId of folder.cardIds || []) {
-        insertFolderCard.run(folder.id, cardId);
-      }
-    }
-
-    db.exec('COMMIT');
-  } catch (err) {
-    db.exec('ROLLBACK');
-    throw err;
   }
 }

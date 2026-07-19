@@ -58,6 +58,10 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
     return [...sets].sort((a, b) => a.releaseDate.localeCompare(b.releaseDate));
   }, [sets]);
 
+  const totalCollectibleCards = useMemo(() => {
+    return sets.reduce((acc, s) => acc + (s.total || 0), 0);
+  }, [sets]);
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-40 gap-4 bg-white min-h-[80vh]">
@@ -68,27 +72,26 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
   }
 
   return (
-    <div className="animate-in fade-in duration-500 px-6 pb-20">
+    <div className="animate-in fade-in duration-500 px-6 pb-20 pt-4">
       <div className="mb-10 flex items-end justify-between border-b border-slate-50 pb-6">
         <div>
           <h2 className="text-2xl text-slate-800 tracking-tight leading-none">Minha Pasta</h2>
           <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-2">Status do Mestre Treinador</p>
         </div>
         <div className="text-right">
-          <div className="text-3xl text-[#646B99] leading-none">{globalStats.totalOwned}</div>
-          <div className="text-[9px] uppercase text-slate-300 tracking-widest mt-1">Total de Cartas</div>
+          <div className="text-3xl text-[#646B99] leading-none">
+            {globalStats.uniqueOwned}<span className="text-lg text-slate-300">/{totalCollectibleCards}</span>
+          </div>
+          <div className="text-[9px] uppercase text-slate-300 tracking-widest mt-1">Cartas Unitárias Colecionadas</div>
+          <div className="text-sm text-slate-500 leading-none mt-2">{globalStats.totalOwned}</div>
+          <div className="text-[9px] uppercase text-slate-300 tracking-widest mt-1">Total de cartas (com as repetidas)</div>
         </div>
       </div>
 
-      <div className="mb-6 bg-gradient-to-r from-[#646B99] to-[#4d5275] rounded-3xl p-6 shadow-lg flex items-center justify-between">
-        <div>
-          <p className="text-[10px] text-white/60 uppercase tracking-widest">Valor Total da Coleção</p>
-          <p className="text-3xl text-white font-semibold mt-1">${globalStats.totalValue.toFixed(2)}</p>
-          <p className="text-[9px] text-white/50 mt-1">Soma de todas as coleções, baseada nos preços que você informou</p>
-        </div>
-        <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center flex-shrink-0">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-        </div>
+      <div className="mb-6 bg-gradient-to-r from-[#646B99] to-[#4d5275] rounded-3xl p-6 shadow-lg">
+        <p className="text-[10px] text-white/60 uppercase tracking-widest">Valor Total da Coleção</p>
+        <p className="text-3xl text-white font-semibold mt-1">R${globalStats.totalValue.toFixed(2)}</p>
+        <p className="text-[9px] text-white/50 mt-1">Soma de todas as coleções, baseada nos preços que você informou</p>
       </div>
 
       <div className="grid gap-6">
@@ -104,7 +107,10 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
                       <img src={set.logoUrl} className="max-h-full max-w-full object-contain" />
                    </div>
                    <div>
-                     <h3 className="text-sm text-slate-800 uppercase tracking-tight leading-tight">{set.name}</h3>
+                     <div className="flex items-center gap-1.5">
+                       {set.symbolUrl && <img src={set.symbolUrl} alt="" className="w-3.5 h-3.5 object-contain flex-shrink-0" />}
+                       <h3 className="text-sm text-slate-800 uppercase tracking-tight leading-tight">{set.name}</h3>
+                     </div>
                      <p className="text-[9px] text-slate-400 uppercase tracking-widest mt-0.5">{set.releaseDate}</p>
                    </div>
                 </div>

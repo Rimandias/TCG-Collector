@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, PokemonSet, Card, UserCardData } from '../types';
-import { fetchSets, fetchCardsBySet } from '../api';
+import { fetchSets, fetchCardsBySet, searchCards } from '../api';
 import CardItem, { CardViewMode } from '../components/CardItem';
 import CardViewModeSelector from '../components/CardViewModeSelector';
 import CardModal from '../components/CardModal';
@@ -36,8 +36,8 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [infoCard, setInfoCard] = useState<Card | null>(null);
   const [filterTab, setFilterTab] = useState<'tudo' | 'restantes'>('tudo');
-  const [allCards, setAllCards] = useState<Card[]>([]);
-  const [loadingAllCards, setLoadingAllCards] = useState(false);
+  const [globalSearchResults, setGlobalSearchResults] = useState<Card[]>([]);
+  const [searchingGlobal, setSearchingGlobal] = useState(false);
   const [viewMode, setViewMode] = useState<CardViewMode>(getInitialCardViewMode);
 
   useEffect(() => {
@@ -52,22 +52,14 @@ const HomeView: React.FC<HomeViewProps> = ({
   }, [user.ownedCards]);
 
   const getSetLogoForSeries = useCallback((seriesName: string) => {
-    const logoOverrides: Record<string, string> = {
-      'Diamond & Pearl': 'https://images.pokemontcg.io/dp1/logo.png',
-      'HeartGold & SoulSilver': 'https://images.pokemontcg.io/hs1/logo.png',
-      'Black & White': 'https://images.pokemontcg.io/bw1/logo.png',
-      'XY': 'https://images.pokemontcg.io/xy1/logo.png',
-      'Sun & Moon': 'https://images.pokemontcg.io/sm1/logo.png',
-      'Sword & Shield': 'https://images.pokemontcg.io/swsh1/logo.png',
-      'Scarlet & Violet': 'https://images.pokemontcg.io/sv1/logo.png',
-    };
-
-    if (logoOverrides[seriesName]) {
-      return logoOverrides[seriesName];
-    }
-
     const seriesSets = sets.filter(s => s.series === seriesName);
     if (seriesSets.length === 0) return '';
+    // Prefere a coleção-base com o mesmo nome da era (ex.: set "Black & White" na era
+    // "Black & White"), em vez de simplesmente a mais antiga por data de lançamento —
+    // vários "X Black Star Promos" são lançados no mesmo dia ou antes da coleção-base
+    // e acabavam "vencendo" o sort por data, mostrando o logo do promo em vez do oficial.
+    const baseSet = seriesSets.find(s => s.name.trim().toLowerCase() === seriesName.trim().toLowerCase());
+    if (baseSet) return baseSet.logoUrl || '';
     const sorted = [...seriesSets].sort((a, b) => a.releaseDate.localeCompare(b.releaseDate));
     return sorted[0]?.logoUrl || '';
   }, [sets]);
@@ -108,44 +100,32 @@ const HomeView: React.FC<HomeViewProps> = ({
     init();
   }, [init]);
 
+  // Busca global: consulta o backend (uma única query rápida sobre todas as coleções já
+  // cacheadas) em vez de baixar o catálogo inteiro (~200 coleções) para filtrar localmente —
+  // essa era a causa real da lentidão do campo de busca. Debounce de 300ms para não disparar
+  // uma requisição a cada tecla digitada.
   useEffect(() => {
-    if (sets.length > 0) {
-      const loadAllCards = async () => {
-        setLoadingAllCards(true);
-        try {
-          const all: Card[] = [];
-          // Executa em lotes controlados de 5 para não sobrecarregar o navegador e a API,
-          // e passa skipBackgroundSync = true para evitar chamadas de background desnecessárias
-          const BATCH_SIZE = 5;
-          for (let i = 0; i < sets.length; i += BATCH_SIZE) {
-            const batch = sets.slice(i, i + BATCH_SIZE);
-            const results = await Promise.all(
-              batch.map(async (s) => {
-                try {
-                  return await fetchCardsBySet(s.id, true);
-                } catch (e) {
-                  return [];
-                }
-              })
-            );
-            results.forEach(cards => {
-              all.push(...cards);
-            });
-            // Pequena pausa para dar fôlego ao navegador
-            if (i + BATCH_SIZE < sets.length) {
-              await new Promise(resolve => setTimeout(resolve, 100));
-            }
-          }
-          setAllCards(all);
-        } catch (e) {
-          console.warn("Error loading all cards for search (falling back gracefully):", e);
-        } finally {
-          setLoadingAllCards(false);
-        }
-      };
-      loadAllCards();
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setGlobalSearchResults([]);
+      return;
     }
-  }, [sets]);
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      setSearchingGlobal(true);
+      searchCards(q)
+        .then((results) => {
+          if (!cancelled) setGlobalSearchResults(results);
+        })
+        .finally(() => {
+          if (!cancelled) setSearchingGlobal(false);
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
 
   useEffect(() => {
     if (selectedSet) {
@@ -170,8 +150,8 @@ const HomeView: React.FC<HomeViewProps> = ({
   }, [selectedSet]);
 
   const eras = useMemo(() => {
-    const uniqueSeries = Array.from(new Set(sets.map(s => s.series)));
-    
+    const uniqueSeries: string[] = Array.from(new Set(sets.map(s => s.series)));
+
     // Helper to get the oldest release date of an era
     const getEraOldestReleaseDate = (eraName: string) => {
       const eraSets = sets.filter(s => s.series === eraName);
@@ -226,7 +206,8 @@ const HomeView: React.FC<HomeViewProps> = ({
         const matchesName = card.name.toLowerCase().includes(q);
         const matchesNum = card.number.toLowerCase() === q || fullNum === q || card.number.toLowerCase().includes(q) || fullNum.includes(q);
         const matchesSet = card.set.name.toLowerCase().includes(q);
-        return matchesName || matchesNum || matchesSet;
+        const matchesArtist = (card.artist || '').toLowerCase().includes(q);
+        return matchesName || matchesNum || matchesSet || matchesArtist;
       });
     }
 
@@ -235,22 +216,16 @@ const HomeView: React.FC<HomeViewProps> = ({
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
-    const q = searchQuery.toLowerCase().trim();
-    let base = allCards;
+    // O backend já filtra por nome/número/coleção/artista; aqui só restringe à era atual
+    // quando o usuário está navegando dentro de uma era específica.
     if (selectedSeries && !selectedSet) {
-      base = allCards.filter(card => {
+      return globalSearchResults.filter(card => {
         const foundSet = sets.find(s => s.id === card.set?.id);
         return foundSet?.series === selectedSeries;
       });
     }
-    return base.filter(card => {
-      const fullNum = getCompleteCardNumber(card).toLowerCase();
-      const matchesName = card.name.toLowerCase().includes(q);
-      const matchesNum = card.number.toLowerCase() === q || fullNum === q || card.number.toLowerCase().includes(q) || fullNum.includes(q);
-      const matchesSet = card.set?.name?.toLowerCase().includes(q);
-      return matchesName || matchesNum || matchesSet;
-    });
-  }, [allCards, searchQuery, selectedSeries, selectedSet, sets]);
+    return globalSearchResults;
+  }, [globalSearchResults, searchQuery, selectedSeries, selectedSet, sets]);
 
   const setStats = useMemo(() => {
     if (!selectedSet || setCards.length === 0) return null;
@@ -363,7 +338,8 @@ const HomeView: React.FC<HomeViewProps> = ({
   if (selectedSet) {
     return (
       <div className="animate-in slide-in-from-right duration-300 px-4 pb-10">
-        <div className="flex items-center justify-center mb-6 pt-2">
+        <div className="flex items-center justify-center gap-1.5 mb-6 pt-4">
+            {selectedSet.symbolUrl && <img src={selectedSet.symbolUrl} alt="" className="w-3.5 h-3.5 object-contain flex-shrink-0" />}
             <span className="text-sm text-slate-500 text-center font-medium uppercase tracking-wider">
                 {selectedSet.releaseDate.split('-')[0]} — {selectedSet.name}
             </span>
@@ -383,7 +359,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                 <div className="flex flex-col items-center">
                     <p className="text-[9px] text-slate-400 leading-tight">Valor estimado</p>
-                    <p className="text-[10px] text-[#646B99]">${setStats?.value.toFixed(2) ?? '0.00'}</p>
+                    <p className="text-[10px] text-[#646B99]">R${setStats?.value.toFixed(2) ?? '0.00'}</p>
                 </div>
              </div>
           </div>
@@ -469,7 +445,7 @@ const HomeView: React.FC<HomeViewProps> = ({
 
         {/* Scrollable Content Layer */}
         <div className="relative z-10 p-4">
-            <div className="flex items-center justify-center mb-6 pt-2">
+            <div className="flex items-center justify-center mb-6 pt-4">
                 <span className="text-xs text-slate-500 uppercase tracking-[0.2em] font-semibold">{selectedSeries}</span>
             </div>
            
@@ -515,7 +491,8 @@ const HomeView: React.FC<HomeViewProps> = ({
                         <img src={set.logoUrl} className="max-h-full max-w-full object-contain filter group-hover:scale-110 transition-transform" />
                     </div>
                     <div className="w-full space-y-2 mt-auto">
-                        <p className="text-[10px] font-medium text-slate-600 text-center line-clamp-1 group-hover:text-[#646B99] transition-colors">
+                        <p className="text-[10px] font-medium text-slate-600 text-center line-clamp-1 group-hover:text-[#646B99] transition-colors flex items-center justify-center gap-1">
+                            {set.symbolUrl && <img src={set.symbolUrl} alt="" className="w-3 h-3 object-contain flex-shrink-0" />}
                             {set.name}
                         </p>
                         <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
@@ -532,6 +509,15 @@ const HomeView: React.FC<HomeViewProps> = ({
            </div>
           )}
         </div>
+
+        {infoCard && (
+          <CardModal
+            card={infoCard}
+            user={user}
+            onUpdateUser={onUpdateUser}
+            onClose={() => setInfoCard(null)}
+          />
+        )}
       </div>
     );
   }
@@ -546,8 +532,8 @@ const HomeView: React.FC<HomeViewProps> = ({
               Resultados da Pesquisa ({searchResults.length})
             </h3>
             <div className="flex items-center gap-2">
-              {loadingAllCards && (
-                <span className="text-[10px] text-slate-400 animate-pulse">Carregando banco...</span>
+              {searchingGlobal && (
+                <span className="text-[10px] text-slate-400 animate-pulse">Buscando...</span>
               )}
               <CardViewModeSelector viewMode={viewMode} onChange={setViewMode} />
             </div>
@@ -602,6 +588,15 @@ const HomeView: React.FC<HomeViewProps> = ({
             ))}
           </div>
         </>
+      )}
+
+      {infoCard && (
+        <CardModal
+          card={infoCard}
+          user={user}
+          onUpdateUser={onUpdateUser}
+          onClose={() => setInfoCard(null)}
+        />
       )}
     </div>
   );

@@ -1,33 +1,27 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
-import { db } from '../db.js';
+import { supabase } from '../supabase.js';
 import { env } from '../env.js';
+import { asyncHandler } from '../asyncHandler.js';
 import { FALLBACK_CARDS, FALLBACK_SETS, generateMockCards, mapSetSeries } from '../fallbackData.js';
+import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 
 export const tcgRouter = Router();
 
 const API_BASE = 'https://api.pokemontcg.io/v2';
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 horas
 
+// Limite alto porque a Home carrega as cartas de todas as ~200 coleções do catálogo
+// de uma vez (para a busca global) logo no login - e os dados vêm do nosso próprio
+// cache (Supabase), não da API externa, então o custo por requisição é baixo.
 const tcgLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 60,
+  limit: 1200,
   standardHeaders: true,
   legacyHeaders: false,
 });
 tcgRouter.use(tcgLimiter);
-
-const getSetsCache = db.prepare(`SELECT data, updated_at FROM sets_cache WHERE id = 'all'`);
-const upsertSetsCache = db.prepare(`
-  INSERT INTO sets_cache (id, data, updated_at) VALUES ('all', ?, ?)
-  ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
-`);
-const getCardsCache = db.prepare(`SELECT data, updated_at FROM cards_cache WHERE set_id = ?`);
-const upsertCardsCache = db.prepare(`
-  INSERT INTO cards_cache (set_id, data, updated_at) VALUES (?, ?, ?)
-  ON CONFLICT(set_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
-`);
 
 async function fetchFromPokemonTcg(pathAndQuery: string, timeoutMs = 8000): Promise<any> {
   const controller = new AbortController();
@@ -71,6 +65,7 @@ function mapCard(raw: any) {
     imageUrlHiRes: raw.images?.large || '',
     number: raw.number,
     rarity: raw.rarity || 'Common',
+    artist: raw.artist || '',
     isSecret: parseInt(raw.number) > (raw.set?.printedTotal || 0),
     set: {
       id: raw.set?.id,
@@ -80,66 +75,154 @@ function mapCard(raw: any) {
   };
 }
 
-tcgRouter.get('/sets', async (_req, res) => {
-  const cached = getSetsCache.get() as { data: string; updated_at: number } | undefined;
-  const isFresh = cached && Date.now() - cached.updated_at < CACHE_TTL_MS;
+tcgRouter.get(
+  '/sets',
+  asyncHandler(async (_req, res) => {
+    const { data: cached } = await supabase.from('sets_cache').select('data, updated_at').eq('id', 'all').maybeSingle();
+    const isFresh = cached && Date.now() - new Date(cached.updated_at).getTime() < CACHE_TTL_MS;
 
-  if (cached && isFresh) {
-    return res.json({ data: JSON.parse(cached.data), source: 'cache' });
-  }
-
-  try {
-    const raw = await fetchFromPokemonTcg('/sets?orderBy=-releaseDate');
-    const mapped = (raw?.data || []).map(mapSet);
-    upsertSetsCache.run(JSON.stringify(mapped), Date.now());
-    return res.json({ data: mapped, source: 'live' });
-  } catch (err) {
-    console.warn('[tcg] Falha ao buscar /sets na Pokemon TCG API, usando contingência:', (err as Error).message);
-    if (cached) {
-      // Serve cache expirado em vez de fallback genérico
-      return res.json({ data: JSON.parse(cached.data), source: 'stale-cache' });
+    if (cached && isFresh) {
+      return res.json({ data: cached.data, source: 'cache' });
     }
-    const mapped = FALLBACK_SETS.map((s) => ({ ...s, series: mapSetSeries(s) }));
-    return res.json({ data: mapped, source: 'fallback' });
-  }
-});
+
+    try {
+      const raw = await fetchFromPokemonTcg('/sets?orderBy=-releaseDate');
+      const mapped = (raw?.data || []).map(mapSet);
+      await supabase.from('sets_cache').upsert({ id: 'all', data: mapped, updated_at: new Date().toISOString() });
+      return res.json({ data: mapped, source: 'live' });
+    } catch (err) {
+      console.warn('[tcg] Falha ao buscar /sets na Pokemon TCG API, usando contingência:', (err as Error).message);
+      if (cached) {
+        // Serve cache expirado em vez de fallback genérico
+        return res.json({ data: cached.data, source: 'stale-cache' });
+      }
+      const mapped = FALLBACK_SETS.map((s) => ({ ...s, series: mapSetSeries(s) }));
+      return res.json({ data: mapped, source: 'fallback' });
+    }
+  })
+);
 
 const setIdSchema = z.string().trim().regex(/^[a-zA-Z0-9.-]+$/).min(1).max(40);
 
-tcgRouter.get('/cards/:setId', async (req, res) => {
-  const parsed = setIdSchema.safeParse(req.params.setId);
-  if (!parsed.success) {
-    return res.status(400).json({ error: 'ID de coleção inválido.' });
-  }
-  const setId = parsed.data;
-
-  const cached = getCardsCache.get(setId) as { data: string; updated_at: number } | undefined;
-  const isFresh = cached && Date.now() - cached.updated_at < CACHE_TTL_MS;
-
-  if (cached && isFresh) {
-    return res.json({ data: JSON.parse(cached.data), source: 'cache' });
-  }
-
-  try {
-    const raw = await fetchFromPokemonTcg(`/cards?q=set.id:${encodeURIComponent(setId)}&orderBy=number`);
-    const mapped = (raw?.data || []).map(mapCard);
-    upsertCardsCache.run(setId, JSON.stringify(mapped), Date.now());
-    return res.json({ data: mapped, source: 'live' });
-  } catch (err) {
-    console.warn(`[tcg] Falha ao buscar /cards para o set ${setId}, usando contingência:`, (err as Error).message);
-    if (cached) {
-      return res.json({ data: JSON.parse(cached.data), source: 'stale-cache' });
+tcgRouter.get(
+  '/cards/:setId',
+  asyncHandler(async (req, res) => {
+    const parsed = setIdSchema.safeParse(req.params.setId);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'ID de coleção inválido.' });
     }
-    if (FALLBACK_CARDS[setId]) {
-      return res.json({ data: FALLBACK_CARDS[setId], source: 'fallback' });
+    const setId = parsed.data;
+
+    const { data: cached } = await supabase.from('cards_cache').select('data, updated_at').eq('set_id', setId).maybeSingle();
+    const isFresh = cached && Date.now() - new Date(cached.updated_at).getTime() < CACHE_TTL_MS;
+
+    if (cached && isFresh) {
+      return res.json({ data: cached.data, source: 'cache' });
     }
 
-    let setName = 'Set';
-    const setsCached = getSetsCache.get() as { data: string } | undefined;
-    const sets = setsCached ? JSON.parse(setsCached.data) : FALLBACK_SETS;
-    const matching = sets.find((s: any) => s.id === setId);
-    if (matching) setName = matching.name;
+    try {
+      const raw = await fetchFromPokemonTcg(`/cards?q=set.id:${encodeURIComponent(setId)}&orderBy=number`);
+      const mapped = (raw?.data || []).map(mapCard);
+      await supabase.from('cards_cache').upsert({ set_id: setId, data: mapped, updated_at: new Date().toISOString() });
+      return res.json({ data: mapped, source: 'live' });
+    } catch (err) {
+      console.warn(`[tcg] Falha ao buscar /cards para o set ${setId}, usando contingência:`, (err as Error).message);
+      if (cached) {
+        return res.json({ data: cached.data, source: 'stale-cache' });
+      }
+      if (FALLBACK_CARDS[setId]) {
+        return res.json({ data: FALLBACK_CARDS[setId], source: 'fallback' });
+      }
 
-    return res.json({ data: generateMockCards(setId, setName), source: 'mock' });
-  }
-});
+      let setName = 'Set';
+      let setTotal: number | undefined;
+      const { data: setsCached } = await supabase.from('sets_cache').select('data').eq('id', 'all').maybeSingle();
+      const sets = setsCached ? setsCached.data : FALLBACK_SETS;
+      const matching = (sets as any[]).find((s) => s.id === setId);
+      if (matching) {
+        setName = matching.name;
+        setTotal = matching.total;
+      }
+
+      return res.json({ data: generateMockCards(setId, setName, setTotal), source: 'mock' });
+    }
+  })
+);
+
+const searchQuerySchema = z.string().trim().min(1).max(60);
+
+// Busca cartas em TODAS as coleções já cacheadas, direto no Postgres (função search_cards),
+// em vez de o cliente baixar o catálogo inteiro (~200 coleções, ~20 mil cartas) para filtrar
+// localmente — isso levava quase 20s antes de a busca sequer funcionar.
+tcgRouter.get(
+  '/search',
+  asyncHandler(async (req, res) => {
+    const parsed = searchQuerySchema.safeParse(req.query.q);
+    if (!parsed.success) {
+      return res.json({ data: [] });
+    }
+    const { data, error } = await supabase.rpc('search_cards', { search_query: parsed.data, result_limit: 150 });
+    if (error) {
+      console.warn('[tcg] Falha na busca de cartas:', error.message);
+      return res.json({ data: [] });
+    }
+    return res.json({ data: data || [] });
+  })
+);
+
+const cardIdSchema = z.string().trim().regex(/^[a-zA-Z0-9._-]+$/).min(1).max(60);
+
+interface PriceStat {
+  avg: number;
+  min: number;
+  max: number;
+  count: number;
+}
+
+tcgRouter.get(
+  '/card-stats/:cardId',
+  requireAuth,
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const parsed = cardIdSchema.safeParse(req.params.cardId);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'ID de carta inválido.' });
+    }
+    const cardId = parsed.data;
+
+    const { data: rows, error } = await supabase.from('user_cards').select('variations').eq('card_id', cardId);
+    if (error) throw error;
+
+    // variation -> condition -> lista de preços informados por usuários (sem guardar quem)
+    const buckets: Record<string, Record<string, number[]>> = {};
+    for (const row of rows || []) {
+      const variations = row.variations || {};
+      for (const [variation, conditions] of Object.entries<any>(variations)) {
+        if (!conditions || typeof conditions !== 'object') continue;
+        for (const [condition, details] of Object.entries<any>(conditions)) {
+          const quantity = typeof details?.quantity === 'number' ? details.quantity : 0;
+          const price = parseFloat(details?.price);
+          if (quantity <= 0 || !isFinite(price) || price <= 0) continue;
+          buckets[variation] ??= {};
+          buckets[variation][condition] ??= [];
+          buckets[variation][condition].push(price);
+        }
+      }
+    }
+
+    const stats: Record<string, Record<string, PriceStat>> = {};
+    for (const [variation, conditions] of Object.entries(buckets)) {
+      stats[variation] = {};
+      for (const [condition, prices] of Object.entries(conditions)) {
+        const sum = prices.reduce((a, b) => a + b, 0);
+        stats[variation][condition] = {
+          avg: sum / prices.length,
+          min: Math.min(...prices),
+          max: Math.max(...prices),
+          count: prices.length,
+        };
+      }
+    }
+
+    return res.json({ stats });
+  })
+);

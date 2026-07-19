@@ -3,19 +3,10 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { env } from './env.js';
-import { db } from './db.js';
-import { generateUniqueFriendCode } from './friendCode.js';
-import { authRouter } from './routes/auth.js';
 import { tcgRouter } from './routes/tcg.js';
 import { usersRouter } from './routes/users.js';
 import { friendsRouter } from './routes/friends.js';
-
-// Preenche friend_code para usuários criados antes desse recurso existir.
-const usersMissingCode = db.prepare('SELECT id FROM users WHERE friend_code IS NULL').all() as { id: string }[];
-const setFriendCode = db.prepare('UPDATE users SET friend_code = ? WHERE id = ?');
-for (const { id } of usersMissingCode) {
-  setFriendCode.run(generateUniqueFriendCode(), id);
-}
+import { tradesRouter } from './routes/trades.js';
 
 const app = express();
 
@@ -24,14 +15,18 @@ app.use(helmet());
 app.use(
   cors({
     origin: env.clientOrigin,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   })
 );
 app.use(express.json({ limit: '1mb' }));
 
+// Alto porque esse limitador roda ANTES dos limitadores específicos de cada rota
+// (ex: tcgLimiter) - se ficar mais baixo que eles, vira o teto efetivo e anula o
+// ajuste feito lá. Serve só como rede de segurança básica contra bugs de loop
+// infinito, não como proteção anti-abuso real (isso ficaria a cargo da infra).
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 300,
+  limit: 2000,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -39,10 +34,10 @@ app.use(globalLimiter);
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-app.use('/api/auth', authRouter);
 app.use('/api/tcg', tcgRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/friends', friendsRouter);
+app.use('/api/trades', tradesRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Rota não encontrada.' });
