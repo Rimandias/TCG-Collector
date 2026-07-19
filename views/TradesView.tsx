@@ -44,6 +44,43 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   const [myTrades, setMyTrades] = useState<Trade[]>([]);
   const [activeTradeModal, setActiveTradeModal] = useState<Trade | null>(null);
   const [dismissedTradeIds, setDismissedTradeIds] = useState<Set<string>>(new Set());
+  const [tradeCardsById, setTradeCardsById] = useState<Record<string, Card>>({});
+  const [showTradeHistory, setShowTradeHistory] = useState(false);
+
+  // Metadados (imagem/nome) das cartas referenciadas em qualquer troca minha, usados
+  // no resumo de conclusão da troca e no histórico.
+  useEffect(() => {
+    const allCardIds = new Set<string>();
+    for (const t of myTrades) {
+      for (const item of t.requestedItems) allCardIds.add(item.cardId);
+      for (const item of t.offeredItems) allCardIds.add(item.cardId);
+    }
+    const missingSetIds = new Set<string>();
+    for (const cardId of allCardIds) {
+      if (!tradeCardsById[cardId]) missingSetIds.add(cardId.split('-')[0]);
+    }
+    if (missingSetIds.size === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const newCards: Record<string, Card> = {};
+      await Promise.all(
+        Array.from(missingSetIds).map(async (setId) => {
+          try {
+            const cards = await fetchCardsBySet(setId);
+            for (const c of cards) newCards[c.id] = c;
+          } catch {
+            // Ignora sets que falharem; as cartas aparecem sem imagem/nome no resumo
+          }
+        })
+      );
+      if (!cancelled) setTradeCardsById((prev) => ({ ...prev, ...newCards }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myTrades]);
 
   // Enquanto a aba Trocas estiver aberta, verifica com frequência pra refletir
   // a resposta do outro lado quase na hora (mais rápido ainda com um popup aberto).
@@ -80,35 +117,39 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     }
   }, [actionableTrades, activeTradeModal]);
 
-  // Mantém o popup aberto sempre com o status mais recente vindo do polling, e
-  // fecha automaticamente (com atualização da coleção) assim que a troca conclui
-  // ou é cancelada, sem precisar de nenhuma ação manual do usuário.
+  // Mantém o popup aberto sempre com o status mais recente vindo do polling. Fecha
+  // sozinho apenas se a troca for cancelada — quando ela é concluída, o popup passa
+  // a mostrar o resumo de cartas entregues/recebidas e só fecha quando o usuário
+  // clicar no botão de confirmação (ver TradeActionModal).
   useEffect(() => {
     if (!activeTradeModal) return;
     const latest = myTrades.find((t) => t.id === activeTradeModal.id);
     if (!latest || latest.updatedAt === activeTradeModal.updatedAt) return;
 
-    if (latest.status === 'completed' || latest.status === 'cancelled') {
+    if (latest.status === 'cancelled') {
       setActiveTradeModal(null);
-      if (latest.status === 'completed') {
-        fetchCurrentUser().then((freshUser) => {
-          if (freshUser) onUpdateUser(freshUser);
-        });
-      }
-    } else {
-      setActiveTradeModal(latest);
+      return;
+    }
+
+    setActiveTradeModal(latest);
+    if (latest.status === 'completed' && activeTradeModal.status !== 'completed') {
+      fetchCurrentUser().then((freshUser) => {
+        if (freshUser) onUpdateUser(freshUser);
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myTrades]);
 
   const handleTradeChanged = async (updated: Trade) => {
     setMyTrades((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-    if (updated.status === 'completed' || updated.status === 'cancelled') {
+    if (updated.status === 'cancelled') {
       setActiveTradeModal(null);
+      return;
+    }
+    setActiveTradeModal(updated);
+    if (updated.status === 'completed') {
       const freshUser = await fetchCurrentUser();
       if (freshUser) onUpdateUser(freshUser);
-    } else {
-      setActiveTradeModal(updated);
     }
   };
 
@@ -1225,8 +1266,107 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
       ) : (
         // --- FRIENDS TAB VIEW ---
         selectedFriend === null ? (
+          showTradeHistory ? (
+            (() => {
+              const completedTrades = [...myTrades]
+                .filter((t) => t.status === 'completed')
+                .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+              return (
+                <div className="space-y-4 animate-in fade-in duration-300">
+                  <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                    <button
+                      onClick={() => setShowTradeHistory(false)}
+                      className="text-xs font-semibold text-slate-400 hover:text-slate-600 flex items-center gap-1"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                      Voltar
+                    </button>
+                    <span className="text-slate-300">/</span>
+                    <span className="text-xs font-semibold text-slate-700">Histórico de Trocas</span>
+                  </div>
+
+                  {completedTrades.length === 0 ? (
+                    <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-100">
+                      <p className="text-slate-400 text-sm">Nenhuma troca concluída ainda.</p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3">
+                      {completedTrades.map((t) => {
+                        const isMeInitiator = t.initiatorId === user.id;
+                        const counterpart = isMeInitiator ? t.recipientUsername : t.initiatorUsername;
+                        const myReceived = isMeInitiator ? t.requestedItems : t.offeredItems;
+                        const myGiven = isMeInitiator ? t.offeredItems : t.requestedItems;
+                        const isCashTrade = t.offeredItems.length === 0;
+                        const cashValue = t.requestedItems.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
+                        const date = new Date(t.updatedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+                        return (
+                          <div key={t.id} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h4 className="text-sm font-semibold text-slate-800">Troca com {counterpart}</h4>
+                                <p className="text-[9px] text-slate-400">{date} · {isCashTrade ? 'Negociado com dinheiro' : 'Negociado com troca de cartas'}</p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <p className="text-[9px] text-emerald-600 uppercase tracking-widest font-bold mb-1.5">Você recebeu</p>
+                                {myReceived.length > 0 ? (
+                                  <div className="space-y-1">
+                                    {myReceived.map((item) => {
+                                      const card = tradeCardsById[item.cardId];
+                                      return (
+                                        <div key={`recv-${item.cardId}-${item.variation}-${item.condition}`} className="flex items-center gap-1.5 bg-slate-50 rounded-lg p-1.5">
+                                          {card && <img src={card.imageUrl} className="w-6 h-8 object-contain rounded bg-white flex-shrink-0" />}
+                                          <span className="text-[9px] text-slate-600 truncate">{card ? card.name : item.cardId} x{item.quantity}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <p className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg p-2 text-center">R${cashValue.toFixed(2)}</p>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-[9px] text-slate-400 uppercase tracking-widest font-bold mb-1.5">Você entregou</p>
+                                {myGiven.length > 0 ? (
+                                  <div className="space-y-1">
+                                    {myGiven.map((item) => {
+                                      const card = tradeCardsById[item.cardId];
+                                      return (
+                                        <div key={`given-${item.cardId}-${item.variation}-${item.condition}`} className="flex items-center gap-1.5 bg-slate-50 rounded-lg p-1.5">
+                                          {card && <img src={card.imageUrl} className="w-6 h-8 object-contain rounded bg-white flex-shrink-0" />}
+                                          <span className="text-[9px] text-slate-600 truncate">{card ? card.name : item.cardId} x{item.quantity}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <p className="text-[10px] text-slate-500 bg-slate-50 border border-slate-100 rounded-lg p-2 text-center">R${cashValue.toFixed(2)}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()
+          ) : (
           <div className="space-y-6">
-            <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Amigos Conectados</span>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Amigos Conectados</span>
+              <button
+                onClick={() => setShowTradeHistory(true)}
+                className="text-[10px] font-semibold text-[#646B99] hover:bg-[#646B99]/5 border border-[#646B99]/20 px-2.5 py-1 rounded-lg transition-colors uppercase tracking-wider"
+              >
+                Histórico
+              </button>
+            </div>
 
             <div className="grid gap-3">
                {user.friends.length === 0 ? (
@@ -1263,6 +1403,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                )}
             </div>
           </div>
+          )
         ) : tradeSuccessMessage ? (
           <div className="space-y-4 animate-in fade-in duration-300">
             <div className="p-10 text-center bg-emerald-50 rounded-2xl border border-emerald-100">
@@ -1568,6 +1709,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
         <TradeActionModal
           trade={activeTradeModal}
           myUserId={user.id}
+          cardsById={tradeCardsById}
           onClose={closeTradeModal}
           onChanged={handleTradeChanged}
         />

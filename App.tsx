@@ -8,6 +8,9 @@ import TradesView from './views/TradesView';
 import SettingsView from './views/SettingsView';
 import LoginView from './views/LoginView';
 import BottomNav from './components/BottomNav';
+import TutorialModal from './components/TutorialModal';
+
+const tutorialSeenKey = (userId: string) => `poketracker_tutorial_seen_${userId}`;
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -16,13 +19,19 @@ const App: React.FC = () => {
   const [selectedSeries, setSelectedSeries] = useState<string | null>(null);
   const [selectedSet, setSelectedSet] = useState<PokemonSet | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showTutorial, setShowTutorial] = useState(false);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const restoreSession = async () => {
       if (getToken()) {
         const savedUser = await fetchCurrentUser();
-        if (savedUser) setUser(savedUser);
+        if (savedUser) {
+          setUser(savedUser);
+          if (!localStorage.getItem(tutorialSeenKey(savedUser.id))) {
+            setShowTutorial(true);
+          }
+        }
       }
       setCheckingSession(false);
     };
@@ -31,6 +40,14 @@ const App: React.FC = () => {
 
   const handleLogin = (userData: User) => {
     setUser(userData);
+    if (!localStorage.getItem(tutorialSeenKey(userData.id))) {
+      setShowTutorial(true);
+    }
+  };
+
+  const handleCloseTutorial = () => {
+    if (user) localStorage.setItem(tutorialSeenKey(user.id), '1');
+    setShowTutorial(false);
   };
 
   const handleLogout = () => {
@@ -80,7 +97,14 @@ const App: React.FC = () => {
       case AppTab.TRADES:
         return <TradesView user={user} onUpdateUser={handleUpdateUser} />;
       case AppTab.SETTINGS:
-        return <SettingsView user={user} onUpdateUser={handleUpdateUser} onLogout={handleLogout} />;
+        return (
+          <SettingsView
+            user={user}
+            onUpdateUser={handleUpdateUser}
+            onLogout={handleLogout}
+            onShowTutorial={() => setShowTutorial(true)}
+          />
+        );
       default:
         return (
           <HomeView 
@@ -179,6 +203,8 @@ const App: React.FC = () => {
       </main>
 
       <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+
+      {showTutorial && <TutorialModal onClose={handleCloseTutorial} />}
     </div>
   );
 };

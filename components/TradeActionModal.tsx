@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Trade, TradeItem } from '../types';
+import { Card, Trade, TradeItem } from '../types';
 import { patchTrade, submitTradeOffer, TradeItemSelection } from '../trades';
+import { getCompleteCardNumber } from '../db';
 import FriendFolderBrowser from './FriendFolderBrowser';
 
 interface TradeActionModalProps {
   trade: Trade;
   myUserId: string;
+  cardsById: Record<string, Card>;
   onClose: () => void;
   onChanged: (trade: Trade) => void;
 }
@@ -15,7 +17,24 @@ const describeItems = (items: TradeItem[]) => {
   return { count: items.reduce((sum, i) => sum + i.quantity, 0), total };
 };
 
-const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, onClose, onChanged }) => {
+const TradeCardLine: React.FC<{ item: TradeItem; card?: Card }> = ({ item, card }) => (
+  <div className="flex items-center gap-2 bg-white border border-slate-100 rounded-lg p-2">
+    {card && (
+      <img src={card.imageUrl} className="w-8 h-11 object-contain rounded bg-slate-50 flex-shrink-0" />
+    )}
+    <div className="flex-1 min-w-0">
+      <p className="text-[11px] font-semibold text-slate-700 truncate">
+        {card ? card.name : item.cardId}
+      </p>
+      <p className="text-[9px] text-slate-400">
+        {card ? `#${getCompleteCardNumber(card)} · ` : ''}{item.variation} · {item.condition} · x{item.quantity}
+      </p>
+    </div>
+    <span className="text-[10px] font-semibold text-slate-500 flex-shrink-0">R${(item.quantity * item.unitPrice).toFixed(2)}</span>
+  </div>
+);
+
+const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, cardsById, onClose, onChanged }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
@@ -287,6 +306,62 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
               Cancelar pedido
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- completed: mostra exatamente quais cartas foram entregues/recebidas.
+  // Não fecha sozinho — só ao clicar no botão (rótulo muda conforme o que a pessoa recebeu). ---
+  if (trade.status === 'completed') {
+    const myReceivedItems = isInitiator ? trade.requestedItems : trade.offeredItems;
+    const myGivenItems = isInitiator ? trade.offeredItems : trade.requestedItems;
+    const confirmLabel = myReceivedItems.length > 0 ? 'Cartas recebidas' : 'Valor recebido';
+
+    return (
+      <div className={wrapperClass}>
+        <div className={cardClass}>
+          <h3 className="text-sm font-semibold text-emerald-600 mb-1 flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+            Troca concluída!
+          </h3>
+          <p className="text-[10px] text-slate-400 mb-4">Negociação com {counterpartName}.</p>
+
+          <p className="text-[9px] text-emerald-600 uppercase tracking-widest font-bold mb-2">Você recebeu</p>
+          {myReceivedItems.length > 0 ? (
+            <div className="space-y-1.5 mb-4">
+              {myReceivedItems.map((item) => (
+                <TradeCardLine key={`recv-${item.cardId}-${item.variation}-${item.condition}`} item={item} card={cardsById[item.cardId]} />
+              ))}
+            </div>
+          ) : (
+            <div className="mb-4 bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-center">
+              <p className="text-[10px] text-emerald-700">R${requested.total.toFixed(2)} em dinheiro.</p>
+            </div>
+          )}
+
+          <p className="text-[9px] text-slate-400 uppercase tracking-widest font-bold mb-2">Você entregou</p>
+          {myGivenItems.length > 0 ? (
+            <div className="space-y-1.5 mb-4">
+              {myGivenItems.map((item) => (
+                <TradeCardLine key={`given-${item.cardId}-${item.variation}-${item.condition}`} item={item} card={cardsById[item.cardId]} />
+              ))}
+            </div>
+          ) : (
+            <div className="mb-4 bg-slate-50 border border-slate-100 rounded-lg p-3 text-center">
+              <p className="text-[10px] text-slate-500">R${requested.total.toFixed(2)} em dinheiro.</p>
+            </div>
+          )}
+
+          <p className="text-[9px] text-slate-400 mb-3 text-center">
+            Confira se retirou as cartas certas da sua pasta física antes de confirmar.
+          </p>
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 bg-[#646B99] text-white text-xs font-semibold rounded-xl hover:bg-[#4d5275] transition-colors"
+          >
+            {confirmLabel}
+          </button>
         </div>
       </div>
     );

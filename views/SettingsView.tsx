@@ -7,6 +7,7 @@ interface SettingsViewProps {
   user: User;
   onUpdateUser: (user: User) => void;
   onLogout: () => void;
+  onShowTutorial: () => void;
 }
 
 const formatFriendCode = (code: string) => (code ? `${code.slice(0, 4)}-${code.slice(4)}` : '');
@@ -19,7 +20,7 @@ const formatAddedAt = (iso: string) => {
   }
 };
 
-const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogout }) => {
+const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogout, onShowTutorial }) => {
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState(user.username);
   const [currentPassword, setCurrentPassword] = useState('');
@@ -253,6 +254,22 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
               ))
             )}
           </div>
+        </section>
+
+        <section className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+          <h4 className="text-[10px] text-slate-300 uppercase tracking-widest mb-3">Ajuda</h4>
+          <button
+            onClick={onShowTutorial}
+            className="w-full flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:border-[#646B99]/30 transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-[#646B99]/10 flex items-center justify-center text-[#646B99] flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              </div>
+              <span className="text-sm text-slate-700 font-medium">Ver Tutorial Novamente</span>
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
         </section>
 
         <button
