@@ -1,12 +1,12 @@
 import type { NextFunction, Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
-import { env } from '../env.js';
+import { supabase } from '../supabase.js';
 
 export interface AuthedRequest extends Request {
   userId?: string;
+  userEmail?: string;
 }
 
-export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
   const header = req.headers.authorization || '';
   const [scheme, token] = header.split(' ');
 
@@ -15,8 +15,12 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
   }
 
   try {
-    const payload = jwt.verify(token, env.jwtSecret) as { sub: string };
-    req.userId = payload.sub;
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data.user) {
+      return res.status(401).json({ error: 'Token inválido ou expirado.' });
+    }
+    req.userId = data.user.id;
+    req.userEmail = data.user.email ?? '';
     next();
   } catch {
     return res.status(401).json({ error: 'Token inválido ou expirado.' });

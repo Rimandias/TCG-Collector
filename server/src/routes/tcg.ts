@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
-import { db } from '../db.js';
+import { supabase } from '../supabase.js';
 import { env } from '../env.js';
+import { asyncHandler } from '../asyncHandler.js';
 import { FALLBACK_CARDS, FALLBACK_SETS, generateMockCards, mapSetSeries } from '../fallbackData.js';
 
 export const tcgRouter = Router();
@@ -17,17 +18,6 @@ const tcgLimiter = rateLimit({
   legacyHeaders: false,
 });
 tcgRouter.use(tcgLimiter);
-
-const getSetsCache = db.prepare(`SELECT data, updated_at FROM sets_cache WHERE id = 'all'`);
-const upsertSetsCache = db.prepare(`
-  INSERT INTO sets_cache (id, data, updated_at) VALUES ('all', ?, ?)
-  ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
-`);
-const getCardsCache = db.prepare(`SELECT data, updated_at FROM cards_cache WHERE set_id = ?`);
-const upsertCardsCache = db.prepare(`
-  INSERT INTO cards_cache (set_id, data, updated_at) VALUES (?, ?, ?)
-  ON CONFLICT(set_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
-`);
 
 async function fetchFromPokemonTcg(pathAndQuery: string, timeoutMs = 8000): Promise<any> {
   const controller = new AbortController();
@@ -80,66 +70,72 @@ function mapCard(raw: any) {
   };
 }
 
-tcgRouter.get('/sets', async (_req, res) => {
-  const cached = getSetsCache.get() as { data: string; updated_at: number } | undefined;
-  const isFresh = cached && Date.now() - cached.updated_at < CACHE_TTL_MS;
+tcgRouter.get(
+  '/sets',
+  asyncHandler(async (_req, res) => {
+    const { data: cached } = await supabase.from('sets_cache').select('data, updated_at').eq('id', 'all').maybeSingle();
+    const isFresh = cached && Date.now() - new Date(cached.updated_at).getTime() < CACHE_TTL_MS;
 
-  if (cached && isFresh) {
-    return res.json({ data: JSON.parse(cached.data), source: 'cache' });
-  }
-
-  try {
-    const raw = await fetchFromPokemonTcg('/sets?orderBy=-releaseDate');
-    const mapped = (raw?.data || []).map(mapSet);
-    upsertSetsCache.run(JSON.stringify(mapped), Date.now());
-    return res.json({ data: mapped, source: 'live' });
-  } catch (err) {
-    console.warn('[tcg] Falha ao buscar /sets na Pokemon TCG API, usando contingência:', (err as Error).message);
-    if (cached) {
-      // Serve cache expirado em vez de fallback genérico
-      return res.json({ data: JSON.parse(cached.data), source: 'stale-cache' });
+    if (cached && isFresh) {
+      return res.json({ data: cached.data, source: 'cache' });
     }
-    const mapped = FALLBACK_SETS.map((s) => ({ ...s, series: mapSetSeries(s) }));
-    return res.json({ data: mapped, source: 'fallback' });
-  }
-});
+
+    try {
+      const raw = await fetchFromPokemonTcg('/sets?orderBy=-releaseDate');
+      const mapped = (raw?.data || []).map(mapSet);
+      await supabase.from('sets_cache').upsert({ id: 'all', data: mapped, updated_at: new Date().toISOString() });
+      return res.json({ data: mapped, source: 'live' });
+    } catch (err) {
+      console.warn('[tcg] Falha ao buscar /sets na Pokemon TCG API, usando contingência:', (err as Error).message);
+      if (cached) {
+        // Serve cache expirado em vez de fallback genérico
+        return res.json({ data: cached.data, source: 'stale-cache' });
+      }
+      const mapped = FALLBACK_SETS.map((s) => ({ ...s, series: mapSetSeries(s) }));
+      return res.json({ data: mapped, source: 'fallback' });
+    }
+  })
+);
 
 const setIdSchema = z.string().trim().regex(/^[a-zA-Z0-9.-]+$/).min(1).max(40);
 
-tcgRouter.get('/cards/:setId', async (req, res) => {
-  const parsed = setIdSchema.safeParse(req.params.setId);
-  if (!parsed.success) {
-    return res.status(400).json({ error: 'ID de coleção inválido.' });
-  }
-  const setId = parsed.data;
-
-  const cached = getCardsCache.get(setId) as { data: string; updated_at: number } | undefined;
-  const isFresh = cached && Date.now() - cached.updated_at < CACHE_TTL_MS;
-
-  if (cached && isFresh) {
-    return res.json({ data: JSON.parse(cached.data), source: 'cache' });
-  }
-
-  try {
-    const raw = await fetchFromPokemonTcg(`/cards?q=set.id:${encodeURIComponent(setId)}&orderBy=number`);
-    const mapped = (raw?.data || []).map(mapCard);
-    upsertCardsCache.run(setId, JSON.stringify(mapped), Date.now());
-    return res.json({ data: mapped, source: 'live' });
-  } catch (err) {
-    console.warn(`[tcg] Falha ao buscar /cards para o set ${setId}, usando contingência:`, (err as Error).message);
-    if (cached) {
-      return res.json({ data: JSON.parse(cached.data), source: 'stale-cache' });
+tcgRouter.get(
+  '/cards/:setId',
+  asyncHandler(async (req, res) => {
+    const parsed = setIdSchema.safeParse(req.params.setId);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'ID de coleção inválido.' });
     }
-    if (FALLBACK_CARDS[setId]) {
-      return res.json({ data: FALLBACK_CARDS[setId], source: 'fallback' });
+    const setId = parsed.data;
+
+    const { data: cached } = await supabase.from('cards_cache').select('data, updated_at').eq('set_id', setId).maybeSingle();
+    const isFresh = cached && Date.now() - new Date(cached.updated_at).getTime() < CACHE_TTL_MS;
+
+    if (cached && isFresh) {
+      return res.json({ data: cached.data, source: 'cache' });
     }
 
-    let setName = 'Set';
-    const setsCached = getSetsCache.get() as { data: string } | undefined;
-    const sets = setsCached ? JSON.parse(setsCached.data) : FALLBACK_SETS;
-    const matching = sets.find((s: any) => s.id === setId);
-    if (matching) setName = matching.name;
+    try {
+      const raw = await fetchFromPokemonTcg(`/cards?q=set.id:${encodeURIComponent(setId)}&orderBy=number`);
+      const mapped = (raw?.data || []).map(mapCard);
+      await supabase.from('cards_cache').upsert({ set_id: setId, data: mapped, updated_at: new Date().toISOString() });
+      return res.json({ data: mapped, source: 'live' });
+    } catch (err) {
+      console.warn(`[tcg] Falha ao buscar /cards para o set ${setId}, usando contingência:`, (err as Error).message);
+      if (cached) {
+        return res.json({ data: cached.data, source: 'stale-cache' });
+      }
+      if (FALLBACK_CARDS[setId]) {
+        return res.json({ data: FALLBACK_CARDS[setId], source: 'fallback' });
+      }
 
-    return res.json({ data: generateMockCards(setId, setName), source: 'mock' });
-  }
-});
+      let setName = 'Set';
+      const { data: setsCached } = await supabase.from('sets_cache').select('data').eq('id', 'all').maybeSingle();
+      const sets = setsCached ? setsCached.data : FALLBACK_SETS;
+      const matching = (sets as any[]).find((s) => s.id === setId);
+      if (matching) setName = matching.name;
+
+      return res.json({ data: generateMockCards(setId, setName), source: 'mock' });
+    }
+  })
+);

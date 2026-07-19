@@ -1,17 +1,20 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { User, AppTab, PokemonSet } from './types';
-import { fetchCurrentUser, persistUser, logout as clearSession, getToken } from './auth';
+import { fetchCurrentUser, persistUser, logout as clearSession } from './auth';
+import { supabase } from './supabaseClient';
 import HomeView from './views/HomeView';
 import CollectionView from './views/CollectionView';
 import TradesView from './views/TradesView';
 import SettingsView from './views/SettingsView';
 import LoginView from './views/LoginView';
+import ResetPasswordView from './views/ResetPasswordView';
 import BottomNav from './components/BottomNav';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [recoveryMode, setRecoveryMode] = useState(false);
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.HOME);
   const [selectedSeries, setSelectedSeries] = useState<string | null>(null);
   const [selectedSet, setSelectedSet] = useState<PokemonSet | null>(null);
@@ -20,22 +23,31 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const restoreSession = async () => {
-      if (getToken()) {
-        const savedUser = await fetchCurrentUser();
-        if (savedUser) setUser(savedUser);
-      }
+      const savedUser = await fetchCurrentUser();
+      if (savedUser) setUser(savedUser);
       setCheckingSession(false);
     };
     restoreSession();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setRecoveryMode(true);
+      }
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+      }
+    });
+
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   const handleLogin = (userData: User) => {
     setUser(userData);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setUser(null);
-    clearSession();
+    await clearSession();
   };
 
   const handleUpdateUser = (updatedUser: User) => {
@@ -54,6 +66,10 @@ const App: React.FC = () => {
         <div className="w-10 h-10 border-4 border-[#646B99] border-t-transparent rounded-full animate-spin" />
       </div>
     );
+  }
+
+  if (recoveryMode) {
+    return <ResetPasswordView onDone={() => setRecoveryMode(false)} />;
   }
 
   if (!user) {

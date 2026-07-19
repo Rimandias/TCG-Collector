@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
-import { db } from '../db.js';
+import { supabase } from '../supabase.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { assembleFullUser } from '../userStore.js';
 import { normalizeFriendCode } from '../friendCode.js';
+import { asyncHandler } from '../asyncHandler.js';
 
 export const friendsRouter = Router();
 
@@ -20,63 +21,67 @@ const addFriendSchema = z.object({
   code: z.string().trim().min(4).max(20),
 });
 
-const findUserByFriendCode = db.prepare(`SELECT id FROM users WHERE friend_code = ?`);
-const findFriendship = db.prepare(`SELECT 1 FROM friends WHERE user_id = ? AND friend_user_id = ?`);
-const insertFriendship = db.prepare(`
-  INSERT OR IGNORE INTO friends (user_id, friend_user_id, added_at) VALUES (?, ?, ?)
-`);
-const deleteFriendship = db.prepare(`DELETE FROM friends WHERE user_id = ? AND friend_user_id = ?`);
+friendsRouter.post(
+  '/',
+  requireAuth,
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const parsed = addFriendSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Código inválido.' });
+    }
 
-friendsRouter.post('/', requireAuth, (req: AuthedRequest, res) => {
-  const parsed = addFriendSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: 'Código inválido.' });
-  }
+    const code = normalizeFriendCode(parsed.data.code);
+    const { data: target, error: targetErr } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('friend_code', code)
+      .maybeSingle();
+    if (targetErr) throw targetErr;
+    if (!target) {
+      return res.status(404).json({ error: 'Nenhum usuário encontrado com esse código.' });
+    }
 
-  const code = normalizeFriendCode(parsed.data.code);
-  const target = findUserByFriendCode.get(code) as { id: string } | undefined;
-  if (!target) {
-    return res.status(404).json({ error: 'Nenhum usuário encontrado com esse código.' });
-  }
+    const myId = req.userId!;
+    if (target.id === myId) {
+      return res.status(400).json({ error: 'Você não pode adicionar a si mesmo como amigo.' });
+    }
 
-  const myId = req.userId!;
-  if (target.id === myId) {
-    return res.status(400).json({ error: 'Você não pode adicionar a si mesmo como amigo.' });
-  }
+    const { data: existing, error: existingErr } = await supabase
+      .from('friends')
+      .select('user_id')
+      .eq('user_id', myId)
+      .eq('friend_user_id', target.id)
+      .maybeSingle();
+    if (existingErr) throw existingErr;
+    if (existing) {
+      return res.status(409).json({ error: 'Vocês já são amigos.' });
+    }
 
-  if (findFriendship.get(myId, target.id)) {
-    return res.status(409).json({ error: 'Vocês já são amigos.' });
-  }
+    const now = new Date().toISOString();
+    const { error: insertErr } = await supabase.from('friends').insert([
+      { user_id: myId, friend_user_id: target.id, added_at: now },
+      { user_id: target.id, friend_user_id: myId, added_at: now },
+    ]);
+    if (insertErr) throw insertErr;
 
-  const now = Date.now();
-  db.exec('BEGIN');
-  try {
-    insertFriendship.run(myId, target.id, now);
-    insertFriendship.run(target.id, myId, now);
-    db.exec('COMMIT');
-  } catch (err) {
-    db.exec('ROLLBACK');
-    throw err;
-  }
+    const user = await assembleFullUser(myId, req.userEmail!);
+    return res.status(201).json({ user });
+  })
+);
 
-  const user = assembleFullUser(myId);
-  return res.status(201).json({ user });
-});
+friendsRouter.delete(
+  '/:friendUserId',
+  requireAuth,
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const { friendUserId } = req.params;
+    const myId = req.userId!;
 
-friendsRouter.delete('/:friendUserId', requireAuth, (req: AuthedRequest, res) => {
-  const { friendUserId } = req.params;
-  const myId = req.userId!;
+    const { error: err1 } = await supabase.from('friends').delete().eq('user_id', myId).eq('friend_user_id', friendUserId);
+    if (err1) throw err1;
+    const { error: err2 } = await supabase.from('friends').delete().eq('user_id', friendUserId).eq('friend_user_id', myId);
+    if (err2) throw err2;
 
-  db.exec('BEGIN');
-  try {
-    deleteFriendship.run(myId, friendUserId);
-    deleteFriendship.run(friendUserId, myId);
-    db.exec('COMMIT');
-  } catch (err) {
-    db.exec('ROLLBACK');
-    throw err;
-  }
-
-  const user = assembleFullUser(myId);
-  return res.json({ user });
-});
+    const user = await assembleFullUser(myId, req.userEmail!);
+    return res.json({ user });
+  })
+);

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { assembleFullUser, replaceUserData } from '../userStore.js';
+import { asyncHandler } from '../asyncHandler.js';
 
 export const usersRouter = Router();
 
@@ -28,20 +29,28 @@ const userDataSchema = z.object({
   wishlist: z.array(z.string().regex(cardIdPattern)).max(5000).default([]),
 });
 
-usersRouter.get('/me', requireAuth, (req: AuthedRequest, res) => {
-  const user = assembleFullUser(req.userId!);
-  if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
-  return res.json({ user });
-});
+usersRouter.get(
+  '/me',
+  requireAuth,
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const user = await assembleFullUser(req.userId!, req.userEmail!);
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    return res.json({ user });
+  })
+);
 
-usersRouter.put('/me', requireAuth, (req: AuthedRequest, res) => {
-  const parsed = userDataSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: 'Dados inválidos.', details: parsed.error.flatten() });
-  }
+usersRouter.put(
+  '/me',
+  requireAuth,
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const parsed = userDataSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Dados inválidos.', details: parsed.error.flatten() });
+    }
 
-  replaceUserData(req.userId!, parsed.data);
+    await replaceUserData(req.userId!, parsed.data);
 
-  const user = assembleFullUser(req.userId!);
-  return res.json({ user });
-});
+    const user = await assembleFullUser(req.userId!, req.userEmail!);
+    return res.json({ user });
+  })
+);

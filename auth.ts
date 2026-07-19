@@ -1,11 +1,7 @@
 import { User } from './types';
+import { supabase } from './supabaseClient';
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || '/api';
-const TOKEN_KEY = 'poketracker_token';
-
-export const getToken = (): string | null => localStorage.getItem(TOKEN_KEY);
-export const setToken = (token: string) => localStorage.setItem(TOKEN_KEY, token);
-export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
 export class AuthError extends Error {}
 
@@ -18,51 +14,76 @@ async function parseErrorMessage(response: Response, fallback: string): Promise<
   }
 }
 
-export const registerUser = async (username: string, email: string, password: string): Promise<User> => {
-  const response = await fetch(`${API_BASE}/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, email, password }),
-  });
-  if (!response.ok) {
-    throw new AuthError(await parseErrorMessage(response, 'Não foi possível criar a conta.'));
-  }
-  const body = await response.json();
-  setToken(body.token);
-  return body.user;
-};
+function mapAuthErrorMessage(message: string): string {
+  if (message.includes('Invalid login credentials')) return 'E-mail ou senha incorretos.';
+  if (message.includes('User already registered')) return 'Já existe uma conta com este e-mail.';
+  if (message.toLowerCase().includes('password should be at least')) return 'A senha deve ter pelo menos 6 caracteres.';
+  if (message.toLowerCase().includes('rate limit')) return 'Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.';
+  return message;
+}
 
-export const loginUser = async (email: string, password: string): Promise<User> => {
-  const response = await fetch(`${API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!response.ok) {
-    throw new AuthError(await parseErrorMessage(response, 'E-mail ou senha incorretos.'));
-  }
-  const body = await response.json();
-  setToken(body.token);
-  return body.user;
-};
+async function getAccessToken(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
 
-export const fetchCurrentUser = async (): Promise<User | null> => {
-  const token = getToken();
-  if (!token) return null;
+async function fetchAppUser(): Promise<User> {
+  const token = await getAccessToken();
+  if (!token) throw new AuthError('Sessão não encontrada.');
 
-  const response = await fetch(`${API_BASE}/auth/me`, {
+  const response = await fetch(`${API_BASE}/users/me`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) {
-    clearToken();
-    return null;
+    throw new AuthError(await parseErrorMessage(response, 'Não foi possível carregar os dados da conta.'));
   }
   const body = await response.json();
   return body.user;
+}
+
+export const registerUser = async (username: string, email: string, password: string): Promise<User> => {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { username: username || 'Treinador' } },
+  });
+  if (error) throw new AuthError(mapAuthErrorMessage(error.message));
+  if (!data.session) {
+    throw new AuthError('Conta criada! Verifique seu e-mail para confirmar o cadastro antes de entrar.');
+  }
+  return fetchAppUser();
+};
+
+export const loginUser = async (email: string, password: string): Promise<User> => {
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw new AuthError(mapAuthErrorMessage(error.message));
+  return fetchAppUser();
+};
+
+export const fetchCurrentUser = async (): Promise<User | null> => {
+  const { data } = await supabase.auth.getSession();
+  if (!data.session) return null;
+  try {
+    return await fetchAppUser();
+  } catch {
+    return null;
+  }
+};
+
+export const requestPasswordReset = async (email: string): Promise<void> => {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin,
+  });
+  if (error) throw new AuthError(mapAuthErrorMessage(error.message));
+};
+
+export const updatePassword = async (newPassword: string): Promise<void> => {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw new AuthError(mapAuthErrorMessage(error.message));
 };
 
 export const persistUser = async (user: User): Promise<User | null> => {
-  const token = getToken();
+  const token = await getAccessToken();
   if (!token) return null;
 
   const payload = {
@@ -92,7 +113,7 @@ export const persistUser = async (user: User): Promise<User | null> => {
 };
 
 export const addFriendByCode = async (code: string): Promise<{ user?: User; error?: string }> => {
-  const token = getToken();
+  const token = await getAccessToken();
   if (!token) return { error: 'Sessão expirada, faça login novamente.' };
 
   const response = await fetch(`${API_BASE}/friends`, {
@@ -113,7 +134,7 @@ export const addFriendByCode = async (code: string): Promise<{ user?: User; erro
 };
 
 export const removeFriend = async (friendUserId: string): Promise<User | null> => {
-  const token = getToken();
+  const token = await getAccessToken();
   if (!token) return null;
 
   const response = await fetch(`${API_BASE}/friends/${encodeURIComponent(friendUserId)}`, {
@@ -126,6 +147,6 @@ export const removeFriend = async (friendUserId: string): Promise<User | null> =
   return body.user;
 };
 
-export const logout = () => {
-  clearToken();
+export const logout = async (): Promise<void> => {
+  await supabase.auth.signOut();
 };

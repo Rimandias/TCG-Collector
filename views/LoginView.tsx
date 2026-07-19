@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
-import { registerUser, loginUser, AuthError } from '../auth';
+import { registerUser, loginUser, requestPasswordReset, AuthError } from '../auth';
 
 interface LoginViewProps {
   onLogin: (user: User) => void;
@@ -16,7 +16,14 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     password: ''
   });
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetSubmitting, setResetSubmitting] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -29,6 +36,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     e.preventDefault();
     if (!formData.email || !formData.password) return;
     setError(null);
+    setInfo(null);
     setSubmitting(true);
 
     try {
@@ -37,9 +45,29 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         : await loginUser(formData.email, formData.password);
       onLogin(user);
     } catch (err) {
-      setError(err instanceof AuthError ? err.message : 'Não foi possível conectar ao servidor.');
+      if (err instanceof AuthError && err.message.includes('Verifique seu e-mail')) {
+        setInfo(err.message);
+      } else {
+        setError(err instanceof AuthError ? err.message : 'Não foi possível conectar ao servidor.');
+      }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetEmail.trim()) return;
+    setResetError(null);
+    setResetSubmitting(true);
+
+    try {
+      await requestPasswordReset(resetEmail.trim());
+      setResetSent(true);
+    } catch (err) {
+      setResetError(err instanceof AuthError ? err.message : 'Não foi possível enviar o e-mail de recuperação.');
+    } finally {
+      setResetSubmitting(false);
     }
   };
 
@@ -108,6 +136,26 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
           {error && (
             <p className="text-red-500 text-[10px] uppercase tracking-widest text-center">{error}</p>
           )}
+          {info && (
+            <p className="text-emerald-500 text-[10px] uppercase tracking-widest text-center">{info}</p>
+          )}
+
+          {!isRegister && (
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForgotPassword(true);
+                  setResetEmail(formData.email);
+                  setResetSent(false);
+                  setResetError(null);
+                }}
+                className="text-[9px] uppercase tracking-widest text-slate-400 hover:text-[#646B99] transition-colors"
+              >
+                Esqueci minha senha
+              </button>
+            </div>
+          )}
 
           <div className="pt-6">
             <button
@@ -128,6 +176,61 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
           </button>
         </form>
       </div>
+
+      {showForgotPassword && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-100 w-full max-w-xs rounded-2xl shadow-2xl p-6">
+            {resetSent ? (
+              <>
+                <h3 className="text-sm font-semibold text-slate-800 mb-1">E-mail enviado!</h3>
+                <p className="text-[10px] text-slate-400 mb-4">
+                  Se houver uma conta com esse e-mail, você vai receber um link para redefinir sua senha.
+                </p>
+                <button
+                  onClick={() => setShowForgotPassword(false)}
+                  className="w-full py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors"
+                >
+                  Fechar
+                </button>
+              </>
+            ) : (
+              <>
+                <h3 className="text-sm font-semibold text-slate-800 mb-1">Recuperar Senha</h3>
+                <p className="text-[10px] text-slate-400 mb-4">Informe seu e-mail para receber um link de redefinição.</p>
+
+                <form onSubmit={handleForgotPassword}>
+                  <input
+                    type="email"
+                    placeholder="E-MAIL"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    autoFocus
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-[#646B99] mb-2"
+                  />
+                  {resetError && <p className="text-red-500 text-[10px] mb-2">{resetError}</p>}
+
+                  <div className="flex gap-3 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotPassword(false)}
+                      className="flex-1 py-2 bg-slate-50 text-slate-400 text-xs rounded-lg hover:bg-slate-100 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!resetEmail.trim() || resetSubmitting}
+                      className="flex-1 py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors disabled:opacity-50"
+                    >
+                      {resetSubmitting ? 'Enviando...' : 'Enviar'}
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
