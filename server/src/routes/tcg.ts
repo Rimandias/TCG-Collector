@@ -65,6 +65,7 @@ function mapCard(raw: any) {
     imageUrlHiRes: raw.images?.large || '',
     number: raw.number,
     rarity: raw.rarity || 'Common',
+    artist: raw.artist || '',
     isSecret: parseInt(raw.number) > (raw.set?.printedTotal || 0),
     set: {
       id: raw.set?.id,

@@ -291,6 +291,11 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   const getSetLogoForSeries = useCallback((seriesName: string) => {
     const seriesSets = sets.filter(s => s.series === seriesName);
     if (seriesSets.length === 0) return '';
+    // Prefere a coleção-base com o mesmo nome da era, em vez da mais antiga por data de
+    // lançamento — os "X Black Star Promos" costumam sair no mesmo dia ou antes da coleção
+    // base e "venciam" o sort por data, mostrando o logo do promo em vez do oficial.
+    const baseSet = seriesSets.find(s => s.name.trim().toLowerCase() === seriesName.trim().toLowerCase());
+    if (baseSet) return baseSet.logoUrl || '';
     const sorted = [...seriesSets].sort((a, b) => a.releaseDate.localeCompare(b.releaseDate));
     return sorted[0]?.logoUrl || '';
   }, [sets]);
@@ -330,7 +335,8 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
         const matchesName = card.name.toLowerCase().includes(q);
         const matchesNum = card.number.toLowerCase() === q || fullNum === q || card.number.toLowerCase().includes(q) || fullNum.includes(q);
         const matchesSet = card.set.name.toLowerCase().includes(q);
-        if (!matchesName && !matchesNum && !matchesSet) return false;
+        const matchesArtist = (card.artist || '').toLowerCase().includes(q);
+        if (!matchesName && !matchesNum && !matchesSet && !matchesArtist) return false;
       }
 
       // 2. Filtro de Raridade (campo da API)
@@ -403,7 +409,8 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
         card.name.toLowerCase().includes(q) ||
         card.number.toLowerCase().includes(q) ||
         fullNum.includes(q) ||
-        card.set.name.toLowerCase().includes(q)
+        card.set.name.toLowerCase().includes(q) ||
+        (card.artist || '').toLowerCase().includes(q)
       );
     });
   }, [tradeCards, manageSearchQuery]);
@@ -1500,12 +1507,19 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
             Object.entries(normalized).forEach(([varType, conditionsObj]) => {
               Object.entries(conditionsObj).forEach(([cond, details]) => {
                 if (details.quantity > 0) {
+                  const isOnlyOne = details.quantity === 1;
                   badges.push(
                     <span
                       key={`${varType}-${cond}`}
-                      className="px-1.5 py-0.5 border border-slate-100 bg-slate-50 rounded text-[8px] font-medium text-[#646B99]"
+                      className={`px-1.5 py-0.5 border rounded text-[8px] font-medium flex items-center gap-1 ${
+                        isOnlyOne
+                          ? 'bg-amber-50 border-amber-200 text-amber-700 font-semibold'
+                          : 'bg-slate-50 border-slate-100 text-[#646B99]'
+                      }`}
                     >
+                      {isOnlyOne && <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />}
                       {varType} {cond}: {details.quantity}
+                      {isOnlyOne && ' (Única!)'}
                     </span>
                   );
                 }
@@ -1702,6 +1716,12 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
           myUserId={user.id}
           onClose={closeTradeModal}
           onChanged={handleTradeChanged}
+          onStartNewTrade={() => {
+            closeTradeModal();
+            setActiveTab('friends');
+            setFriendsSubTab('friends');
+            setSelectedFriend(null);
+          }}
         />
       )}
     </div>

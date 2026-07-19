@@ -88,15 +88,10 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
         </div>
       </div>
 
-      <div className="mb-6 bg-gradient-to-r from-[#646B99] to-[#4d5275] rounded-3xl p-6 shadow-lg flex items-center justify-between">
-        <div>
-          <p className="text-[10px] text-white/60 uppercase tracking-widest">Valor Total da Coleção</p>
-          <p className="text-3xl text-white font-semibold mt-1">R${globalStats.totalValue.toFixed(2)}</p>
-          <p className="text-[9px] text-white/50 mt-1">Soma de todas as coleções, baseada nos preços que você informou</p>
-        </div>
-        <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center flex-shrink-0">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-        </div>
+      <div className="mb-6 bg-gradient-to-r from-[#646B99] to-[#4d5275] rounded-3xl p-6 shadow-lg">
+        <p className="text-[10px] text-white/60 uppercase tracking-widest">Valor Total da Coleção</p>
+        <p className="text-3xl text-white font-semibold mt-1">R${globalStats.totalValue.toFixed(2)}</p>
+        <p className="text-[9px] text-white/50 mt-1">Soma de todas as coleções, baseada nos preços que você informou</p>
       </div>
 
       <div className="grid gap-6">
@@ -112,7 +107,10 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
                       <img src={set.logoUrl} className="max-h-full max-w-full object-contain" />
                    </div>
                    <div>
-                     <h3 className="text-sm text-slate-800 uppercase tracking-tight leading-tight">{set.name}</h3>
+                     <div className="flex items-center gap-1.5">
+                       {set.symbolUrl && <img src={set.symbolUrl} alt="" className="w-3.5 h-3.5 object-contain flex-shrink-0" />}
+                       <h3 className="text-sm text-slate-800 uppercase tracking-tight leading-tight">{set.name}</h3>
+                     </div>
                      <p className="text-[9px] text-slate-400 uppercase tracking-widest mt-0.5">{set.releaseDate}</p>
                    </div>
                 </div>

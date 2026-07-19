@@ -19,14 +19,26 @@ const formatAddedAt = (iso: string) => {
   }
 };
 
+const EyeIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+);
+
+const EyeOffIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+);
+
 const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogout }) => {
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState(user.username);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [pwdError, setPwdError] = useState<string | null>(null);
   const [changingPwd, setChangingPwd] = useState(false);
   const [showPwdMsg, setShowPwdMsg] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [friendCodeInput, setFriendCodeInput] = useState('');
@@ -56,6 +68,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
       setPwdError('A nova senha precisa ter pelo menos 8 caracteres.');
       return;
     }
+    if (newPassword !== confirmPassword) {
+      setPwdError('A confirmação não corresponde à nova senha.');
+      return;
+    }
     setPwdError(null);
     setChangingPwd(true);
 
@@ -68,6 +84,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
     }
     setCurrentPassword('');
     setNewPassword('');
+    setConfirmPassword('');
     setShowPwdMsg(true);
     setTimeout(() => setShowPwdMsg(false), 3000);
   };
@@ -175,31 +192,64 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
 
           <form onSubmit={handleUpdatePassword} className="space-y-3">
             <h4 className="text-[10px] text-slate-300 uppercase tracking-widest">Alterar Senha</h4>
-            <input
-              type="password"
-              placeholder="Senha atual..."
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              className="w-full bg-white border border-slate-100 rounded-xl px-4 py-2 text-sm text-slate-700 focus:ring-1 focus:ring-[#646B99] outline-none"
-            />
-            <div className="flex gap-3">
+            <div className="relative">
               <input
-                type="password"
+                type={showCurrentPassword ? 'text' : 'password'}
+                placeholder="Senha atual..."
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="w-full bg-white border border-slate-100 rounded-xl px-4 py-2 pr-10 text-sm text-slate-700 focus:ring-1 focus:ring-[#646B99] outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
+              >
+                {showCurrentPassword ? <EyeOffIcon /> : <EyeIcon />}
+              </button>
+            </div>
+            <div className="relative">
+              <input
+                type={showNewPassword ? 'text' : 'password'}
                 placeholder="Nova senha (mín. 8 caracteres)..."
                 autoComplete="new-password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="flex-1 bg-white border border-slate-100 rounded-xl px-4 py-2 text-sm text-slate-700 focus:ring-1 focus:ring-[#646B99] outline-none"
+                className="w-full bg-white border border-slate-100 rounded-xl px-4 py-2 pr-10 text-sm text-slate-700 focus:ring-1 focus:ring-[#646B99] outline-none"
               />
               <button
-                type="submit"
-                disabled={changingPwd || !currentPassword || newPassword.length < 8}
-                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl text-slate-600 text-sm transition-colors disabled:opacity-50"
+                type="button"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
               >
-                {changingPwd ? 'Atualizando...' : 'Atualizar'}
+                {showNewPassword ? <EyeOffIcon /> : <EyeIcon />}
               </button>
             </div>
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                placeholder="Confirmar nova senha..."
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full bg-white border border-slate-100 rounded-xl px-4 py-2 pr-10 text-sm text-slate-700 focus:ring-1 focus:ring-[#646B99] outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
+              >
+                {showConfirmPassword ? <EyeOffIcon /> : <EyeIcon />}
+              </button>
+            </div>
+            <button
+              type="submit"
+              disabled={changingPwd || !currentPassword || newPassword.length < 8 || !confirmPassword}
+              className="w-full px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl text-slate-600 text-sm transition-colors disabled:opacity-50"
+            >
+              {changingPwd ? 'Atualizando...' : 'Atualizar'}
+            </button>
             {pwdError && (
               <p className="text-red-500 text-[10px]">{pwdError}</p>
             )}

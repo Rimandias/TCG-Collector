@@ -54,6 +54,12 @@ const HomeView: React.FC<HomeViewProps> = ({
   const getSetLogoForSeries = useCallback((seriesName: string) => {
     const seriesSets = sets.filter(s => s.series === seriesName);
     if (seriesSets.length === 0) return '';
+    // Prefere a coleção-base com o mesmo nome da era (ex.: set "Black & White" na era
+    // "Black & White"), em vez de simplesmente a mais antiga por data de lançamento —
+    // vários "X Black Star Promos" são lançados no mesmo dia ou antes da coleção-base
+    // e acabavam "vencendo" o sort por data, mostrando o logo do promo em vez do oficial.
+    const baseSet = seriesSets.find(s => s.name.trim().toLowerCase() === seriesName.trim().toLowerCase());
+    if (baseSet) return baseSet.logoUrl || '';
     const sorted = [...seriesSets].sort((a, b) => a.releaseDate.localeCompare(b.releaseDate));
     return sorted[0]?.logoUrl || '';
   }, [sets]);
@@ -212,7 +218,8 @@ const HomeView: React.FC<HomeViewProps> = ({
         const matchesName = card.name.toLowerCase().includes(q);
         const matchesNum = card.number.toLowerCase() === q || fullNum === q || card.number.toLowerCase().includes(q) || fullNum.includes(q);
         const matchesSet = card.set.name.toLowerCase().includes(q);
-        return matchesName || matchesNum || matchesSet;
+        const matchesArtist = (card.artist || '').toLowerCase().includes(q);
+        return matchesName || matchesNum || matchesSet || matchesArtist;
       });
     }
 
@@ -234,7 +241,8 @@ const HomeView: React.FC<HomeViewProps> = ({
       const matchesName = card.name.toLowerCase().includes(q);
       const matchesNum = card.number.toLowerCase() === q || fullNum === q || card.number.toLowerCase().includes(q) || fullNum.includes(q);
       const matchesSet = card.set?.name?.toLowerCase().includes(q);
-      return matchesName || matchesNum || matchesSet;
+      const matchesArtist = (card.artist || '').toLowerCase().includes(q);
+      return matchesName || matchesNum || matchesSet || matchesArtist;
     });
   }, [allCards, searchQuery, selectedSeries, selectedSet, sets]);
 

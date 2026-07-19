@@ -10,6 +10,7 @@ interface TradeActionModalProps {
   myUserId: string;
   onClose: () => void;
   onChanged: (trade: Trade) => void;
+  onStartNewTrade?: () => void;
 }
 
 const describeItems = (items: TradeItem[]) => {
@@ -17,7 +18,7 @@ const describeItems = (items: TradeItem[]) => {
   return { count: items.reduce((sum, i) => sum + i.quantity, 0), total };
 };
 
-const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, onClose, onChanged }) => {
+const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, onClose, onChanged, onStartNewTrade }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
@@ -224,11 +225,6 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
               </button>
             )}
           </div>
-          {myConfirmed && (
-            <button onClick={onClose} className="w-full mt-2 py-2 text-slate-400 text-[10px] uppercase tracking-widest hover:text-slate-600">
-              Fechar
-            </button>
-          )}
         </div>
       </div>
     );
@@ -286,11 +282,6 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
               </button>
             )}
           </div>
-          {myConfirmed && (
-            <button onClick={onClose} className="w-full mt-2 py-2 text-slate-400 text-[10px] uppercase tracking-widest hover:text-slate-600">
-              Fechar
-            </button>
-          )}
         </div>
       </div>
     );
@@ -318,6 +309,14 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
               Cancelar pedido
             </button>
           </div>
+          {onStartNewTrade && (
+            <button
+              onClick={onStartNewTrade}
+              className="w-full mt-2 py-2 text-[#646B99] text-[10px] uppercase tracking-widest hover:text-[#4d5275] transition-colors"
+            >
+              Iniciar outra troca
+            </button>
+          )}
         </div>
       </div>
     );
@@ -380,6 +379,14 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
           <button onClick={onClose} className="w-full py-2 bg-slate-50 text-slate-400 text-xs rounded-lg hover:bg-slate-100 transition-colors">
             Fechar
           </button>
+          {onStartNewTrade && (
+            <button
+              onClick={onStartNewTrade}
+              className="w-full mt-2 py-2 text-[#646B99] text-[10px] uppercase tracking-widest hover:text-[#4d5275] transition-colors"
+            >
+              Iniciar outra troca
+            </button>
+          )}
         </div>
       </div>
     );

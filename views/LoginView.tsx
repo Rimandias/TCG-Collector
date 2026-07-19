@@ -110,20 +110,20 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             </div>
           )}
 
-          <input 
-            type="email" 
+          <input
+            type="email"
             placeholder="E-MAIL"
             value={formData.email}
             onChange={(e) => setFormData({...formData, email: e.target.value})}
-            className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs uppercase tracking-widest text-slate-900 outline-none focus:border-[#646B99] transition-colors"
+            className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs tracking-widest text-slate-900 outline-none focus:border-[#646B99] transition-colors"
           />
 
-          <input 
-            type="password" 
+          <input
+            type="password"
             placeholder="SENHA"
             value={formData.password}
             onChange={(e) => setFormData({...formData, password: e.target.value})}
-            className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs uppercase tracking-widest text-slate-900 outline-none focus:border-[#646B99] transition-colors"
+            className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs tracking-widest text-slate-900 outline-none focus:border-[#646B99] transition-colors"
           />
 
           {error && (

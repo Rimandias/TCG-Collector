@@ -30,6 +30,7 @@ export interface Card {
   imageUrlHiRes: string;
   number: string;
   rarity: string;
+  artist?: string;
   isSecret: boolean;
   set: {
     id: string;

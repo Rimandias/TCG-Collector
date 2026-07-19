@@ -118,7 +118,8 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
         line.card.name.toLowerCase().includes(q) ||
         line.card.number.toLowerCase().includes(q) ||
         fullNum.includes(q) ||
-        line.card.set.name.toLowerCase().includes(q)
+        line.card.set.name.toLowerCase().includes(q) ||
+        (line.card.artist || '').toLowerCase().includes(q)
       );
     });
   }, [lines, searchQuery]);
