@@ -7,6 +7,7 @@ import { fetchCurrentUser } from '../auth';
 import CardModal from '../components/CardModal';
 import FriendFolderBrowser from '../components/FriendFolderBrowser';
 import TradeActionModal from '../components/TradeActionModal';
+import TradeItemsList from '../components/TradeItemsList';
 import Pagination, { PAGE_SIZE } from '../components/Pagination';
 
 const TRADE_POLL_INTERVAL_MS = 15000;
@@ -76,12 +77,16 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
   const handleTradeChanged = async (updated: Trade) => {
     setMyTrades((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-    if (updated.status === 'completed' || updated.status === 'cancelled') {
+    if (updated.status === 'cancelled') {
       setActiveTradeModal(null);
+      return;
+    }
+    // Em 'completed' mantemos o pop-up aberto (sem auto-close) para o usuário ver
+    // quais cartas foram trocadas antes de fechar manualmente e ajustar a pasta física.
+    setActiveTradeModal(updated);
+    if (updated.status === 'completed') {
       const freshUser = await fetchCurrentUser();
       if (freshUser) onUpdateUser(freshUser);
-    } else {
-      setActiveTradeModal(updated);
     }
   };
 
@@ -91,6 +96,54 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     }
     setActiveTradeModal(null);
   };
+
+  // --- Histórico de Trocas (dentro do toggle "Pasta de Amigos") ---
+  const [friendsSubTab, setFriendsSubTab] = useState<'friends' | 'history'>('friends');
+  const [historyCardsById, setHistoryCardsById] = useState<Record<string, Card>>({});
+  const [loadingHistoryCards, setLoadingHistoryCards] = useState(false);
+
+  const historyTrades = useMemo(
+    () =>
+      myTrades
+        .filter((t) => t.status === 'completed' || t.status === 'cancelled')
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    [myTrades]
+  );
+
+  // Carrega os dados das cartas do histórico só quando o usuário abre essa aba (evita
+  // requisições desnecessárias de todas as coleções toda vez que a tela de trocas monta).
+  useEffect(() => {
+    if (friendsSubTab !== 'history' || historyTrades.length === 0) return;
+    let cancelled = false;
+    const load = async () => {
+      const allCardIds: string[] = Array.from(
+        new Set(historyTrades.flatMap((t) => [...t.requestedItems, ...t.offeredItems].map((i) => i.cardId)))
+      );
+      const missingIds = allCardIds.filter((id) => !historyCardsById[id]);
+      if (missingIds.length === 0) return;
+      setLoadingHistoryCards(true);
+      const setIds: string[] = Array.from(new Set(missingIds.map((id) => id.split('-')[0])));
+      const map: Record<string, Card> = {};
+      await Promise.all(
+        setIds.map(async (setId) => {
+          try {
+            const cards = await fetchCardsBySet(setId);
+            for (const card of cards) map[card.id] = card;
+          } catch {
+            // Ignora falhas isoladas de coleção
+          }
+        })
+      );
+      if (!cancelled) {
+        setHistoryCardsById((prev) => ({ ...prev, ...map }));
+        setLoadingHistoryCards(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [friendsSubTab, historyTrades]);
 
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -156,37 +209,46 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     }
   }, [user.ownedCards, activeTab]);
 
-  // Carrega as coleções e todas as cartas das coleções em paralelo para a Lista de Desejos
+  // Carrega os metadados das coleções (leve, uma única chamada) sempre.
   useEffect(() => {
-    const loadSetsAndAllCards = async () => {
+    fetchSets().then((setsList) => {
+      if (setsList) setSets(setsList);
+    });
+  }, []);
+
+  // Carrega as cartas da Lista de Desejos: busca somente as coleções realmente referenciadas
+  // pelo wishlist do usuário (via prefixo do cardId), em vez de TODAS as ~200 coleções do
+  // catálogo. Buscar tudo a cada montagem da tela de Trocas gerava dezenas/centenas de
+  // requisições concorrentes desnecessárias, deixando toda a aplicação lenta (inclusive
+  // travando por vários segundos outras chamadas importantes, como carregar as trocas).
+  useEffect(() => {
+    const loadWishlistCards = async () => {
+      const wishlistIds = user.wishlist || [];
+      const neededSetIds: string[] = Array.from(new Set(wishlistIds.map((id) => id.split('-')[0])));
+      if (neededSetIds.length === 0) {
+        setAllSetCards([]);
+        return;
+      }
       setLoadingWishlist(true);
       try {
-        const setsList = await fetchSets();
-        if (setsList) {
-          setSets(setsList);
-          
-          const allCards: Card[] = [];
-          const promises = setsList.map(async (s) => {
+        const allCards: Card[] = [];
+        await Promise.all(
+          neededSetIds.map(async (setId) => {
             try {
-              return await fetchCardsBySet(s.id);
+              const cards = await fetchCardsBySet(setId);
+              allCards.push(...cards);
             } catch (e) {
-              return [];
+              // Ignora falhas isoladas de coleção; a carta some da lista de desejos exibida
             }
-          });
-          const results = await Promise.all(promises);
-          results.forEach(cards => {
-            allCards.push(...cards);
-          });
-          setAllSetCards(allCards);
-        }
-      } catch (err) {
-        console.warn("Error loading wishlist sets/cards (handled with fallback/mock cards):", err);
+          })
+        );
+        setAllSetCards(allCards);
       } finally {
         setLoadingWishlist(false);
       }
     };
-    loadSetsAndAllCards();
-  }, []);
+    loadWishlistCards();
+  }, [user.wishlist]);
 
   // Lista de Desejos: Cartas adicionadas manualmente via coração pelo usuário
   const wishlistCards = useMemo(() => {
@@ -353,6 +415,19 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     return manageFilteredCards.slice(start, start + PAGE_SIZE);
   }, [manageFilteredCards, managePage]);
 
+  // Toggle "Todas as Cartas" vs "Coleções" dentro do modal "Gerenciar Pasta"
+  const [manageViewMode, setManageViewMode] = useState<'cards' | 'collections'>('cards');
+  const [manageSelectedSeries, setManageSelectedSeries] = useState<string | null>(null);
+  const [manageSelectedSetId, setManageSelectedSetId] = useState<string | null>(null);
+
+  const manageSetCardsInSet = useMemo(() => {
+    if (!manageSelectedSetId) return [];
+    return manageFilteredCards.filter(({ card }) => card.set.id === manageSelectedSetId);
+  }, [manageFilteredCards, manageSelectedSetId]);
+  useEffect(() => {
+    setManagePage(1);
+  }, [manageSelectedSetId]);
+
   // Reseta filtros e navegação ao voltar/fechar uma pasta
   const handleExitFolder = () => {
     setSelectedFolderId(null);
@@ -494,6 +569,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
               setActiveTab('friends');
               handleExitFolder();
               setSelectedFriend(null);
+              setFriendsSubTab('friends');
             }}
             className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'friends' ? 'bg-white text-[#646B99] shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
           >
@@ -670,7 +746,13 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
                   {!isDuplicates && !isWishlist && (
                     <button
-                      onClick={() => { setManageSearchQuery(''); setShowManageCards(true); }}
+                      onClick={() => {
+                        setManageSearchQuery('');
+                        setManageViewMode('cards');
+                        setManageSelectedSeries(null);
+                        setManageSelectedSetId(null);
+                        setShowManageCards(true);
+                      }}
                       className="text-[11px] font-medium text-[#646B99] hover:bg-[#646B99]/5 border border-[#646B99]/20 px-2.5 py-1 rounded-lg transition-colors uppercase tracking-wider"
                     >
                       Gerenciar
@@ -1168,42 +1250,124 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
         // --- FRIENDS TAB VIEW ---
         selectedFriend === null ? (
           <div className="space-y-6">
-            <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Amigos Conectados</span>
-
-            <div className="grid gap-3">
-               {user.friends.length === 0 ? (
-                 <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-100">
-                   <p className="text-slate-400 text-sm">Você ainda não adicionou nenhum amigo.</p>
-                   <p className="text-[10px] text-slate-300 uppercase tracking-wider mt-1">Adicione amigos pela aba Opções</p>
-                 </div>
-               ) : (
-                 user.friends.map((friend) => (
-                   <div
-                     key={friend.userId}
-                     onClick={() => {
-                       setSelectedFriend(friend);
-                       setTradeError(null);
-                       setTradeSuccessMessage(null);
-                     }}
-                     className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 cursor-pointer hover:border-[#646B99]/30 hover:shadow-md transition-all shadow-sm group"
-                   >
-                     <div className="flex items-center gap-4">
-                       <div className="w-10 h-10 rounded-xl bg-[#646B99]/10 flex items-center justify-center text-[#646B99] font-bold text-sm">
-                         {friend.username[0]?.toUpperCase()}
-                       </div>
-                       <div>
-                         <span className="text-sm font-semibold text-slate-700 group-hover:text-[#646B99] transition-colors">{friend.username}</span>
-                         <p className="text-[10px] text-slate-400">Ver coleções compartilhadas</p>
-                       </div>
-                     </div>
-                     <div className="flex items-center gap-2">
-                       <span className="text-[9px] text-slate-400 uppercase tracking-widest font-semibold">Ver Pastas</span>
-                       <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-slate-300 group-hover:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                     </div>
-                   </div>
-                 ))
-               )}
+            <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+              <button
+                onClick={() => setFriendsSubTab('friends')}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${friendsSubTab === 'friends' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                Amigos
+              </button>
+              <button
+                onClick={() => setFriendsSubTab('history')}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${friendsSubTab === 'history' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                Histórico de Trocas
+              </button>
             </div>
+
+            {friendsSubTab === 'friends' ? (
+              <div className="grid gap-3">
+                 {user.friends.length === 0 ? (
+                   <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-100">
+                     <p className="text-slate-400 text-sm">Você ainda não adicionou nenhum amigo.</p>
+                     <p className="text-[10px] text-slate-300 uppercase tracking-wider mt-1">Adicione amigos pela aba Opções</p>
+                   </div>
+                 ) : (
+                   user.friends.map((friend) => (
+                     <div
+                       key={friend.userId}
+                       onClick={() => {
+                         setSelectedFriend(friend);
+                         setTradeError(null);
+                         setTradeSuccessMessage(null);
+                       }}
+                       className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 cursor-pointer hover:border-[#646B99]/30 hover:shadow-md transition-all shadow-sm group"
+                     >
+                       <div className="flex items-center gap-4">
+                         <div className="w-10 h-10 rounded-xl bg-[#646B99]/10 flex items-center justify-center text-[#646B99] font-bold text-sm">
+                           {friend.username[0]?.toUpperCase()}
+                         </div>
+                         <div>
+                           <span className="text-sm font-semibold text-slate-700 group-hover:text-[#646B99] transition-colors">{friend.username}</span>
+                           <p className="text-[10px] text-slate-400">Ver coleções compartilhadas</p>
+                         </div>
+                       </div>
+                       <div className="flex items-center gap-2">
+                         <span className="text-[9px] text-slate-400 uppercase tracking-widest font-semibold">Ver Pastas</span>
+                         <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-slate-300 group-hover:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                       </div>
+                     </div>
+                   ))
+                 )}
+              </div>
+            ) : (
+              // --- HISTÓRICO DE TROCAS: trocas concluídas ou canceladas ---
+              <div className="space-y-3">
+                {historyTrades.length === 0 ? (
+                  <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-100">
+                    <p className="text-slate-400 text-sm">Nenhuma troca concluída ou cancelada ainda.</p>
+                  </div>
+                ) : (
+                  <>
+                    {loadingHistoryCards && (
+                      <p className="text-[10px] text-slate-400 uppercase tracking-widest text-center">Carregando detalhes das cartas...</p>
+                    )}
+                    {historyTrades.map((trade) => {
+                      const isInitiator = trade.initiatorId === user.id;
+                      const counterpartName = isInitiator ? trade.recipientUsername : trade.initiatorUsername;
+                      const isCompleted = trade.status === 'completed';
+                      const iGave = isInitiator ? trade.offeredItems : trade.requestedItems;
+                      const iReceived = isInitiator ? trade.requestedItems : trade.offeredItems;
+                      const diff = trade.requestedValue - trade.offeredValue;
+
+                      return (
+                        <div key={trade.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-700">Troca com {counterpartName}</p>
+                              <p className="text-[9px] text-slate-400 uppercase tracking-widest mt-0.5">
+                                {new Date(trade.updatedAt).toLocaleDateString('pt-BR')}
+                              </p>
+                            </div>
+                            <span className={`text-[9px] font-semibold uppercase tracking-widest px-2 py-1 rounded-full ${isCompleted ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>
+                              {isCompleted ? 'Concluída' : 'Cancelada'}
+                            </span>
+                          </div>
+
+                          {isCompleted ? (
+                            <>
+                              {iGave.length > 0 && (
+                                <div>
+                                  <p className="text-[9px] uppercase tracking-widest text-red-500 font-semibold mb-1.5">Você entregou</p>
+                                  <TradeItemsList items={iGave} cardsById={historyCardsById} />
+                                </div>
+                              )}
+                              {iReceived.length > 0 && (
+                                <div>
+                                  <p className="text-[9px] uppercase tracking-widest text-emerald-600 font-semibold mb-1.5">Você recebeu</p>
+                                  <TradeItemsList items={iReceived} cardsById={historyCardsById} />
+                                </div>
+                              )}
+                              {diff !== 0 && iGave.length === 0 && !isInitiator && (
+                                <p className="text-[11px] text-slate-500 bg-slate-50 rounded-lg p-2.5">Você recebeu R${Math.abs(diff).toFixed(2)} em dinheiro.</p>
+                              )}
+                              {diff !== 0 && iGave.length === 0 && isInitiator && (
+                                <p className="text-[11px] text-slate-500 bg-slate-50 rounded-lg p-2.5">Você pagou R${Math.abs(diff).toFixed(2)} em dinheiro.</p>
+                              )}
+                            </>
+                          ) : (
+                            <div>
+                              <p className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-1.5">Cartas pedidas (não concretizado)</p>
+                              <TradeItemsList items={trade.requestedItems} cardsById={historyCardsById} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         ) : tradeSuccessMessage ? (
           <div className="space-y-4 animate-in fade-in duration-300">
@@ -1329,6 +1493,46 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
           const currentFolder = folders.find(f => f.id === selectedFolderId);
           if (!currentFolder) return null;
 
+          const renderManageRow = ({ card, data }: { card: Card, data: UserCardData }) => {
+            const isInFolder = currentFolder.cardIds.includes(card.id);
+            const normalized = getNormalizedVariations(data.variations);
+            const badges: React.ReactNode[] = [];
+            Object.entries(normalized).forEach(([varType, conditionsObj]) => {
+              Object.entries(conditionsObj).forEach(([cond, details]) => {
+                if (details.quantity > 0) {
+                  badges.push(
+                    <span
+                      key={`${varType}-${cond}`}
+                      className="px-1.5 py-0.5 border border-slate-100 bg-slate-50 rounded text-[8px] font-medium text-[#646B99]"
+                    >
+                      {varType} {cond}: {details.quantity}
+                    </span>
+                  );
+                }
+              });
+            });
+            return (
+              <div
+                key={card.id}
+                onClick={() => handleToggleCardInFolder(currentFolder.id, card.id)}
+                className={`flex items-center gap-3 p-2 rounded-xl border cursor-pointer transition-all ${isInFolder ? 'border-[#646B99]/30 bg-[#646B99]/5' : 'border-slate-100 hover:bg-slate-50'}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isInFolder}
+                  onChange={() => {}} // Controlled via onClick on div
+                  className="w-3.5 h-3.5 text-[#646B99] border-slate-300 rounded focus:ring-[#646B99]"
+                />
+                <img src={card.imageUrl} className="w-10 h-14 object-contain rounded bg-white border border-slate-100/50 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-[11px] font-semibold text-slate-700 truncate">{card.name}</h4>
+                  <p className="text-[9px] text-slate-400 truncate">{card.rarity} • #{card.number}</p>
+                  {badges.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{badges}</div>}
+                </div>
+              </div>
+            );
+          };
+
           return (
             <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
                <div className="bg-white border border-slate-100 w-full max-w-sm rounded-2xl shadow-2xl p-6 max-h-[85vh] flex flex-col">
@@ -1356,42 +1560,122 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                           className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#646B99] transition-all"
                         />
                       </div>
-                    <div className="flex-1 overflow-y-auto space-y-2 pr-1 my-2 max-h-[45vh]">
-                      {manageFilteredCards.length === 0 ? (
-                        <div className="py-10 text-center bg-slate-50 rounded-xl border border-slate-100">
-                          <p className="text-xs text-slate-400">Nenhuma carta encontrada.</p>
-                        </div>
-                      ) : (
-                      paginatedManageCards.map(({ card }) => {
-                        const isInFolder = currentFolder.cardIds.includes(card.id);
-                        return (
-                          <div 
-                            key={card.id}
-                            onClick={() => handleToggleCardInFolder(currentFolder.id, card.id)}
-                            className={`flex items-center gap-3 p-2 rounded-xl border cursor-pointer transition-all ${isInFolder ? 'border-[#646B99]/30 bg-[#646B99]/5' : 'border-slate-100 hover:bg-slate-50'}`}
-                          >
-                            <input 
-                              type="checkbox" 
-                              checked={isInFolder}
-                              onChange={() => {}} // Controlled via onClick on div
-                              className="w-3.5 h-3.5 text-[#646B99] border-slate-300 rounded focus:ring-[#646B99]"
-                            />
-                            <img src={card.imageUrl} className="w-10 h-14 object-contain rounded bg-white border border-slate-100/50" />
-                            <div className="flex-1 min-w-0">
-                              <h4 className="text-[11px] font-semibold text-slate-700 truncate">{card.name}</h4>
-                              <p className="text-[9px] text-slate-400 truncate">{card.rarity} • #{card.number}</p>
+
+                      <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100 mb-2">
+                        <button
+                          onClick={() => { setManageViewMode('cards'); setManageSelectedSeries(null); setManageSelectedSetId(null); }}
+                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all ${manageViewMode === 'cards' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                        >
+                          Todas as Cartas
+                        </button>
+                        <button
+                          onClick={() => { setManageViewMode('collections'); setManageSelectedSeries(null); setManageSelectedSetId(null); }}
+                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all ${manageViewMode === 'collections' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                        >
+                          Coleções
+                        </button>
+                      </div>
+
+                    {manageViewMode === 'cards' ? (
+                      <>
+                        <div className="flex-1 overflow-y-auto space-y-2 pr-1 my-2 max-h-[45vh]">
+                          {manageFilteredCards.length === 0 ? (
+                            <div className="py-10 text-center bg-slate-50 rounded-xl border border-slate-100">
+                              <p className="text-xs text-slate-400">Nenhuma carta encontrada.</p>
                             </div>
-                          </div>
-                        );
-                      })
-                      )}
-                    </div>
-                    <Pagination page={managePage} totalPages={Math.max(1, Math.ceil(manageFilteredCards.length / PAGE_SIZE))} onPageChange={setManagePage} />
+                          ) : (
+                            paginatedManageCards.map(renderManageRow)
+                          )}
+                        </div>
+                        <Pagination page={managePage} totalPages={Math.max(1, Math.ceil(manageFilteredCards.length / PAGE_SIZE))} onPageChange={setManagePage} />
+                      </>
+                    ) : manageSelectedSetId !== null ? (
+                      <>
+                        <div className="flex items-center gap-2 mb-2">
+                          <button
+                            onClick={() => setManageSelectedSetId(null)}
+                            className="text-[10px] font-semibold text-slate-400 hover:text-slate-600 flex items-center gap-1"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                            Voltar
+                          </button>
+                          <span className="text-slate-300 text-[10px]">/</span>
+                          <span className="text-[10px] font-semibold text-slate-700 truncate">
+                            {sets.find(s => s.id === manageSelectedSetId)?.name}
+                          </span>
+                        </div>
+                        <div className="flex-1 overflow-y-auto space-y-2 pr-1 my-2 max-h-[40vh]">
+                          {manageSetCardsInSet.length === 0 ? (
+                            <div className="py-10 text-center bg-slate-50 rounded-xl border border-slate-100">
+                              <p className="text-xs text-slate-400">Nenhuma carta encontrada.</p>
+                            </div>
+                          ) : (
+                            manageSetCardsInSet.slice((managePage - 1) * PAGE_SIZE, managePage * PAGE_SIZE).map(renderManageRow)
+                          )}
+                        </div>
+                        <Pagination page={managePage} totalPages={Math.max(1, Math.ceil(manageSetCardsInSet.length / PAGE_SIZE))} onPageChange={setManagePage} />
+                      </>
+                    ) : manageSelectedSeries !== null ? (
+                      <div className="flex-1 overflow-y-auto my-2 max-h-[45vh]">
+                        <div className="flex items-center gap-2 mb-2">
+                          <button
+                            onClick={() => setManageSelectedSeries(null)}
+                            className="text-[10px] font-semibold text-slate-400 hover:text-slate-600 flex items-center gap-1"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                            Voltar para Eras
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {sets
+                            .filter(s => s.series === manageSelectedSeries)
+                            .sort((a, b) => a.releaseDate.localeCompare(b.releaseDate))
+                            .map(set => {
+                              const count = manageFilteredCards.filter(({ card }) => card.set.id === set.id).length;
+                              if (count === 0) return null;
+                              return (
+                                <button
+                                  key={set.id}
+                                  onClick={() => setManageSelectedSetId(set.id)}
+                                  className="flex flex-col items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:border-[#646B99]/30 transition-all min-h-[110px]"
+                                >
+                                  <div className="h-9 w-full flex items-center justify-center mb-1">
+                                    <img src={set.logoUrl} className="max-h-full max-w-full object-contain" />
+                                  </div>
+                                  <p className="text-[9px] font-medium text-slate-600 line-clamp-1 text-center">{set.name}</p>
+                                  <p className="text-[8px] font-semibold text-[#646B99] bg-[#646B99]/5 px-1.5 py-0.5 rounded-full mt-1">
+                                    {count} {count === 1 ? 'carta' : 'cartas'}
+                                  </p>
+                                </button>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex-1 overflow-y-auto space-y-2 my-2 max-h-[45vh]">
+                        {eras.map(era => {
+                          const count = manageFilteredCards.filter(({ card }) => sets.find(s => s.id === card.set.id)?.series === era).length;
+                          if (count === 0) return null;
+                          return (
+                            <button
+                              key={era}
+                              onClick={() => setManageSelectedSeries(era)}
+                              className="w-full flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm hover:border-[#646B99]/30 transition-all"
+                            >
+                              <span className="text-[11px] font-semibold text-slate-700">{era}</span>
+                              <span className="text-[9px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2 py-0.5 rounded-full border border-[#646B99]/10">
+                                {count} {count === 1 ? 'carta' : 'cartas'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                     </>
                   )}
 
                   <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
-                    <button 
+                    <button
                       onClick={() => setShowManageCards(false)}
                       className="w-full py-2.5 bg-[#646B99] hover:bg-[#4d5275] text-white text-xs font-semibold rounded-xl transition-colors"
                     >

@@ -105,7 +105,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 placeholder="NOME DE USUÁRIO"
                 value={formData.username}
                 onChange={(e) => setFormData({...formData, username: e.target.value})}
-                className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs uppercase tracking-widest text-slate-900 outline-none focus:border-[#646B99] transition-colors"
+                className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs tracking-widest text-slate-900 outline-none focus:border-[#646B99] transition-colors"
               />
             </div>
           )}

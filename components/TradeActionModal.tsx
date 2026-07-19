@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import { Trade, TradeItem } from '../types';
+import React, { useEffect, useState } from 'react';
+import { Card, Trade, TradeItem } from '../types';
+import { fetchCardsBySet } from '../api';
 import { patchTrade, submitTradeOffer, TradeItemSelection } from '../trades';
 import FriendFolderBrowser from './FriendFolderBrowser';
+import TradeItemsList from './TradeItemsList';
 
 interface TradeActionModalProps {
   trade: Trade;
@@ -19,6 +21,33 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [cardsById, setCardsById] = useState<Record<string, Card>>({});
+
+  // Carrega os dados (imagem/nome) das cartas envolvidas na troca, agrupando por coleção
+  // para minimizar o número de requisições.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const allCardIds = Array.from(new Set([...trade.requestedItems, ...trade.offeredItems].map((i) => i.cardId)));
+      const setIds = Array.from(new Set(allCardIds.map((id) => id.split('-')[0])));
+      const map: Record<string, Card> = {};
+      await Promise.all(
+        setIds.map(async (setId) => {
+          try {
+            const cards = await fetchCardsBySet(setId);
+            for (const card of cards) map[card.id] = card;
+          } catch {
+            // Ignora falhas isoladas de coleção; cartas aparecem sem imagem/nome
+          }
+        })
+      );
+      if (!cancelled) setCardsById(map);
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [trade.id]);
 
   const isInitiator = trade.initiatorId === myUserId;
   const isRecipient = trade.recipientId === myUserId;
@@ -124,9 +153,11 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
       <div className={wrapperClass}>
         <div className={cardClass}>
           <h3 className="text-sm font-semibold text-slate-800 mb-1">Há uma troca disponível!</h3>
-          <p className="text-[10px] text-slate-400 mb-4">
+          <p className="text-[10px] text-slate-400 mb-3">
             <span className="font-semibold text-slate-600">{trade.initiatorUsername}</span> quer {requested.count} carta(s) sua(s), no valor de R${requested.total.toFixed(2)}.
           </p>
+          <TradeItemsList items={trade.requestedItems} cardsById={cardsById} />
+          <div className="mb-4" />
           {error && <p className="text-red-500 text-[10px] mb-3">{error}</p>}
           <div className="space-y-2">
             <button
@@ -287,6 +318,51 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
               Cancelar pedido
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- completed: troca concluída, mostra as cartas movimentadas antes de fechar (sem auto-close) ---
+  if (trade.status === 'completed') {
+    const iGave = isRecipient ? trade.requestedItems : trade.offeredItems;
+    const iReceived = isRecipient ? trade.offeredItems : trade.requestedItems;
+    return (
+      <div className={wrapperClass}>
+        <div className={cardClass}>
+          <h3 className="text-sm font-semibold text-emerald-600 mb-1">Troca concluída!</h3>
+          <p className="text-[10px] text-slate-400 mb-4">
+            Confira abaixo as cartas movimentadas com {counterpartName} antes de fechar — remova/adicione essas cartas na sua pasta física.
+          </p>
+
+          {iGave.length > 0 && (
+            <div className="mb-4">
+              <p className="text-[9px] uppercase tracking-widest text-red-500 font-semibold mb-2">Você entregou</p>
+              <TradeItemsList items={iGave} cardsById={cardsById} />
+            </div>
+          )}
+
+          {iReceived.length > 0 && (
+            <div className="mb-4">
+              <p className="text-[9px] uppercase tracking-widest text-emerald-600 font-semibold mb-2">Você recebeu</p>
+              <TradeItemsList items={iReceived} cardsById={cardsById} />
+            </div>
+          )}
+
+          {diff !== 0 && iReceived.length === 0 && isInitiator && (
+            <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-100 rounded-lg p-3 mb-4">
+              Você pagou <span className="font-semibold">R${requested.total.toFixed(2)}</span> para {counterpartName}.
+            </p>
+          )}
+          {diff !== 0 && iGave.length === 0 && isRecipient && (
+            <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-100 rounded-lg p-3 mb-4">
+              Você recebeu <span className="font-semibold">R${requested.total.toFixed(2)}</span> de {counterpartName}.
+            </p>
+          )}
+
+          <button onClick={onClose} className="w-full mt-1 py-2.5 bg-[#646B99] text-white text-xs font-semibold rounded-xl hover:bg-[#4d5275] transition-colors">
+            Fechar
+          </button>
         </div>
       </div>
     );
