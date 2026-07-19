@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useDeferredValue } from 'react';
 import { User, AppTab, PokemonSet } from './types';
 import { fetchCurrentUser, persistUser, logout as clearSession } from './auth';
 import { supabase } from './supabaseClient';
@@ -19,6 +19,11 @@ const App: React.FC = () => {
   const [selectedSeries, setSelectedSeries] = useState<string | null>(null);
   const [selectedSet, setSelectedSet] = useState<PokemonSet | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  // O campo de busca fica preso ao valor digitado (nunca trava), mas a filtragem pesada em
+  // HomeView (que roda sobre o catálogo inteiro, ~200 coleções) usa esse valor "atrasado" —
+  // sem isso, cada tecla digitada refiltrava milhares de cartas de forma síncrona e travava
+  // a digitação.
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -87,7 +92,7 @@ const App: React.FC = () => {
             setSelectedSeries={setSelectedSeries}
             selectedSet={selectedSet}
             setSelectedSet={setSelectedSet}
-            searchQuery={searchQuery}
+            searchQuery={deferredSearchQuery}
             setSearchQuery={setSearchQuery}
           />
         );
@@ -106,7 +111,7 @@ const App: React.FC = () => {
             setSelectedSeries={setSelectedSeries}
             selectedSet={selectedSet}
             setSelectedSet={setSelectedSet}
-            searchQuery={searchQuery}
+            searchQuery={deferredSearchQuery}
             setSearchQuery={setSearchQuery}
           />
         );

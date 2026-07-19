@@ -135,12 +135,16 @@ tcgRouter.get(
       }
 
       let setName = 'Set';
+      let setTotal: number | undefined;
       const { data: setsCached } = await supabase.from('sets_cache').select('data').eq('id', 'all').maybeSingle();
       const sets = setsCached ? setsCached.data : FALLBACK_SETS;
       const matching = (sets as any[]).find((s) => s.id === setId);
-      if (matching) setName = matching.name;
+      if (matching) {
+        setName = matching.name;
+        setTotal = matching.total;
+      }
 
-      return res.json({ data: generateMockCards(setId, setName), source: 'mock' });
+      return res.json({ data: generateMockCards(setId, setName, setTotal), source: 'mock' });
     }
   })
 );
