@@ -149,6 +149,27 @@ tcgRouter.get(
   })
 );
 
+const searchQuerySchema = z.string().trim().min(1).max(60);
+
+// Busca cartas em TODAS as coleções já cacheadas, direto no Postgres (função search_cards),
+// em vez de o cliente baixar o catálogo inteiro (~200 coleções, ~20 mil cartas) para filtrar
+// localmente — isso levava quase 20s antes de a busca sequer funcionar.
+tcgRouter.get(
+  '/search',
+  asyncHandler(async (req, res) => {
+    const parsed = searchQuerySchema.safeParse(req.query.q);
+    if (!parsed.success) {
+      return res.json({ data: [] });
+    }
+    const { data, error } = await supabase.rpc('search_cards', { search_query: parsed.data, result_limit: 150 });
+    if (error) {
+      console.warn('[tcg] Falha na busca de cartas:', error.message);
+      return res.json({ data: [] });
+    }
+    return res.json({ data: data || [] });
+  })
+);
+
 const cardIdSchema = z.string().trim().regex(/^[a-zA-Z0-9._-]+$/).min(1).max(60);
 
 interface PriceStat {

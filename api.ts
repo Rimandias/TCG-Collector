@@ -107,7 +107,11 @@ export const fetchSets = async () => {
 
 // FETCH CARDS WITH CLIENT-SIDE SWR CACHING
 export const fetchCardsBySet = async (setId: string, skipBackgroundSync = false) => {
-  const CACHE_KEY = `poketracker_cache_cards_${setId}`;
+  // v2: invalida qualquer cache antigo do navegador que possa ter guardado dados de
+  // contingência (nomes/imagens genéricos) de antes da chave da Pokemon TCG API ser
+  // configurada — sem isso, o navegador continuava servindo essas cartas quebradas
+  // mesmo depois do backend já estar corrigido.
+  const CACHE_KEY = `poketracker_cache_cards_v2_${setId}`;
 
   let cachedData: any[] | null = null;
   try {
@@ -148,6 +152,32 @@ export const fetchCardsBySet = async (setId: string, skipBackgroundSync = false)
   } catch (error: any) {
     console.warn(`Error fetching cards for set ${setId}: ${error?.message || error}.`);
     return [];
+  }
+};
+
+// Busca cartas em TODAS as coleções cacheadas direto no backend (consulta única no banco,
+// ~30ms), em vez de o cliente ter que baixar o catálogo inteiro (~200 coleções) para
+// filtrar localmente — essa era a causa real da lentidão no campo de busca.
+export const searchCards = async (query: string): Promise<any[]> => {
+  const q = query.trim();
+  if (!q) return [];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(`${API_BASE}/tcg/search?q=${encodeURIComponent(q)}`, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) return [];
+    const body = await response.json();
+    return body?.data || [];
+  } catch (err) {
+    if ((err as Error)?.name !== 'AbortError') {
+      console.warn('Could not search cards:', (err as Error).message);
+    }
+    return [];
+  } finally {
+    clearTimeout(timer);
   }
 };
 

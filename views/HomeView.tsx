@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, PokemonSet, Card, UserCardData } from '../types';
-import { fetchSets, fetchCardsBySet } from '../api';
+import { fetchSets, fetchCardsBySet, searchCards } from '../api';
 import CardItem, { CardViewMode } from '../components/CardItem';
 import CardViewModeSelector from '../components/CardViewModeSelector';
 import CardModal from '../components/CardModal';
@@ -36,8 +36,8 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [infoCard, setInfoCard] = useState<Card | null>(null);
   const [filterTab, setFilterTab] = useState<'tudo' | 'restantes'>('tudo');
-  const [allCards, setAllCards] = useState<Card[]>([]);
-  const [loadingAllCards, setLoadingAllCards] = useState(false);
+  const [globalSearchResults, setGlobalSearchResults] = useState<Card[]>([]);
+  const [searchingGlobal, setSearchingGlobal] = useState(false);
   const [viewMode, setViewMode] = useState<CardViewMode>(getInitialCardViewMode);
 
   useEffect(() => {
@@ -100,44 +100,32 @@ const HomeView: React.FC<HomeViewProps> = ({
     init();
   }, [init]);
 
+  // Busca global: consulta o backend (uma única query rápida sobre todas as coleções já
+  // cacheadas) em vez de baixar o catálogo inteiro (~200 coleções) para filtrar localmente —
+  // essa era a causa real da lentidão do campo de busca. Debounce de 300ms para não disparar
+  // uma requisição a cada tecla digitada.
   useEffect(() => {
-    if (sets.length > 0) {
-      const loadAllCards = async () => {
-        setLoadingAllCards(true);
-        try {
-          const all: Card[] = [];
-          // Executa em lotes controlados de 5 para não sobrecarregar o navegador e a API,
-          // e passa skipBackgroundSync = true para evitar chamadas de background desnecessárias
-          const BATCH_SIZE = 5;
-          for (let i = 0; i < sets.length; i += BATCH_SIZE) {
-            const batch = sets.slice(i, i + BATCH_SIZE);
-            const results = await Promise.all(
-              batch.map(async (s) => {
-                try {
-                  return await fetchCardsBySet(s.id, true);
-                } catch (e) {
-                  return [];
-                }
-              })
-            );
-            results.forEach(cards => {
-              all.push(...cards);
-            });
-            // Pequena pausa para dar fôlego ao navegador
-            if (i + BATCH_SIZE < sets.length) {
-              await new Promise(resolve => setTimeout(resolve, 100));
-            }
-          }
-          setAllCards(all);
-        } catch (e) {
-          console.warn("Error loading all cards for search (falling back gracefully):", e);
-        } finally {
-          setLoadingAllCards(false);
-        }
-      };
-      loadAllCards();
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setGlobalSearchResults([]);
+      return;
     }
-  }, [sets]);
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      setSearchingGlobal(true);
+      searchCards(q)
+        .then((results) => {
+          if (!cancelled) setGlobalSearchResults(results);
+        })
+        .finally(() => {
+          if (!cancelled) setSearchingGlobal(false);
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
 
   useEffect(() => {
     if (selectedSet) {
@@ -228,23 +216,16 @@ const HomeView: React.FC<HomeViewProps> = ({
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
-    const q = searchQuery.toLowerCase().trim();
-    let base = allCards;
+    // O backend já filtra por nome/número/coleção/artista; aqui só restringe à era atual
+    // quando o usuário está navegando dentro de uma era específica.
     if (selectedSeries && !selectedSet) {
-      base = allCards.filter(card => {
+      return globalSearchResults.filter(card => {
         const foundSet = sets.find(s => s.id === card.set?.id);
         return foundSet?.series === selectedSeries;
       });
     }
-    return base.filter(card => {
-      const fullNum = getCompleteCardNumber(card).toLowerCase();
-      const matchesName = card.name.toLowerCase().includes(q);
-      const matchesNum = card.number.toLowerCase() === q || fullNum === q || card.number.toLowerCase().includes(q) || fullNum.includes(q);
-      const matchesSet = card.set?.name?.toLowerCase().includes(q);
-      const matchesArtist = (card.artist || '').toLowerCase().includes(q);
-      return matchesName || matchesNum || matchesSet || matchesArtist;
-    });
-  }, [allCards, searchQuery, selectedSeries, selectedSet, sets]);
+    return globalSearchResults;
+  }, [globalSearchResults, searchQuery, selectedSeries, selectedSet, sets]);
 
   const setStats = useMemo(() => {
     if (!selectedSet || setCards.length === 0) return null;
@@ -551,8 +532,8 @@ const HomeView: React.FC<HomeViewProps> = ({
               Resultados da Pesquisa ({searchResults.length})
             </h3>
             <div className="flex items-center gap-2">
-              {loadingAllCards && (
-                <span className="text-[10px] text-slate-400 animate-pulse">Carregando banco...</span>
+              {searchingGlobal && (
+                <span className="text-[10px] text-slate-400 animate-pulse">Buscando...</span>
               )}
               <CardViewModeSelector viewMode={viewMode} onChange={setViewMode} />
             </div>
