@@ -83,6 +83,57 @@ export interface TradeFolder {
   visibleToFriends: boolean;
 }
 
+export interface TradeItem {
+  cardId: string;
+  variation: string;
+  condition: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export type TradeStatus =
+  | 'pending_response'
+  | 'awaiting_payment_confirmation'
+  | 'selecting_offer'
+  | 'awaiting_value_diff_confirmation'
+  | 'completed'
+  | 'cancelled';
+
+export interface Trade {
+  id: string;
+  initiatorId: string;
+  recipientId: string;
+  status: TradeStatus;
+  requestedItems: TradeItem[];
+  offeredItems: TradeItem[];
+  initiatorConfirmed: boolean;
+  recipientConfirmed: boolean;
+  createdAt: string;
+  updatedAt: string;
+  initiatorUsername: string;
+  recipientUsername: string;
+  requestedValue: number;
+  offeredValue: number;
+}
+
+export interface VisibleFolderCardEntry {
+  variation: string;
+  condition: string;
+  quantity: number;
+  price: number;
+}
+
+export interface VisibleFolderCard {
+  cardId: string;
+  items: VisibleFolderCardEntry[];
+}
+
+export interface VisibleFolder {
+  id: string;
+  name: string;
+  cards: VisibleFolderCard[];
+}
+
 export enum AppTab {
   HOME = 'home',
   COLLECTION = 'collection',

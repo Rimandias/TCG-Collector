@@ -2,6 +2,8 @@
 // (incluindo a chave de API e os dados de contingência) vive agora no backend — este arquivo
 // só fala com o nosso próprio servidor, nunca diretamente com serviços externos.
 
+import { getAccessToken } from './auth';
+
 const API_BASE = (import.meta as any).env?.VITE_API_URL || '/api';
 
 const fetchWithTimeout = async (url: string, timeout = 8000): Promise<Response> => {
@@ -107,5 +109,39 @@ export const fetchCardsBySet = async (setId: string, skipBackgroundSync = false)
   } catch (error: any) {
     console.warn(`Error fetching cards for set ${setId}: ${error?.message || error}.`);
     return [];
+  }
+};
+
+export interface CardPriceStat {
+  avg: number;
+  min: number;
+  max: number;
+  count: number;
+}
+
+// variação -> condição -> estatística de preço agregada entre todos os usuários que informaram um preço.
+export type CardPriceStats = Record<string, Record<string, CardPriceStat>>;
+
+// Estatísticas comunitárias de preço (média/mínimo/máximo) para uma carta específica,
+// calculadas no backend a partir dos preços que os próprios usuários informaram.
+export const fetchCardStats = async (cardId: string): Promise<CardPriceStats> => {
+  const token = await getAccessToken();
+  if (!token) return {};
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(`${API_BASE}/tcg/card-stats/${encodeURIComponent(cardId)}`, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return {};
+    const body = await response.json();
+    return body?.stats || {};
+  } catch (err) {
+    console.warn(`Could not load price stats for ${cardId}:`, (err as Error).message);
+    return {};
+  } finally {
+    clearTimeout(timer);
   }
 };

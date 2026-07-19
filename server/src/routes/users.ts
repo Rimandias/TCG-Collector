@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { assembleFullUser, replaceUserData } from '../userStore.js';
 import { asyncHandler } from '../asyncHandler.js';
+import { supabase } from '../supabase.js';
 
 export const usersRouter = Router();
 
@@ -52,5 +53,19 @@ usersRouter.put(
 
     const user = await assembleFullUser(req.userId!, req.userEmail!);
     return res.json({ user });
+  })
+);
+
+// A confirmação de senha acontece no cliente (reautenticação via supabase-js
+// signInWithPassword) antes de chegar aqui — este endpoint só pode ser chamado
+// por uma sessão Supabase autenticada, que já garante que é o próprio dono da conta.
+// O ON DELETE CASCADE das FKs remove coleção, pastas, wishlist, amizades e trocas.
+usersRouter.delete(
+  '/me',
+  requireAuth,
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const { error } = await supabase.auth.admin.deleteUser(req.userId!);
+    if (error) throw error;
+    return res.json({ ok: true });
   })
 );

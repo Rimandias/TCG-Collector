@@ -22,7 +22,7 @@ function mapAuthErrorMessage(message: string): string {
   return message;
 }
 
-async function getAccessToken(): Promise<string | null> {
+export async function getAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
   return data.session?.access_token ?? null;
 }
@@ -145,6 +145,44 @@ export const removeFriend = async (friendUserId: string): Promise<User | null> =
   if (!response.ok) return null;
   const body = await response.json();
   return body.user;
+};
+
+export const changePassword = async (currentPassword: string, newPassword: string): Promise<{ ok: boolean; error?: string }> => {
+  const { data } = await supabase.auth.getSession();
+  const email = data.session?.user.email;
+  if (!email) return { ok: false, error: 'Sessão expirada, faça login novamente.' };
+
+  // Reautentica com a senha atual antes de trocar - evita que uma sessão vazada
+  // sozinha seja suficiente para assumir a conta.
+  const { error: reauthError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+  if (reauthError) return { ok: false, error: 'Senha atual incorreta.' };
+
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) return { ok: false, error: mapAuthErrorMessage(error.message) };
+  return { ok: true };
+};
+
+export const deleteAccount = async (password: string): Promise<{ ok: boolean; error?: string }> => {
+  const { data } = await supabase.auth.getSession();
+  const email = data.session?.user.email;
+  if (!email) return { ok: false, error: 'Sessão expirada, faça login novamente.' };
+
+  const { error: reauthError } = await supabase.auth.signInWithPassword({ email, password });
+  if (reauthError) return { ok: false, error: 'Senha incorreta.' };
+
+  const token = await getAccessToken();
+  if (!token) return { ok: false, error: 'Sessão expirada, faça login novamente.' };
+
+  const response = await fetch(`${API_BASE}/users/me`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    return { ok: false, error: await parseErrorMessage(response, 'Não foi possível excluir a conta.') };
+  }
+  await supabase.auth.signOut();
+  return { ok: true };
 };
 
 export const logout = async (): Promise<void> => {

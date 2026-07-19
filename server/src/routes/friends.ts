@@ -6,6 +6,7 @@ import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { assembleFullUser } from '../userStore.js';
 import { normalizeFriendCode } from '../friendCode.js';
 import { asyncHandler } from '../asyncHandler.js';
+import { areFriends, getVisibleFolders } from '../tradeStore.js';
 
 export const friendsRouter = Router();
 
@@ -66,6 +67,22 @@ friendsRouter.post(
 
     const user = await assembleFullUser(myId, req.userEmail!);
     return res.status(201).json({ user });
+  })
+);
+
+friendsRouter.get(
+  '/:friendUserId/folders',
+  requireAuth,
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const { friendUserId } = req.params;
+    const myId = req.userId!;
+
+    if (!(await areFriends(myId, friendUserId))) {
+      return res.status(403).json({ error: 'Vocês não são amigos.' });
+    }
+
+    const folders = await getVisibleFolders(friendUserId);
+    return res.json({ folders });
   })
 );
 

@@ -35,6 +35,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.email || !formData.password) return;
+    if (isRegister && formData.password.length < 8) {
+      setError('A senha precisa ter pelo menos 8 caracteres.');
+      return;
+    }
     setError(null);
     setInfo(null);
     setSubmitting(true);
@@ -73,24 +77,13 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
 
   if (showSplash) {
     return (
-      <div 
-        className="min-h-screen bg-white flex flex-col items-center justify-center p-6 cursor-pointer animate-in fade-in duration-700"
+      <div
+        className="min-h-screen bg-[#FBF2E1] flex flex-col items-center justify-center p-6 cursor-pointer animate-in fade-in duration-700"
         onClick={() => setShowSplash(false)}
       >
         <div className="flex flex-col items-center gap-2">
-            <div className="relative w-48 h-48 mb-4">
-                <div className="absolute inset-0 flex flex-wrap gap-1 p-2">
-                    <div className="w-[45%] h-[45%] bg-emerald-500 rounded-sm shadow-sm rotate-[-5deg]"></div>
-                    <div className="w-[45%] h-[45%] bg-blue-500 rounded-sm shadow-sm rotate-[5deg]"></div>
-                    <div className="w-[45%] h-[45%] bg-yellow-400 rounded-sm shadow-sm rotate-[10deg]"></div>
-                    <div className="w-[45%] h-[45%] bg-red-500 rounded-sm shadow-sm rotate-[-10deg]"></div>
-                </div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-7xl text-slate-800 tracking-tighter">TCG</span>
-                </div>
-            </div>
-            <h1 className="text-sm tracking-[0.5em] text-slate-400 uppercase ml-2">colecionador</h1>
-            <p className="mt-20 text-[10px] text-slate-300 uppercase animate-pulse tracking-widest">Toque para iniciar</p>
+            <img src="/logo.svg" alt="TCG Collector" className="w-56 h-auto mb-4" />
+            <p className="mt-20 text-[10px] text-slate-400 uppercase animate-pulse tracking-widest">Toque para iniciar</p>
         </div>
       </div>
     );

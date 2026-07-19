@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, User, CardCondition, VARIATION_TYPES } from '../types';
 import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, getCardEstimatedValue } from '../db';
+import { fetchCardStats, CardPriceStats } from '../api';
 
 interface CardModalProps {
   card: Card;
@@ -13,7 +14,30 @@ interface CardModalProps {
 const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose, showWarnings = false }) => {
   const [activeTab, setActiveTab] = useState<'variations' | 'price'>('variations');
   const [expandedVariation, setExpandedVariation] = useState<string | null>('Standard');
-  
+  const [priceStats, setPriceStats] = useState<CardPriceStats>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchCardStats(card.id).then((stats) => {
+      if (!cancelled) setPriceStats(stats);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [card.id]);
+
+  const communityAverage = useMemo(() => {
+    let sum = 0;
+    let count = 0;
+    for (const conditions of Object.values(priceStats)) {
+      for (const stat of Object.values(conditions)) {
+        sum += stat.avg * stat.count;
+        count += stat.count;
+      }
+    }
+    return count > 0 ? { avg: sum / count, count } : null;
+  }, [priceStats]);
+
   const cardData = user.ownedCards[card.id] || {
     isOwned: false,
     isForTrade: false,
@@ -191,7 +215,7 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
 
                               {/* Right: Custom Price Input */}
                               <div className="relative flex items-center w-24">
-                                <span className="absolute left-2 text-[10px] text-slate-400 font-semibold">$</span>
+                                <span className="absolute left-2 text-[10px] text-slate-400 font-semibold">R$</span>
                                 <input
                                   type="text"
                                   placeholder="Preço"
@@ -212,13 +236,39 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
           ) : (
             <div className="space-y-4 p-2 text-center">
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
-                <p className="text-slate-400 text-[10px] mb-1.5 uppercase tracking-[0.2em] font-bold">Valor Total</p>
+                <p className="text-slate-400 text-[10px] mb-1.5 uppercase tracking-[0.2em] font-bold">Valor Total (sua coleção)</p>
                 <div className="text-3xl font-extrabold text-emerald-500">
-                    {estimatedValue > 0 ? `$${estimatedValue.toFixed(2)}` : 'N/A'}
+                    {estimatedValue > 0 ? `R$${estimatedValue.toFixed(2)}` : 'N/A'}
                 </div>
                 <p className="text-[9px] text-slate-300 mt-3 uppercase tracking-wider">
-                  {totalQty > 0 ? `Preço médio: $${averageUnitPrice.toFixed(2)} por unidade` : 'Baseado nos preços que você informou'}
+                  {totalQty > 0 ? `Preço médio: R$${averageUnitPrice.toFixed(2)} por unidade` : 'Baseado nos preços que você informou'}
                 </p>
+              </div>
+
+              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 text-left">
+                <p className="text-slate-400 text-[10px] mb-1.5 uppercase tracking-[0.2em] font-bold text-center">Preço da Comunidade</p>
+                {communityAverage ? (
+                  <>
+                    <div className="text-3xl font-extrabold text-[#646B99] text-center">
+                      R${communityAverage.avg.toFixed(2)}
+                    </div>
+                    <p className="text-[9px] text-slate-300 mt-1 mb-4 uppercase tracking-wider text-center">
+                      Média de {communityAverage.count} preço(s) informado(s) por usuários
+                    </p>
+                    <div className="space-y-1.5">
+                      {Object.entries(priceStats).map(([variation, conditions]) =>
+                        Object.entries(conditions).map(([condition, stat]) => (
+                          <div key={`${variation}-${condition}`} className="flex items-center justify-between text-[10px] text-slate-400 bg-white border border-slate-100 rounded-lg px-3 py-1.5">
+                            <span className="font-medium text-slate-500">{variation} {condition}</span>
+                            <span>R${stat.min.toFixed(2)} – R${stat.max.toFixed(2)}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-slate-400 text-xs text-center py-2">Nenhum preço informado por usuários ainda.</p>
+                )}
               </div>
             </div>
           )}

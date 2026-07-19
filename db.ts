@@ -28,18 +28,20 @@ export const getCardTotalQuantity = (variations: Record<string, any>): number =>
   return total;
 };
 
+const emptyConditionRecord = (): Record<CardCondition, { quantity: number; price: string }> => ({
+  [CardCondition.NM]: { quantity: 0, price: '' },
+  [CardCondition.SP]: { quantity: 0, price: '' },
+  [CardCondition.MP]: { quantity: 0, price: '' },
+  [CardCondition.HP]: { quantity: 0, price: '' },
+  [CardCondition.D]: { quantity: 0, price: '' },
+});
+
 export const getNormalizedVariations = (variations: Record<string, any>): Record<string, Record<CardCondition, { quantity: number; price: string }>> => {
   const normalized: Record<string, Record<CardCondition, { quantity: number; price: string }>> = {};
-  
+
   // Initialize defaults
   VARIATION_TYPES.forEach(v => {
-    normalized[v] = {
-      [CardCondition.NM]: { quantity: 0, price: '' },
-      [CardCondition.SP]: { quantity: 0, price: '' },
-      [CardCondition.MP]: { quantity: 0, price: '' },
-      [CardCondition.HP]: { quantity: 0, price: '' },
-      [CardCondition.D]: { quantity: 0, price: '' },
-    };
+    normalized[v] = emptyConditionRecord();
   });
 
   if (!variations) return normalized;
@@ -64,7 +66,7 @@ export const getNormalizedVariations = (variations: Record<string, any>): Record
     // New format: merge values
     Object.entries(variations).forEach(([varType, conditionsObj]) => {
       if (conditionsObj && typeof conditionsObj === 'object') {
-        normalized[varType] = normalized[varType] || {};
+        normalized[varType] = normalized[varType] || emptyConditionRecord();
         Object.entries(conditionsObj).forEach(([cond, details]) => {
           const condition = cond as CardCondition;
           if (Object.values(CardCondition).includes(condition)) {

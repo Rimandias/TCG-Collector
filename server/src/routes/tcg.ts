@@ -5,15 +5,19 @@ import { supabase } from '../supabase.js';
 import { env } from '../env.js';
 import { asyncHandler } from '../asyncHandler.js';
 import { FALLBACK_CARDS, FALLBACK_SETS, generateMockCards, mapSetSeries } from '../fallbackData.js';
+import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 
 export const tcgRouter = Router();
 
 const API_BASE = 'https://api.pokemontcg.io/v2';
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 horas
 
+// Limite alto porque a Home carrega as cartas de todas as ~200 coleções do catálogo
+// de uma vez (para a busca global) logo no login - e os dados vêm do nosso próprio
+// cache (Supabase), não da API externa, então o custo por requisição é baixo.
 const tcgLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 60,
+  limit: 600,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -137,5 +141,62 @@ tcgRouter.get(
 
       return res.json({ data: generateMockCards(setId, setName), source: 'mock' });
     }
+  })
+);
+
+const cardIdSchema = z.string().trim().regex(/^[a-zA-Z0-9._-]+$/).min(1).max(60);
+
+interface PriceStat {
+  avg: number;
+  min: number;
+  max: number;
+  count: number;
+}
+
+tcgRouter.get(
+  '/card-stats/:cardId',
+  requireAuth,
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const parsed = cardIdSchema.safeParse(req.params.cardId);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'ID de carta inválido.' });
+    }
+    const cardId = parsed.data;
+
+    const { data: rows, error } = await supabase.from('user_cards').select('variations').eq('card_id', cardId);
+    if (error) throw error;
+
+    // variation -> condition -> lista de preços informados por usuários (sem guardar quem)
+    const buckets: Record<string, Record<string, number[]>> = {};
+    for (const row of rows || []) {
+      const variations = row.variations || {};
+      for (const [variation, conditions] of Object.entries<any>(variations)) {
+        if (!conditions || typeof conditions !== 'object') continue;
+        for (const [condition, details] of Object.entries<any>(conditions)) {
+          const quantity = typeof details?.quantity === 'number' ? details.quantity : 0;
+          const price = parseFloat(details?.price);
+          if (quantity <= 0 || !isFinite(price) || price <= 0) continue;
+          buckets[variation] ??= {};
+          buckets[variation][condition] ??= [];
+          buckets[variation][condition].push(price);
+        }
+      }
+    }
+
+    const stats: Record<string, Record<string, PriceStat>> = {};
+    for (const [variation, conditions] of Object.entries(buckets)) {
+      stats[variation] = {};
+      for (const [condition, prices] of Object.entries(conditions)) {
+        const sum = prices.reduce((a, b) => a + b, 0);
+        stats[variation][condition] = {
+          avg: sum / prices.length,
+          min: Math.min(...prices),
+          max: Math.max(...prices),
+          count: prices.length,
+        };
+      }
+    }
+
+    return res.json({ stats });
   })
 );
