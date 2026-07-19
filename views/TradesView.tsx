@@ -450,7 +450,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   };
 
   return (
-    <div className="animate-in fade-in duration-500 px-6 max-w-lg mx-auto pb-8">
+    <div className="animate-in fade-in duration-500 px-6 max-w-lg mx-auto pb-8 pt-4">
       <div className="mb-6 flex flex-col gap-4">
         <div>
           <h2 className="text-2xl text-slate-800">Central de Trocas</h2>
@@ -872,7 +872,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                         >
                                           {isOnlyOne && <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />}
                                           {varType} {cond}: {details.quantity}
-                                          {details.price ? ` ($${details.price})` : ''}
+                                          {details.price ? ` (R$${details.price})` : ''}
                                           {isOnlyOne && ' (Única!)'}
                                         </span>
                                       );

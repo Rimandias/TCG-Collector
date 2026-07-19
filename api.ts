@@ -36,15 +36,18 @@ export const fetchSets = async () => {
   }
 
   if (cachedData && Array.isArray(cachedData) && cachedData.length > 0) {
-    // Revalida em segundo plano, sem bloquear a UI
-    fetchWithTimeout(`${API_BASE}/tcg/sets`)
+    // Revalida em segundo plano, sem bloquear a UI. Timeout generoso (20s) porque
+    // é comum haver dezenas dessas chamadas concorrentes logo no login.
+    fetchWithTimeout(`${API_BASE}/tcg/sets`, 20000)
       .then((res) => res.json())
       .then((body) => {
         if (body?.data) {
           localStorage.setItem(CACHE_KEY, JSON.stringify(body.data));
         }
       })
-      .catch((err) => console.warn('Background sets sync skipped/failed:', err.message));
+      .catch((err) => {
+        if (err?.name !== 'AbortError') console.warn('Background sets sync skipped/failed:', err.message);
+      });
 
     return cachedData;
   }
@@ -81,14 +84,16 @@ export const fetchCardsBySet = async (setId: string, skipBackgroundSync = false)
 
   if (cachedData && Array.isArray(cachedData) && cachedData.length > 0) {
     if (!skipBackgroundSync) {
-      fetchWithTimeout(`${API_BASE}/tcg/cards/${encodeURIComponent(setId)}`)
+      fetchWithTimeout(`${API_BASE}/tcg/cards/${encodeURIComponent(setId)}`, 20000)
         .then((res) => res.json())
         .then((body) => {
           if (body?.data) {
             localStorage.setItem(CACHE_KEY, JSON.stringify(body.data));
           }
         })
-        .catch((err) => console.warn(`Background cards sync for ${setId} skipped/failed:`, err.message));
+        .catch((err) => {
+          if (err?.name !== 'AbortError') console.warn(`Background cards sync for ${setId} skipped/failed:`, err.message);
+        });
     }
 
     return cachedData;
@@ -139,7 +144,9 @@ export const fetchCardStats = async (cardId: string): Promise<CardPriceStats> =>
     const body = await response.json();
     return body?.stats || {};
   } catch (err) {
-    console.warn(`Could not load price stats for ${cardId}:`, (err as Error).message);
+    if ((err as Error)?.name !== 'AbortError') {
+      console.warn(`Could not load price stats for ${cardId}:`, (err as Error).message);
+    }
     return {};
   } finally {
     clearTimeout(timer);

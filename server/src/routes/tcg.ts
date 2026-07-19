@@ -17,7 +17,7 @@ const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 horas
 // cache (Supabase), não da API externa, então o custo por requisição é baixo.
 const tcgLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 600,
+  limit: 1200,
   standardHeaders: true,
   legacyHeaders: false,
 });

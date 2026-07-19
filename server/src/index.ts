@@ -20,9 +20,13 @@ app.use(
 );
 app.use(express.json({ limit: '1mb' }));
 
+// Alto porque esse limitador roda ANTES dos limitadores específicos de cada rota
+// (ex: tcgLimiter) - se ficar mais baixo que eles, vira o teto efetivo e anula o
+// ajuste feito lá. Serve só como rede de segurança básica contra bugs de loop
+// infinito, não como proteção anti-abuso real (isso ficaria a cargo da infra).
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 300,
+  limit: 2000,
   standardHeaders: true,
   legacyHeaders: false,
 });

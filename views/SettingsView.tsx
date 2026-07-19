@@ -130,7 +130,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
   );
 
   return (
-    <div className="animate-in fade-in duration-500 px-6">
+    <div className="animate-in fade-in duration-500 px-6 pt-4">
       <div className="mb-8">
         <h2 className="text-2xl text-slate-800 mb-2">Configurações</h2>
         <p className="text-slate-400 text-xs uppercase tracking-widest">Gerencie seu perfil e conexões.</p>

@@ -52,20 +52,6 @@ const HomeView: React.FC<HomeViewProps> = ({
   }, [user.ownedCards]);
 
   const getSetLogoForSeries = useCallback((seriesName: string) => {
-    const logoOverrides: Record<string, string> = {
-      'Diamond & Pearl': 'https://images.pokemontcg.io/dp1/logo.png',
-      'HeartGold & SoulSilver': 'https://images.pokemontcg.io/hs1/logo.png',
-      'Black & White': 'https://images.pokemontcg.io/bw1/logo.png',
-      'XY': 'https://images.pokemontcg.io/xy1/logo.png',
-      'Sun & Moon': 'https://images.pokemontcg.io/sm1/logo.png',
-      'Sword & Shield': 'https://images.pokemontcg.io/swsh1/logo.png',
-      'Scarlet & Violet': 'https://images.pokemontcg.io/sv1/logo.png',
-    };
-
-    if (logoOverrides[seriesName]) {
-      return logoOverrides[seriesName];
-    }
-
     const seriesSets = sets.filter(s => s.series === seriesName);
     if (seriesSets.length === 0) return '';
     const sorted = [...seriesSets].sort((a, b) => a.releaseDate.localeCompare(b.releaseDate));
@@ -363,7 +349,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   if (selectedSet) {
     return (
       <div className="animate-in slide-in-from-right duration-300 px-4 pb-10">
-        <div className="flex items-center justify-center mb-6 pt-2">
+        <div className="flex items-center justify-center mb-6 pt-4">
             <span className="text-sm text-slate-500 text-center font-medium uppercase tracking-wider">
                 {selectedSet.releaseDate.split('-')[0]} — {selectedSet.name}
             </span>
@@ -469,7 +455,7 @@ const HomeView: React.FC<HomeViewProps> = ({
 
         {/* Scrollable Content Layer */}
         <div className="relative z-10 p-4">
-            <div className="flex items-center justify-center mb-6 pt-2">
+            <div className="flex items-center justify-center mb-6 pt-4">
                 <span className="text-xs text-slate-500 uppercase tracking-[0.2em] font-semibold">{selectedSeries}</span>
             </div>
            
