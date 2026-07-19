@@ -75,6 +75,25 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     }
   }, [actionableTrades, activeTradeModal]);
 
+  // Mantém o pop-up aberto sincronizado com o polling: sem isso, o modal ficava "congelado"
+  // com os dados de quando foi aberto, mesmo depois da outra pessoa confirmar e a troca
+  // avançar (ex.: usuário via "Aguardando confirmação" indefinidamente mesmo já concluída).
+  useEffect(() => {
+    setActiveTradeModal((current) => {
+      if (!current) return current;
+      const fresh = myTrades.find((t) => t.id === current.id);
+      if (!fresh) return current;
+      if (fresh.status === current.status && fresh.updatedAt === current.updatedAt) return current;
+      if (fresh.status === 'completed' && current.status !== 'completed') {
+        fetchCurrentUser().then((freshUser) => {
+          if (freshUser) onUpdateUser(freshUser);
+        });
+      }
+      if (fresh.status === 'cancelled') return null;
+      return fresh;
+    });
+  }, [myTrades]);
+
   const handleTradeChanged = async (updated: Trade) => {
     setMyTrades((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
     if (updated.status === 'cancelled') {

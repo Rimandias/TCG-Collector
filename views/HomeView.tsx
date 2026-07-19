@@ -357,7 +357,8 @@ const HomeView: React.FC<HomeViewProps> = ({
   if (selectedSet) {
     return (
       <div className="animate-in slide-in-from-right duration-300 px-4 pb-10">
-        <div className="flex items-center justify-center mb-6 pt-4">
+        <div className="flex items-center justify-center gap-1.5 mb-6 pt-4">
+            {selectedSet.symbolUrl && <img src={selectedSet.symbolUrl} alt="" className="w-3.5 h-3.5 object-contain flex-shrink-0" />}
             <span className="text-sm text-slate-500 text-center font-medium uppercase tracking-wider">
                 {selectedSet.releaseDate.split('-')[0]} — {selectedSet.name}
             </span>
@@ -509,7 +510,8 @@ const HomeView: React.FC<HomeViewProps> = ({
                         <img src={set.logoUrl} className="max-h-full max-w-full object-contain filter group-hover:scale-110 transition-transform" />
                     </div>
                     <div className="w-full space-y-2 mt-auto">
-                        <p className="text-[10px] font-medium text-slate-600 text-center line-clamp-1 group-hover:text-[#646B99] transition-colors">
+                        <p className="text-[10px] font-medium text-slate-600 text-center line-clamp-1 group-hover:text-[#646B99] transition-colors flex items-center justify-center gap-1">
+                            {set.symbolUrl && <img src={set.symbolUrl} alt="" className="w-3 h-3 object-contain flex-shrink-0" />}
                             {set.name}
                         </p>
                         <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">

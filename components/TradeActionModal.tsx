@@ -196,11 +196,13 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
           <h3 className="text-sm font-semibold text-slate-800 mb-1">
             {myConfirmed ? 'Aguardando confirmação' : 'Confirmar pagamento'}
           </h3>
-          <p className="text-[10px] text-slate-400 mb-4">
+          <p className="text-[10px] text-slate-400 mb-3">
             {isInitiator
               ? `Você paga R$${requested.total.toFixed(2)} para ${counterpartName} e recebe ${requested.count} carta(s).`
               : `Você recebe R$${requested.total.toFixed(2)} de ${counterpartName} e entrega ${requested.count} carta(s).`}
           </p>
+          <TradeItemsList items={trade.requestedItems} cardsById={cardsById} />
+          <div className="mb-3" />
           {myConfirmed ? (
             <p className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded-lg p-3 mb-4">
               Aguardando {counterpartName} confirmar também. Assim que ambos confirmarem, as cartas são trocadas automaticamente.
@@ -252,6 +254,20 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
               <span className={`font-bold ${diff === 0 ? 'text-emerald-500' : 'text-amber-600'}`}>R${Math.abs(diff).toFixed(2)}</span>
             </div>
           </div>
+
+          {trade.requestedItems.length > 0 && (
+            <div className="mb-3">
+              <p className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-1.5">Cartas de {trade.recipientUsername}</p>
+              <TradeItemsList items={trade.requestedItems} cardsById={cardsById} />
+            </div>
+          )}
+          {trade.offeredItems.length > 0 && (
+            <div className="mb-3">
+              <p className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-1.5">Cartas de {trade.initiatorUsername}</p>
+              <TradeItemsList items={trade.offeredItems} cardsById={cardsById} />
+            </div>
+          )}
+
           {payerName && receiverName && (
             <p className="text-[11px] text-slate-600 bg-[#646B99]/5 border border-[#646B99]/10 rounded-lg p-3 mb-4">
               <span className="font-semibold">{payerIsMe ? 'Você' : payerName}</span> deve pagar <span className="font-semibold">R${Math.abs(diff).toFixed(2)}</span> para{' '}
