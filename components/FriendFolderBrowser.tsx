@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, PokemonSet, VisibleFolder } from '../types';
+import { Card, LANGUAGE_OPTIONS, PokemonSet, VisibleFolder } from '../types';
 import { getCompleteCardNumber } from '../db';
 import { fetchCardsBySet, fetchSets } from '../api';
 import { getFriendVisibleFolders, TradeItemSelection } from '../trades';
@@ -22,11 +22,14 @@ interface ResolvedLine {
   card: Card | null;
   variation: string;
   condition: string;
+  language?: string;
   availableQuantity: number;
   price: number;
 }
 
-const selectionKey = (cardId: string, variation: string, condition: string) => `${cardId}__${variation}__${condition}`;
+const languageLabel = (code?: string) => (!code ? null : (LANGUAGE_OPTIONS.find(l => l.code === code)?.label || code));
+
+const selectionKey = (cardId: string, variation: string, condition: string, language?: string) => `${cardId}__${variation}__${condition}__${language || ''}`;
 
 const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
   friendUserId,
@@ -113,6 +116,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
           card: cardsById[card.cardId] || null,
           variation: item.variation,
           condition: item.condition,
+          language: item.language,
           availableQuantity: item.quantity,
           price: item.price,
         });
@@ -145,7 +149,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
   }, [filteredLines, selectedSetId]);
 
   const setLineQuantity = (line: ResolvedLine, quantity: number) => {
-    const key = selectionKey(line.cardId, line.variation, line.condition);
+    const key = selectionKey(line.cardId, line.variation, line.condition, line.language);
     const clamped = Math.max(0, Math.min(quantity, line.availableQuantity));
     setSelectedQuantities((prev) => {
       const next = { ...prev };
@@ -156,7 +160,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
   };
 
   const selectedLines = lines
-    .map((line) => ({ line, quantity: selectedQuantities[selectionKey(line.cardId, line.variation, line.condition)] || 0 }))
+    .map((line) => ({ line, quantity: selectedQuantities[selectionKey(line.cardId, line.variation, line.condition, line.language)] || 0 }))
     .filter((entry) => entry.quantity > 0);
   const totalValue = selectedLines.reduce((sum, { line, quantity }) => sum + quantity * line.price, 0);
   const totalCards = selectedLines.reduce((sum, { quantity }) => sum + quantity, 0);
@@ -167,6 +171,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
       cardId: line.cardId,
       variation: line.variation,
       condition: line.condition,
+      language: line.language,
       quantity,
     }));
     onSubmit(selectedFolder.id, items, totalValue);
@@ -182,8 +187,9 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
   };
 
   const renderLine = (line: ResolvedLine) => {
-    const key = selectionKey(line.cardId, line.variation, line.condition);
+    const key = selectionKey(line.cardId, line.variation, line.condition, line.language);
     const qty = selectedQuantities[key] || 0;
+    const langLabel = languageLabel(line.language);
     const isSelected = qty > 0;
     const iDontOwn = !ownedCardIdSet.has(line.cardId);
     const isWishlisted = wishlistCardIdSet.has(line.cardId);
@@ -210,7 +216,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
             )}
           </h4>
           <p className="text-[9px] text-slate-400">
-            {line.card ? `#${getCompleteCardNumber(line.card)} · ` : ''}{line.variation} · {line.condition}
+            {line.card ? `#${getCompleteCardNumber(line.card)} · ` : ''}{line.variation} · {line.condition}{langLabel ? ` · ${langLabel}` : ''}
           </p>
           <p className="text-[9px] text-slate-400">
             Disponível: {line.availableQuantity} · R${line.price.toFixed(2)}/un

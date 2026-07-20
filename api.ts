@@ -155,6 +155,92 @@ export const fetchCardsBySet = async (setId: string, skipBackgroundSync = false)
   }
 };
 
+// Catálogo de coleções japonesas (via TCGdex no backend) - mesmo padrão de cache
+// client-side do catálogo ocidental, só que com chaves e endpoint próprios.
+export const fetchJpSets = async () => {
+  const CACHE_KEY = 'poketracker_cache_jp_sets';
+
+  let cachedData: any[] | null = null;
+  try {
+    const item = localStorage.getItem(CACHE_KEY);
+    if (item) cachedData = JSON.parse(item);
+  } catch (e) {
+    console.warn('Could not read jp sets cache:', e);
+  }
+
+  if (cachedData && Array.isArray(cachedData) && cachedData.length > 0) {
+    const url = `${API_BASE}/tcg-jp/sets`;
+    if (shouldRunBackgroundSync(url)) {
+      fetchDeduped(url, 20000)
+        .then((body) => {
+          if (body?.data) {
+            localStorage.setItem(CACHE_KEY, JSON.stringify(body.data));
+          }
+        })
+        .catch((err) => {
+          if (err?.name !== 'AbortError') console.warn('Background jp sets sync skipped/failed:', err.message);
+        });
+    }
+    return cachedData;
+  }
+
+  try {
+    const body = await fetchDeduped(`${API_BASE}/tcg-jp/sets`, 15000);
+    if (!body?.data) throw new Error('Invalid data format received from backend');
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(body.data));
+    } catch (e) {
+      console.warn('Could not write jp sets cache:', e);
+    }
+    return body.data;
+  } catch (error) {
+    console.error('Error fetching jp sets from backend:', error);
+    return [];
+  }
+};
+
+export const fetchJpCardsBySet = async (setId: string) => {
+  const CACHE_KEY = `poketracker_cache_jp_cards_${setId}`;
+
+  let cachedData: any[] | null = null;
+  try {
+    const item = localStorage.getItem(CACHE_KEY);
+    if (item) cachedData = JSON.parse(item);
+  } catch (e) {
+    console.warn('Could not read jp cards cache:', e);
+  }
+
+  if (cachedData && Array.isArray(cachedData) && cachedData.length > 0) {
+    const url = `${API_BASE}/tcg-jp/cards/${encodeURIComponent(setId)}`;
+    if (shouldRunBackgroundSync(url)) {
+      fetchDeduped(url, 20000)
+        .then((body) => {
+          if (body?.data) {
+            localStorage.setItem(CACHE_KEY, JSON.stringify(body.data));
+          }
+        })
+        .catch((err) => {
+          if (err?.name !== 'AbortError') console.warn(`Background jp cards sync for ${setId} skipped/failed:`, err.message);
+        });
+    }
+    return cachedData;
+  }
+
+  try {
+    const body = await fetchDeduped(`${API_BASE}/tcg-jp/cards/${encodeURIComponent(setId)}`, 15000);
+    if (!body?.data) throw new Error('Invalid data format received from backend');
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(body.data));
+    } catch (e) {
+      console.warn('Could not write jp cards cache:', e);
+    }
+    return body.data;
+  } catch (error: any) {
+    console.warn(`Error fetching jp cards for set ${setId}: ${error?.message || error}.`);
+    return [];
+  }
+};
+
 // Busca cartas em TODAS as coleções cacheadas direto no backend (consulta única no banco,
 // ~30ms), em vez de o cliente ter que baixar o catálogo inteiro (~200 coleções) para
 // filtrar localmente — essa era a causa real da lentidão no campo de busca.

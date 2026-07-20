@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { User, Card, UserCardData, TradeFolder, TradeFolderVariationSelection, Friend, Trade, CardCondition, VARIATION_TYPES } from '../types';
+import { User, Card, UserCardData, TradeFolder, TradeFolderVariationSelection, Friend, Trade, CardCondition, VARIATION_TYPES, LANGUAGE_OPTIONS } from '../types';
 import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getCardEstimatedValue } from '../db';
 import { fetchCardsBySet, fetchSets } from '../api';
 import { createTradeRequest, getMyTrades, TradeItemSelection } from '../trades';
+import { redeemAccessCode } from '../premium';
 import { fetchCurrentUser } from '../auth';
 import CardModal from '../components/CardModal';
 import FriendFolderBrowser from '../components/FriendFolderBrowser';
@@ -11,6 +12,29 @@ import TradeItemsList from '../components/TradeItemsList';
 import Pagination, { PAGE_SIZE } from '../components/Pagination';
 
 const TRADE_POLL_INTERVAL_MS = 15000;
+
+// ID fixo da pasta "Pasta de Repetidas" (a mesma pasta automática exibida no topo de
+// Minhas Pastas) - agora também é uma pasta real persistida (ver efeito de sincronização
+// abaixo), pra poder ficar visível para amigos como qualquer outra. Ela não tem botão de
+// excluir na UI e sua lista de cartas é sempre recalculada automaticamente, nunca editada
+// manualmente pelo usuário.
+const DEFAULT_FOLDER_ID = 'default';
+
+const languageLabel = (code?: string) => (!code ? null : (LANGUAGE_OPTIONS.find(l => l.code === code)?.label || code));
+
+// Mesma regra usada para popular a "Pasta de Repetidas": cartas marcadas para troca ou com
+// mais de 1 cópia em alguma variação/condição.
+function computeAutoTradeCardIds(ownedCards: Record<string, UserCardData>): string[] {
+  return Object.entries(ownedCards)
+    .filter(([_, data]) => {
+      const normalized = getNormalizedVariations(data.variations);
+      const hasDuplicate = Object.values(normalized).some(conditionsObj =>
+        Object.values(conditionsObj).some(details => details.quantity > 1)
+      );
+      return data.isForTrade || hasDuplicate;
+    })
+    .map(([id]) => id);
+}
 
 function needsMyAction(trade: Trade, myId: string): boolean {
   if (trade.status === 'completed' || trade.status === 'cancelled') return false;
@@ -29,6 +53,25 @@ interface TradesViewProps {
 }
 
 const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
+  // Trocas ainda está em teste fechado - liberada por código de acesso (ver premium.ts)
+  const [accessCode, setAccessCode] = useState('');
+  const [redeemSubmitting, setRedeemSubmitting] = useState(false);
+  const [redeemError, setRedeemError] = useState<string | null>(null);
+
+  const handleRedeemCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!accessCode.trim()) return;
+    setRedeemSubmitting(true);
+    setRedeemError(null);
+    const { user: updatedUser, error } = await redeemAccessCode(accessCode);
+    setRedeemSubmitting(false);
+    if (error) {
+      setRedeemError(error);
+      return;
+    }
+    if (updatedUser) onUpdateUser(updatedUser);
+  };
+
   const [activeTab, setActiveTab] = useState<'my' | 'friends'>('my');
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
 
@@ -60,8 +103,13 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     };
   }, []);
 
+  // Fila: quando mais de uma troca precisa da minha ação ao mesmo tempo (ex: dois amigos
+  // pediram cartas da mesma pasta), a mais antiga (quem pediu primeiro) aparece primeiro.
   const actionableTrades = useMemo(
-    () => myTrades.filter((t) => needsMyAction(t, user.id) && !dismissedTradeIds.has(t.id)),
+    () =>
+      myTrades
+        .filter((t) => needsMyAction(t, user.id) && !dismissedTradeIds.has(t.id))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     [myTrades, user.id, dismissedTradeIds]
   );
   const activeTrades = useMemo(
@@ -192,6 +240,27 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
   // Memoized user folders
   const folders = useMemo<TradeFolder[]>(() => user.folders || [], [user.folders]);
+
+  // Mantém a "Pasta de Repetidas" sempre existindo como uma pasta real (visível para
+  // amigos, ver getVisibleFolders no backend) com a lista de cartas sincronizada com a
+  // regra automática (isForTrade ou mais de 1 cópia) - o usuário nunca edita isso na mão,
+  // só via Home ("Colocar Todas Para Troca") ou marcando cartas individualmente.
+  useEffect(() => {
+    const idealIds = computeAutoTradeCardIds(user.ownedCards);
+    const existing = (user.folders || []).find(f => f.id === DEFAULT_FOLDER_ID);
+    const currentSet = new Set(existing?.cardIds || []);
+    const sameMembership = !!existing && idealIds.length === currentSet.size && idealIds.every(id => currentSet.has(id));
+    if (sameMembership) return;
+
+    const nextFolders = existing
+      ? (user.folders || []).map(f => (f.id === DEFAULT_FOLDER_ID ? { ...f, cardIds: idealIds } : f))
+      : [
+          ...(user.folders || []),
+          { id: DEFAULT_FOLDER_ID, name: 'Pasta de Repetidas', cardIds: idealIds, visibleToFriends: true },
+        ];
+    onUpdateUser({ ...user, folders: nextFolders });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.ownedCards]);
 
   // IDs das cartas que o usuário possui (quantidade > 0 em alguma variação/condição), usado
   // para destacar na pasta do amigo quais cartas eu ainda não tenho.
@@ -527,12 +596,12 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   const getFolderCardSelections = (
     folder: TradeFolder,
     cardId: string,
-    entries: { variation: string; condition: CardCondition; quantity: number }[]
+    entries: { variation: string; condition: CardCondition; language?: string; quantity: number }[]
   ): TradeFolderVariationSelection[] => {
     const existing = folder.variationSelections?.[cardId];
     if (existing) return existing;
     if (folder.cardIds.includes(cardId)) {
-      return entries.map(e => ({ variation: e.variation, condition: e.condition, quantity: e.quantity }));
+      return entries.map(e => ({ variation: e.variation, condition: e.condition, language: e.language, quantity: e.quantity }));
     }
     return [];
   };
@@ -577,6 +646,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   };
 
   const handleDeleteFolder = (folderId: string) => {
+    if (folderId === DEFAULT_FOLDER_ID) return; // Pasta de Repetidas não pode ser excluída
     if (window.confirm("Tem certeza de que deseja excluir esta pasta? As cartas não serão removidas de suas trocas gerais.")) {
       const updatedFolders = folders.filter(f => f.id !== folderId);
       onUpdateUser({
@@ -598,6 +668,40 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
       folders: updatedFolders
     });
   };
+
+  if (!user.isPremium) {
+    return (
+      <div className="animate-in fade-in duration-500 px-8 pt-16 pb-10 flex flex-col items-center text-center max-w-sm mx-auto">
+        <div className="w-16 h-16 bg-[#646B99]/10 text-[#646B99] rounded-full flex items-center justify-center mb-5">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h2 className="text-lg text-slate-800 tracking-tight">Trocas em teste fechado</h2>
+        <p className="text-slate-400 text-xs mt-2 leading-relaxed">
+          Essa funcionalidade ainda está em fase de testes. Se você recebeu um código de acesso, digite abaixo para liberar as Trocas na sua conta.
+        </p>
+
+        <form onSubmit={handleRedeemCode} className="w-full mt-8 space-y-3">
+          <input
+            type="text"
+            placeholder="CÓDIGO DE ACESSO"
+            value={accessCode}
+            onChange={(e) => setAccessCode(e.target.value)}
+            className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs tracking-widest text-slate-900 text-center outline-none focus:border-[#646B99] transition-colors uppercase"
+          />
+          {redeemError && (
+            <p className="text-red-500 text-[10px] uppercase tracking-widest">{redeemError}</p>
+          )}
+          <button
+            type="submit"
+            disabled={redeemSubmitting || !accessCode.trim()}
+            className="w-full py-4 bg-slate-900 text-white text-xs rounded-full hover:bg-slate-800 transition-all shadow-xl uppercase tracking-[0.3em] disabled:opacity-50"
+          >
+            {redeemSubmitting ? 'Verificando...' : 'Liberar Acesso'}
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-in fade-in duration-500 px-6 max-w-lg mx-auto pb-8 pt-4">
@@ -675,7 +779,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
             ) : (
               <div className="grid gap-3">
                 {/* 1. Pasta de Repetidas */}
-                <div 
+                <div
                   onClick={() => setSelectedFolderId('duplicates')}
                   className="flex items-center justify-between bg-gradient-to-r from-slate-50 to-white p-4 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:border-[#646B99]/30 transition-all group animate-in fade-in"
                 >
@@ -685,7 +789,9 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                     </div>
                     <div>
                       <h3 className="text-sm font-semibold text-slate-800">Pasta de Repetidas</h3>
-                      <p className="text-[10px] text-slate-400">Cartas repetidas ou para troca</p>
+                      <p className="text-[10px] text-slate-400">
+                        {folders.find(f => f.id === DEFAULT_FOLDER_ID)?.visibleToFriends ? 'Visível para amigos' : 'Cartas repetidas ou para troca'}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -695,6 +801,20 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                     <span className="text-[9px] bg-[#646B99]/10 text-[#646B99] px-2 py-0.5 rounded uppercase tracking-wider font-semibold">
                       Automática
                     </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleFolderVisibility(DEFAULT_FOLDER_ID);
+                      }}
+                      className={`p-1.5 rounded-lg transition-all ${folders.find(f => f.id === DEFAULT_FOLDER_ID)?.visibleToFriends ? 'text-[#646B99] bg-[#646B99]/10' : 'text-slate-300 hover:text-[#646B99] hover:bg-[#646B99]/5'}`}
+                      title={folders.find(f => f.id === DEFAULT_FOLDER_ID)?.visibleToFriends ? 'Visível para amigos (clique para ocultar)' : 'Oculta para amigos (clique para exibir)'}
+                    >
+                      {folders.find(f => f.id === DEFAULT_FOLDER_ID)?.visibleToFriends ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -729,7 +849,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                 </div>
 
                 {/* 3. Custom Folders */}
-                {folders.map(folder => {
+                {folders.filter(folder => folder.id !== DEFAULT_FOLDER_ID).map(folder => {
                   const validCardsCount = folder.cardIds.filter(id => 
                     tradeCards.some(tc => tc.card.id === id)
                   ).length;
@@ -1573,19 +1693,30 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
           const renderManageRow = ({ card, data }: { card: Card, data: UserCardData }) => {
             const isInFolder = currentFolder.cardIds.includes(card.id);
             const normalized = getNormalizedVariations(data.variations);
-            const entries: { variation: string; condition: CardCondition; quantity: number }[] = [];
+            const entries: { variation: string; condition: CardCondition; language?: string; quantity: number }[] = [];
             Object.entries(normalized).forEach(([varType, conditionsObj]) => {
               Object.entries(conditionsObj).forEach(([cond, details]) => {
+                const languages = details.languages;
+                if (languages && Object.keys(languages).length > 0) {
+                  Object.entries(languages).forEach(([lang, langDetails]) => {
+                    if (langDetails.quantity > 0) {
+                      entries.push({ variation: varType, condition: cond as CardCondition, language: lang, quantity: langDetails.quantity });
+                    }
+                  });
+                  return;
+                }
                 if (details.quantity > 0) {
                   entries.push({ variation: varType, condition: cond as CardCondition, quantity: details.quantity });
                 }
               });
             });
+            const entryKey = (e: { variation: string; condition: string; language?: string }) => `${e.variation}-${e.condition}-${e.language || ''}`;
             const badges = entries.map(e => {
               const isOnlyOne = e.quantity === 1;
+              const langLabel = languageLabel(e.language);
               return (
                 <span
-                  key={`${e.variation}-${e.condition}`}
+                  key={entryKey(e)}
                   className={`px-1.5 py-0.5 border rounded text-[8px] font-medium flex items-center gap-1 ${
                     isOnlyOne
                       ? 'bg-amber-50 border-amber-200 text-amber-700 font-semibold'
@@ -1593,7 +1724,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                   }`}
                 >
                   {isOnlyOne && <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />}
-                  {e.variation} {e.condition}: {e.quantity}
+                  {e.variation} {e.condition}{langLabel ? ` (${langLabel})` : ''}: {e.quantity}
                   {isOnlyOne && ' (Única!)'}
                 </span>
               );
@@ -1602,20 +1733,20 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
             const isPickerOpen = variationPickerCardId === card.id;
             const selections = getFolderCardSelections(currentFolder, card.id, entries);
 
-            const toggleEntry = (entry: { variation: string; condition: CardCondition; quantity: number }) => {
-              const idx = selections.findIndex(s => s.variation === entry.variation && s.condition === entry.condition);
+            const toggleEntry = (entry: { variation: string; condition: CardCondition; language?: string; quantity: number }) => {
+              const idx = selections.findIndex(s => s.variation === entry.variation && s.condition === entry.condition && (s.language || '') === (entry.language || ''));
               const updated = idx >= 0
                 ? selections.filter((_, i) => i !== idx)
-                : [...selections, { variation: entry.variation, condition: entry.condition, quantity: entry.quantity }];
+                : [...selections, { variation: entry.variation, condition: entry.condition, language: entry.language, quantity: entry.quantity }];
               handleSetVariationSelections(currentFolder.id, card.id, updated);
             };
 
-            const updateEntryQuantity = (entry: { variation: string; condition: CardCondition; quantity: number }, quantity: number) => {
+            const updateEntryQuantity = (entry: { variation: string; condition: CardCondition; language?: string; quantity: number }, quantity: number) => {
               const capped = Math.max(1, Math.min(quantity, entry.quantity));
-              const idx = selections.findIndex(s => s.variation === entry.variation && s.condition === entry.condition);
+              const idx = selections.findIndex(s => s.variation === entry.variation && s.condition === entry.condition && (s.language || '') === (entry.language || ''));
               const updated = idx >= 0
                 ? selections.map((s, i) => i === idx ? { ...s, quantity: capped } : s)
-                : [...selections, { variation: entry.variation, condition: entry.condition, quantity: capped }];
+                : [...selections, { variation: entry.variation, condition: entry.condition, language: entry.language, quantity: capped }];
               handleSetVariationSelections(currentFolder.id, card.id, updated);
             };
 
@@ -1655,10 +1786,11 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                   <div className="px-2.5 pb-2.5 space-y-1.5 border-t border-slate-100/70 pt-2 animate-in slide-in-from-top-1 duration-150">
                     <p className="text-[8px] text-slate-400 uppercase tracking-widest">Selecione variação/condição e quantidade:</p>
                     {entries.map(entry => {
-                      const sel = selections.find(s => s.variation === entry.variation && s.condition === entry.condition);
+                      const sel = selections.find(s => s.variation === entry.variation && s.condition === entry.condition && (s.language || '') === (entry.language || ''));
                       const checked = !!sel;
+                      const langLabel = languageLabel(entry.language);
                       return (
-                        <div key={`${entry.variation}-${entry.condition}`} className="flex items-center gap-2 bg-white border border-slate-100 rounded-lg p-1.5">
+                        <div key={entryKey(entry)} className="flex items-center gap-2 bg-white border border-slate-100 rounded-lg p-1.5">
                           <input
                             type="checkbox"
                             checked={checked}
@@ -1666,7 +1798,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                             className="w-3.5 h-3.5 text-[#646B99] border-slate-300 rounded focus:ring-[#646B99] flex-shrink-0"
                           />
                           <span className="text-[10px] text-slate-600 flex-1 min-w-0 truncate">
-                            {entry.variation} {entry.condition} <span className="text-slate-300">(possui {entry.quantity})</span>
+                            {entry.variation} {entry.condition}{langLabel ? ` · ${langLabel}` : ''} <span className="text-slate-300">(possui {entry.quantity})</span>
                           </span>
                           {checked && (
                             <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg overflow-hidden h-6 flex-shrink-0">

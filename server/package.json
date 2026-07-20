@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "codes:generate": "node scripts/generate-access-codes.js",
+    "codes:list": "node scripts/list-access-codes.js",
+    "premium:set": "node scripts/revoke-premium.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.1",

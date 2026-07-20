@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { User } from '../types';
 import { addFriendByCode, removeFriend as removeFriendRequest, changePassword, deleteAccount } from '../auth';
+import { importCollectionCsv, ImportSummary } from '../csvImport';
 
 interface SettingsViewProps {
   user: User;
@@ -50,6 +51,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
   const [deleteAccountPassword, setDeleteAccountPassword] = useState('');
   const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
+
+  const csvInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [csvSummary, setCsvSummary] = useState<ImportSummary | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const handleChangeAvatar = () => {
     const newAvatar = `https://picsum.photos/seed/${Math.random()}/200`;
@@ -140,6 +147,32 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
       return;
     }
     onLogout();
+  };
+
+  const handleCsvSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImportError(null);
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const summary = await importCollectionCsv(user, text);
+      setCsvSummary(summary);
+      setShowImportModal(true);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Não foi possível processar o arquivo.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleConfirmImport = () => {
+    if (csvSummary) {
+      onUpdateUser(csvSummary.updatedUser);
+    }
+    setShowImportModal(false);
+    setCsvSummary(null);
   };
 
   const friendsSortedByDate = [...user.friends].sort(
@@ -309,6 +342,28 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
           </div>
         </section>
 
+        <section className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+          <h4 className="text-[10px] text-slate-300 uppercase tracking-widest mb-1">Importar Coleção (CSV)</h4>
+          <p className="text-[10px] text-slate-400 mb-4">
+            Suba o arquivo no modelo de exportação do LigaPokemon para preencher sua coleção automaticamente. Apenas coleções ocidentais são suportadas — edições exclusivas do Japão são ignoradas.
+          </p>
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv"
+            onChange={handleCsvSelected}
+            className="hidden"
+          />
+          <button
+            onClick={() => csvInputRef.current?.click()}
+            disabled={importing}
+            className="w-full py-3 bg-white border border-slate-100 text-[#646B99] text-xs font-semibold rounded-xl hover:bg-slate-100 transition-colors shadow-sm disabled:opacity-50"
+          >
+            {importing ? 'Processando arquivo...' : '+ Selecionar arquivo CSV'}
+          </button>
+          {importError && <p className="text-red-500 text-[10px] mt-2">{importError}</p>}
+        </section>
+
         <button
           onClick={onLogout}
           className="w-full py-4 bg-white text-red-400 rounded-2xl border border-red-50 shadow-sm hover:bg-red-50 transition-all uppercase tracking-[0.2em] text-[10px]"
@@ -403,6 +458,54 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {showImportModal && csvSummary && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-100 w-full max-w-sm rounded-2xl shadow-2xl p-6 max-h-[85vh] flex flex-col">
+            <h3 className="text-sm font-semibold text-slate-800 mb-1">Resumo da importação</h3>
+            <p className="text-[10px] text-slate-400 mb-4">Confira antes de aplicar na sua coleção — nada é salvo até você confirmar.</p>
+
+            <div className="flex gap-3 mb-4 flex-shrink-0">
+              <div className="flex-1 bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-center">
+                <div className="text-xl font-bold text-emerald-600">{csvSummary.importedCount}</div>
+                <div className="text-[9px] text-emerald-600 uppercase tracking-widest mt-0.5">Importadas</div>
+              </div>
+              <div className="flex-1 bg-amber-50 border border-amber-100 rounded-xl p-3 text-center">
+                <div className="text-xl font-bold text-amber-600">{csvSummary.skippedCount}</div>
+                <div className="text-[9px] text-amber-600 uppercase tracking-widest mt-0.5">Ignoradas</div>
+              </div>
+            </div>
+
+            {csvSummary.skippedCount > 0 && (
+              <div className="flex-1 overflow-y-auto min-h-0 mb-4 space-y-1.5">
+                <p className="text-[9px] text-slate-400 uppercase tracking-widest mb-1">Linhas ignoradas e por quê</p>
+                {csvSummary.results.filter(r => r.status === 'skipped').map((r, i) => (
+                  <div key={i} className="text-[10px] text-slate-500 bg-slate-50 border border-slate-100 rounded-lg p-2">
+                    <span className="font-semibold text-slate-600">{r.cardName}</span>
+                    {r.setName ? <span className="text-slate-400"> ({r.setName})</span> : null}
+                    <p className="text-slate-400 mt-0.5">{r.reason}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-auto pt-2 flex-shrink-0">
+              <button
+                onClick={() => { setShowImportModal(false); setCsvSummary(null); }}
+                className="flex-1 py-2 bg-slate-50 text-slate-400 text-xs rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmImport}
+                disabled={csvSummary.importedCount === 0}
+                className="flex-1 py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors disabled:opacity-50"
+              >
+                Aplicar {csvSummary.importedCount} carta(s)
+              </button>
+            </div>
           </div>
         </div>
       )}

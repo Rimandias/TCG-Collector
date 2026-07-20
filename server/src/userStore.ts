@@ -10,6 +10,7 @@ export interface FriendEntry {
 export interface TradeFolderVariationSelection {
   variation: string;
   condition: string;
+  language?: string;
   quantity: number;
 }
 
@@ -19,6 +20,7 @@ export interface FullUser {
   email: string;
   avatarUrl: string;
   friendCode: string;
+  isPremium: boolean;
   ownedCards: Record<string, { cardId: string; isOwned: boolean; isForTrade: boolean; variations: Record<string, any> }>;
   friends: FriendEntry[];
   folders: { id: string; name: string; cardIds: string[]; visibleToFriends: boolean; variationSelections: Record<string, TradeFolderVariationSelection[]> }[];
@@ -28,7 +30,7 @@ export interface FullUser {
 export async function assembleFullUser(userId: string, email: string): Promise<FullUser | null> {
   const { data: profile, error: profileErr } = await supabase
     .from('profiles')
-    .select('id, username, avatar_url, friend_code')
+    .select('id, username, avatar_url, friend_code, is_premium')
     .eq('id', userId)
     .maybeSingle();
   if (profileErr) throw profileErr;
@@ -100,6 +102,7 @@ export async function assembleFullUser(userId: string, email: string): Promise<F
     email,
     avatarUrl: profile.avatar_url,
     friendCode: profile.friend_code,
+    isPremium: profile.is_premium,
     ownedCards,
     friends,
     folders,

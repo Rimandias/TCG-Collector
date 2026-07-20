@@ -18,6 +18,7 @@ const userCardSchema = z.object({
 const variationSelectionSchema = z.object({
   variation: z.string().min(1).max(80),
   condition: z.string().min(1).max(20),
+  language: z.string().max(10).optional(),
   quantity: z.number().int().min(0),
 });
 

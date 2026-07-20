@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Card, User, CardCondition } from '../types';
-import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber } from '../db';
+import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, adjustLanguageQuantity } from '../db';
 
 export type CardViewMode = 'grid3' | 'grid6' | 'list';
 
@@ -38,8 +38,15 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
 
   const adjustQuantity = (delta: number) => {
     const normalized = getNormalizedVariations(cardData.variations);
-    const currentNM = normalized['Standard'][CardCondition.NM].quantity || 0;
-    normalized['Standard'][CardCondition.NM].quantity = Math.max(0, currentNM + delta);
+    const nmDetails = normalized['Standard'][CardCondition.NM];
+    // Cartas com idioma detalhado (ver +Info) mantêm o total consistente somando/
+    // subtraindo no idioma padrão (Português/BR), em vez de mexer direto no agregado.
+    if (nmDetails.languages) {
+      normalized['Standard'][CardCondition.NM] = adjustLanguageQuantity(nmDetails, 'BR', delta);
+    } else {
+      const currentNM = nmDetails.quantity || 0;
+      normalized['Standard'][CardCondition.NM].quantity = Math.max(0, currentNM + delta);
+    }
     const hasCards = getCardTotalQuantity(normalized) > 0;
     onUpdateUser(updateCardStatus(user, card.id, { variations: normalized, isOwned: hasCards }));
   };

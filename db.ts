@@ -1,5 +1,5 @@
 
-import { User, UserCardData, Card, CardCondition, VARIATION_TYPES } from './types';
+import { User, UserCardData, Card, CardCondition, VARIATION_TYPES, ConditionDetails, LanguageDetails } from './types';
 
 // A persistência de dados do usuário (coleção, trocas, wishlist) vive no backend
 // (ver auth.ts: fetchCurrentUser / persistUser). Este arquivo só contém helpers puros
@@ -28,7 +28,7 @@ export const getCardTotalQuantity = (variations: Record<string, any>): number =>
   return total;
 };
 
-const emptyConditionRecord = (): Record<CardCondition, { quantity: number; price: string }> => ({
+const emptyConditionRecord = (): Record<CardCondition, ConditionDetails> => ({
   [CardCondition.NM]: { quantity: 0, price: '' },
   [CardCondition.SP]: { quantity: 0, price: '' },
   [CardCondition.MP]: { quantity: 0, price: '' },
@@ -36,8 +36,22 @@ const emptyConditionRecord = (): Record<CardCondition, { quantity: number; price
   [CardCondition.D]: { quantity: 0, price: '' },
 });
 
-export const getNormalizedVariations = (variations: Record<string, any>): Record<string, Record<CardCondition, { quantity: number; price: string }>> => {
-  const normalized: Record<string, Record<CardCondition, { quantity: number; price: string }>> = {};
+// Valida/copia o detalhamento por idioma de uma condição, descartando entradas
+// inválidas ou com quantidade zerada.
+const normalizeLanguages = (raw: any): Record<string, LanguageDetails> | undefined => {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const languages: Record<string, LanguageDetails> = {};
+  for (const [code, details] of Object.entries<any>(raw)) {
+    const quantity = typeof details?.quantity === 'number' ? details.quantity : 0;
+    if (quantity > 0) {
+      languages[code] = { quantity, price: details?.price !== undefined ? String(details.price) : '' };
+    }
+  }
+  return Object.keys(languages).length > 0 ? languages : undefined;
+};
+
+export const getNormalizedVariations = (variations: Record<string, any>): Record<string, Record<CardCondition, ConditionDetails>> => {
+  const normalized: Record<string, Record<CardCondition, ConditionDetails>> = {};
 
   // Initialize defaults
   VARIATION_TYPES.forEach(v => {
@@ -73,7 +87,8 @@ export const getNormalizedVariations = (variations: Record<string, any>): Record
             if (details && typeof details === 'object') {
               normalized[varType][condition] = {
                 quantity: typeof (details as any).quantity === 'number' ? (details as any).quantity : 0,
-                price: (details as any).price !== undefined ? String((details as any).price) : ''
+                price: (details as any).price !== undefined ? String((details as any).price) : '',
+                languages: normalizeLanguages((details as any).languages),
               };
             } else if (typeof details === 'number') {
               normalized[varType][condition] = {
@@ -88,6 +103,60 @@ export const getNormalizedVariations = (variations: Record<string, any>): Record
   }
 
   return normalized;
+};
+
+// Ajusta a quantidade de um idioma específico dentro de uma condição, recalculando
+// o agregado (quantity/price) usado pelo resto do app (trocas, estatísticas, etc.).
+// delta pode ser negativo (para diminuir). Quando price é informado, atualiza o
+// preço daquele idioma específico.
+export const adjustLanguageQuantity = (
+  details: ConditionDetails,
+  languageCode: string,
+  delta: number,
+  price?: string
+): ConditionDetails => {
+  const languages: Record<string, LanguageDetails> = { ...(details.languages || {}) };
+  const current = languages[languageCode] || { quantity: 0, price: '' };
+  const nextQuantity = Math.max(0, (current.quantity || 0) + delta);
+  const nextPrice = price !== undefined ? price : current.price;
+  if (nextQuantity <= 0) {
+    delete languages[languageCode];
+  } else {
+    languages[languageCode] = { quantity: nextQuantity, price: nextPrice };
+  }
+  const hasLanguages = Object.keys(languages).length > 0;
+  const quantity = hasLanguages
+    ? Object.values(languages).reduce((sum, l) => sum + (l.quantity || 0), 0)
+    : 0;
+  return {
+    quantity,
+    price: hasLanguages ? '' : '',
+    languages: hasLanguages ? languages : undefined,
+  };
+};
+
+// Define diretamente o preço de um idioma já existente numa condição.
+export const setLanguagePrice = (details: ConditionDetails, languageCode: string, price: string): ConditionDetails => {
+  const languages: Record<string, LanguageDetails> = { ...(details.languages || {}) };
+  const current = languages[languageCode];
+  if (!current) return details;
+  languages[languageCode] = { ...current, price };
+  return { ...details, languages };
+};
+
+// Troca o código de idioma de uma linha já registrada (ex.: usuário corrige de BR
+// para PTEN). Se o novo código já existir, funde as quantidades.
+export const renameLanguageEntry = (details: ConditionDetails, oldCode: string, newCode: string): ConditionDetails => {
+  if (oldCode === newCode) return details;
+  const languages: Record<string, LanguageDetails> = { ...(details.languages || {}) };
+  const current = languages[oldCode];
+  if (!current) return details;
+  delete languages[oldCode];
+  const existing = languages[newCode];
+  languages[newCode] = existing
+    ? { quantity: existing.quantity + current.quantity, price: existing.price || current.price }
+    : current;
+  return { ...details, languages };
 };
 
 export const getInitialCardData = (cardId: string): UserCardData => {
@@ -140,9 +209,20 @@ export const getCardEstimatedValue = (variations: Record<string, any>): number =
   for (const varType in normalized) {
     for (const cond in normalized[varType]) {
       const details = normalized[varType][cond as CardCondition];
-      const price = parseFloat(details.price);
-      if (details.quantity > 0 && !isNaN(price)) {
-        total += details.quantity * price;
+      if (details.languages) {
+        // Com idiomas detalhados, cada um pode ter preço próprio (ex.: cópia EN
+        // custou diferente da PT) - soma por idioma em vez do agregado.
+        for (const lang of Object.values(details.languages)) {
+          const langPrice = parseFloat(lang.price || '');
+          if (lang.quantity > 0 && !isNaN(langPrice)) {
+            total += lang.quantity * langPrice;
+          }
+        }
+      } else {
+        const price = parseFloat(details.price || '');
+        if (details.quantity > 0 && !isNaN(price)) {
+          total += details.quantity * price;
+        }
       }
     }
   }
