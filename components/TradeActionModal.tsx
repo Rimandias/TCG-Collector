@@ -8,6 +8,8 @@ import TradeItemsList from './TradeItemsList';
 interface TradeActionModalProps {
   trade: Trade;
   myUserId: string;
+  myOwnedCardIds: string[];
+  myWishlist: string[];
   onClose: () => void;
   onChanged: (trade: Trade) => void;
   onStartNewTrade?: () => void;
@@ -18,7 +20,7 @@ const describeItems = (items: TradeItem[]) => {
   return { count: items.reduce((sum, i) => sum + i.quantity, 0), total };
 };
 
-const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, onClose, onChanged, onStartNewTrade }) => {
+const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, myOwnedCardIds, myWishlist, onClose, onChanged, onStartNewTrade }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
@@ -113,6 +115,8 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, on
             submitting={busy}
             helperText={`Escolha as cartas de ${trade.initiatorUsername} que você quer receber em troca das suas ${requested.count} carta(s).`}
             onSubmit={handleSubmitOffer}
+            myOwnedCardIds={myOwnedCardIds}
+            myWishlist={myWishlist}
           />
         </div>
       </div>

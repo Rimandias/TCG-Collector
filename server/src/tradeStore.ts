@@ -85,11 +85,27 @@ export interface VisibleFolder {
   cards: { cardId: string; items: VariationEntry[] }[];
 }
 
+// Restringe as entradas de uma carta às combinações variação/condição selecionadas para a
+// pasta (quando houver seleção configurada), limitando a quantidade exposta à quantidade
+// realmente possuída. Sem seleção configurada para o cardId, expõe todas as combinações
+// (comportamento anterior, mantido por compatibilidade).
+function applySelection(entries: VariationEntry[], selections?: { variation: string; condition: string; quantity: number }[]): VariationEntry[] {
+  if (!selections || selections.length === 0) return entries;
+  const result: VariationEntry[] = [];
+  for (const sel of selections) {
+    const owned = entries.find((e) => e.variation === sel.variation && e.condition === sel.condition);
+    if (!owned) continue;
+    const quantity = Math.min(sel.quantity, owned.quantity);
+    if (quantity > 0) result.push({ ...owned, quantity });
+  }
+  return result;
+}
+
 // Pastas de um amigo marcadas como visíveis, com a quantidade/condição/preço reais das cartas nelas.
 export async function getVisibleFolders(friendUserId: string): Promise<VisibleFolder[]> {
   const { data: folders, error } = await supabase
     .from('trade_folders')
-    .select('id, name')
+    .select('id, name, variation_selections')
     .eq('user_id', friendUserId)
     .eq('visible_to_friends', true);
   if (error) throw error;
@@ -119,8 +135,12 @@ export async function getVisibleFolders(friendUserId: string): Promise<VisibleFo
 
   return folders.map((folder) => {
     const cardIds = cardIdsByFolder[folder.id] || [];
+    const variationSelections = (folder as any).variation_selections || {};
     const cards = cardIds
-      .map((cardId) => ({ cardId, items: entriesFromVariations(variationsByCard[cardId]) }))
+      .map((cardId) => ({
+        cardId,
+        items: applySelection(entriesFromVariations(variationsByCard[cardId]), variationSelections[cardId]),
+      }))
       .filter((c) => c.items.length > 0);
     return { id: folder.id, name: folder.name, cards };
   });

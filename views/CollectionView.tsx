@@ -55,7 +55,8 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
   }, [user.ownedCards]);
 
   const sortedSets = useMemo(() => {
-    return [...sets].sort((a, b) => a.releaseDate.localeCompare(b.releaseDate));
+    // Ordem decrescente: coleção mais recente primeiro, igual à Home.
+    return [...sets].sort((a, b) => b.releaseDate.localeCompare(a.releaseDate));
   }, [sets]);
 
   const totalCollectibleCards = useMemo(() => {

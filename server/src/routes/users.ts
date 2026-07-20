@@ -15,11 +15,18 @@ const userCardSchema = z.object({
   variations: z.record(z.string(), z.any()).default({}),
 });
 
+const variationSelectionSchema = z.object({
+  variation: z.string().min(1).max(80),
+  condition: z.string().min(1).max(20),
+  quantity: z.number().int().min(0),
+});
+
 const folderSchema = z.object({
   id: z.string().min(1).max(80),
   name: z.string().min(1).max(80),
   cardIds: z.array(z.string().regex(cardIdPattern)).max(5000),
   visibleToFriends: z.boolean().default(false),
+  variationSelections: z.record(z.string().regex(cardIdPattern), z.array(variationSelectionSchema).max(50)).default({}),
 });
 
 const userDataSchema = z.object({

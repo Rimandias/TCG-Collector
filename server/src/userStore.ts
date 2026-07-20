@@ -7,6 +7,12 @@ export interface FriendEntry {
   addedAt: string;
 }
 
+export interface TradeFolderVariationSelection {
+  variation: string;
+  condition: string;
+  quantity: number;
+}
+
 export interface FullUser {
   id: string;
   username: string;
@@ -15,7 +21,7 @@ export interface FullUser {
   friendCode: string;
   ownedCards: Record<string, { cardId: string; isOwned: boolean; isForTrade: boolean; variations: Record<string, any> }>;
   friends: FriendEntry[];
-  folders: { id: string; name: string; cardIds: string[]; visibleToFriends: boolean }[];
+  folders: { id: string; name: string; cardIds: string[]; visibleToFriends: boolean; variationSelections: Record<string, TradeFolderVariationSelection[]> }[];
   wishlist: string[];
 }
 
@@ -31,7 +37,7 @@ export async function assembleFullUser(userId: string, email: string): Promise<F
   const [cardsRes, friendsRes, foldersRes, wishlistRes] = await Promise.all([
     supabase.from('user_cards').select('card_id, is_owned, is_for_trade, variations').eq('user_id', userId),
     supabase.from('friends').select('friend_user_id, added_at').eq('user_id', userId).order('added_at', { ascending: true }),
-    supabase.from('trade_folders').select('id, name, visible_to_friends').eq('user_id', userId),
+    supabase.from('trade_folders').select('id, name, visible_to_friends, variation_selections').eq('user_id', userId),
     supabase.from('wishlist').select('card_id').eq('user_id', userId),
   ]);
   if (cardsRes.error) throw cardsRes.error;
@@ -83,6 +89,7 @@ export async function assembleFullUser(userId: string, email: string): Promise<F
     name: f.name,
     visibleToFriends: f.visible_to_friends,
     cardIds: folderCardsByFolder[f.id] || [],
+    variationSelections: f.variation_selections || {},
   }));
 
   const wishlist = (wishlistRes.data || []).map((r) => r.card_id);
@@ -107,7 +114,7 @@ export interface UserDataInput {
   username?: string;
   avatarUrl?: string;
   ownedCards?: Record<string, { isOwned?: boolean; isForTrade?: boolean; variations?: Record<string, any> }>;
-  folders?: { id: string; name: string; cardIds: string[]; visibleToFriends?: boolean }[];
+  folders?: { id: string; name: string; cardIds: string[]; visibleToFriends?: boolean; variationSelections?: Record<string, TradeFolderVariationSelection[]> }[];
   wishlist?: string[];
 }
 
@@ -147,7 +154,7 @@ export async function replaceUserData(userId: string, data: UserDataInput): Prom
   if (folders.length > 0) {
     const { error: foldersInsertErr } = await supabase
       .from('trade_folders')
-      .insert(folders.map((f) => ({ id: f.id, user_id: userId, name: f.name, visible_to_friends: !!f.visibleToFriends })));
+      .insert(folders.map((f) => ({ id: f.id, user_id: userId, name: f.name, visible_to_friends: !!f.visibleToFriends, variation_selections: f.variationSelections || {} })));
     if (foldersInsertErr) throw foldersInsertErr;
 
     const folderCardRows = folders.flatMap((f) => (f.cardIds || []).map((cardId) => ({ folder_id: f.id, card_id: cardId })));

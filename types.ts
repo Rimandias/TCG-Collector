@@ -77,11 +77,18 @@ export interface User {
   wishlist?: string[];
 }
 
+export interface TradeFolderVariationSelection {
+  variation: string;
+  condition: string;
+  quantity: number;
+}
+
 export interface TradeFolder {
   id: string;
   name: string;
   cardIds: string[];
   visibleToFriends: boolean;
+  variationSelections?: Record<string, TradeFolderVariationSelection[]>;
 }
 
 export interface TradeItem {
