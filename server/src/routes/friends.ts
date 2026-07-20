@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { supabase } from '../supabase.js';
-import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
+import { requireAuth, requirePremium, type AuthedRequest } from '../middleware/auth.js';
 import { assembleFullUser } from '../userStore.js';
 import { normalizeFriendCode } from '../friendCode.js';
 import { asyncHandler } from '../asyncHandler.js';
@@ -73,6 +73,7 @@ friendsRouter.post(
 friendsRouter.get(
   '/:friendUserId/folders',
   requireAuth,
+  requirePremium,
   asyncHandler(async (req: AuthedRequest, res) => {
     const { friendUserId } = req.params;
     const myId = req.userId!;

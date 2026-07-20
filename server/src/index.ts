@@ -7,6 +7,7 @@ import { tcgRouter } from './routes/tcg.js';
 import { usersRouter } from './routes/users.js';
 import { friendsRouter } from './routes/friends.js';
 import { tradesRouter } from './routes/trades.js';
+import { premiumRouter } from './routes/premium.js';
 
 const app = express();
 
@@ -38,6 +39,7 @@ app.use('/api/tcg', tcgRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/friends', friendsRouter);
 app.use('/api/trades', tradesRouter);
+app.use('/api/premium', premiumRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Rota não encontrada.' });

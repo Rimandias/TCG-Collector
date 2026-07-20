@@ -71,6 +71,7 @@ export interface User {
   email: string;
   avatarUrl: string;
   friendCode: string;
+  isPremium: boolean;
   ownedCards: Record<string, UserCardData>;
   friends: Friend[];
   folders?: TradeFolder[];

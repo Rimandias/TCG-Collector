@@ -3,6 +3,7 @@ import { User, Card, UserCardData, TradeFolder, TradeFolderVariationSelection, F
 import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getCardEstimatedValue } from '../db';
 import { fetchCardsBySet, fetchSets } from '../api';
 import { createTradeRequest, getMyTrades, TradeItemSelection } from '../trades';
+import { redeemAccessCode } from '../premium';
 import { fetchCurrentUser } from '../auth';
 import CardModal from '../components/CardModal';
 import FriendFolderBrowser from '../components/FriendFolderBrowser';
@@ -29,6 +30,25 @@ interface TradesViewProps {
 }
 
 const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
+  // Trocas ainda está em teste fechado - liberada por código de acesso (ver premium.ts)
+  const [accessCode, setAccessCode] = useState('');
+  const [redeemSubmitting, setRedeemSubmitting] = useState(false);
+  const [redeemError, setRedeemError] = useState<string | null>(null);
+
+  const handleRedeemCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!accessCode.trim()) return;
+    setRedeemSubmitting(true);
+    setRedeemError(null);
+    const { user: updatedUser, error } = await redeemAccessCode(accessCode);
+    setRedeemSubmitting(false);
+    if (error) {
+      setRedeemError(error);
+      return;
+    }
+    if (updatedUser) onUpdateUser(updatedUser);
+  };
+
   const [activeTab, setActiveTab] = useState<'my' | 'friends'>('my');
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
 
@@ -598,6 +618,40 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
       folders: updatedFolders
     });
   };
+
+  if (!user.isPremium) {
+    return (
+      <div className="animate-in fade-in duration-500 px-8 pt-16 pb-10 flex flex-col items-center text-center max-w-sm mx-auto">
+        <div className="w-16 h-16 bg-[#646B99]/10 text-[#646B99] rounded-full flex items-center justify-center mb-5">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h2 className="text-lg text-slate-800 tracking-tight">Trocas em teste fechado</h2>
+        <p className="text-slate-400 text-xs mt-2 leading-relaxed">
+          Essa funcionalidade ainda está em fase de testes. Se você recebeu um código de acesso, digite abaixo para liberar as Trocas na sua conta.
+        </p>
+
+        <form onSubmit={handleRedeemCode} className="w-full mt-8 space-y-3">
+          <input
+            type="text"
+            placeholder="CÓDIGO DE ACESSO"
+            value={accessCode}
+            onChange={(e) => setAccessCode(e.target.value)}
+            className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs tracking-widest text-slate-900 text-center outline-none focus:border-[#646B99] transition-colors uppercase"
+          />
+          {redeemError && (
+            <p className="text-red-500 text-[10px] uppercase tracking-widest">{redeemError}</p>
+          )}
+          <button
+            type="submit"
+            disabled={redeemSubmitting || !accessCode.trim()}
+            className="w-full py-4 bg-slate-900 text-white text-xs rounded-full hover:bg-slate-800 transition-all shadow-xl uppercase tracking-[0.3em] disabled:opacity-50"
+          >
+            {redeemSubmitting ? 'Verificando...' : 'Liberar Acesso'}
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-in fade-in duration-500 px-6 max-w-lg mx-auto pb-8 pt-4">

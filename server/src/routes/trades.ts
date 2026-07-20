@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { supabase } from '../supabase.js';
-import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
+import { requireAuth, requirePremium, type AuthedRequest } from '../middleware/auth.js';
 import {
   areFriends,
   createTrade,
@@ -27,6 +27,7 @@ const tradesLimiter = rateLimit({
   legacyHeaders: false,
 });
 tradesRouter.use(tradesLimiter);
+tradesRouter.use(requireAuth, requirePremium);
 
 const cardIdPattern = /^[a-zA-Z0-9._-]+$/;
 const itemSelectionSchema = z.object({
@@ -87,7 +88,6 @@ async function resolveItems(
 
 tradesRouter.post(
   '/',
-  requireAuth,
   asyncHandler(async (req: AuthedRequest, res) => {
     const parsed = createTradeSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -127,7 +127,6 @@ tradesRouter.post(
 
 tradesRouter.get(
   '/',
-  requireAuth,
   asyncHandler(async (req: AuthedRequest, res) => {
     const trades = await getTradesForUser(req.userId!);
     const serialized = await Promise.all(trades.map(serializeTrade));
@@ -146,7 +145,6 @@ const patchSchema = z.union([submitOfferSchema, simpleActionSchema]);
 
 tradesRouter.patch(
   '/:id',
-  requireAuth,
   asyncHandler(async (req: AuthedRequest, res) => {
     const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) {
