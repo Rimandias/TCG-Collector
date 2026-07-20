@@ -13,6 +13,8 @@ interface FriendFolderBrowserProps {
   onSubmit: (folderId: string, items: TradeItemSelection[], totalValue: number) => void | Promise<void>;
   submitting?: boolean;
   helperText?: string;
+  myOwnedCardIds?: string[];
+  myWishlist?: string[];
 }
 
 interface ResolvedLine {
@@ -34,7 +36,18 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
   onSubmit,
   submitting = false,
   helperText,
+  myOwnedCardIds = [],
+  myWishlist = [],
 }) => {
+  const ownedCardIdSet = useMemo(() => new Set(myOwnedCardIds), [myOwnedCardIds]);
+  const wishlistCardIdSet = useMemo(() => new Set(myWishlist), [myWishlist]);
+
+  // Prioridade de exibição: desejados (0) > não possuídos (1) > o restante, já possuído (2)
+  const getCardPriority = (cardId: string): number => {
+    if (wishlistCardIdSet.has(cardId)) return 0;
+    if (!ownedCardIdSet.has(cardId)) return 1;
+    return 2;
+  };
   const [loading, setLoading] = useState(true);
   const [folders, setFolders] = useState<VisibleFolder[]>([]);
   const [cardsById, setCardsById] = useState<Record<string, Card>>({});
@@ -109,20 +122,22 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
   }, [selectedFolder, cardsById]);
 
   const filteredLines = useMemo(() => {
-    if (!searchQuery.trim()) return lines;
-    const q = searchQuery.toLowerCase().trim();
-    return lines.filter((line) => {
-      if (!line.card) return line.cardId.toLowerCase().includes(q);
-      const fullNum = getCompleteCardNumber(line.card).toLowerCase();
-      return (
-        line.card.name.toLowerCase().includes(q) ||
-        line.card.number.toLowerCase().includes(q) ||
-        fullNum.includes(q) ||
-        line.card.set.name.toLowerCase().includes(q) ||
-        (line.card.artist || '').toLowerCase().includes(q)
-      );
-    });
-  }, [lines, searchQuery]);
+    const base = !searchQuery.trim()
+      ? lines
+      : lines.filter((line) => {
+          const q = searchQuery.toLowerCase().trim();
+          if (!line.card) return line.cardId.toLowerCase().includes(q);
+          const fullNum = getCompleteCardNumber(line.card).toLowerCase();
+          return (
+            line.card.name.toLowerCase().includes(q) ||
+            line.card.number.toLowerCase().includes(q) ||
+            fullNum.includes(q) ||
+            line.card.set.name.toLowerCase().includes(q) ||
+            (line.card.artist || '').toLowerCase().includes(q)
+          );
+        });
+    return [...base].sort((a, b) => getCardPriority(a.cardId) - getCardPriority(b.cardId));
+  }, [lines, searchQuery, ownedCardIdSet, wishlistCardIdSet]);
 
   // Reseta a página sempre que a lista filtrada ou a navegação de coleção mudam
   useEffect(() => {
@@ -170,6 +185,8 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
     const key = selectionKey(line.cardId, line.variation, line.condition);
     const qty = selectedQuantities[key] || 0;
     const isSelected = qty > 0;
+    const iDontOwn = !ownedCardIdSet.has(line.cardId);
+    const isWishlisted = wishlistCardIdSet.has(line.cardId);
     return (
       <div
         key={key}
@@ -179,8 +196,18 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
           <img src={line.card.imageUrl} className="w-12 h-16 rounded-lg object-contain bg-slate-50 border border-slate-100/40 flex-shrink-0" />
         )}
         <div className="flex-1 min-w-0">
-          <h4 className="text-xs font-semibold text-slate-800 truncate">
-            {line.card ? line.card.name : line.cardId}
+          <h4 className="text-xs font-semibold text-slate-800 truncate flex items-center gap-1.5">
+            <span className="truncate">{line.card ? line.card.name : line.cardId}</span>
+            {isWishlisted && (
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-rose-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor" stroke="none" title="Na sua lista de desejos">
+                <path d="M12 21s-6.716-4.35-9.428-8.06C.89 10.31 1.2 6.6 4.2 4.9c2.29-1.3 4.94-.62 6.3 1.24l1.5 2.05 1.5-2.05c1.36-1.86 4.01-2.54 6.3-1.24 3 1.7 3.31 5.41 1.63 8.04C18.716 16.65 12 21 12 21z"/>
+              </svg>
+            )}
+            {iDontOwn && (
+              <span className="px-1.5 py-0.5 bg-amber-50 border border-amber-200 text-amber-700 text-[8px] font-bold rounded uppercase tracking-wider flex-shrink-0">
+                Não possuo
+              </span>
+            )}
           </h4>
           <p className="text-[9px] text-slate-400">
             {line.card ? `#${getCompleteCardNumber(line.card)} · ` : ''}{line.variation} · {line.condition}

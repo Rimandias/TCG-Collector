@@ -15,6 +15,7 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
   const [activeTab, setActiveTab] = useState<'variations' | 'price'>('variations');
   const [expandedVariation, setExpandedVariation] = useState<string | null>('Standard');
   const [priceStats, setPriceStats] = useState<CardPriceStats>({});
+  const [showFullscreen, setShowFullscreen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +75,25 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
+      {showFullscreen && (
+        <div
+          onClick={() => setShowFullscreen(false)}
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/95 animate-in fade-in duration-200"
+        >
+          <button
+            onClick={() => setShowFullscreen(false)}
+            className="absolute top-5 right-5 p-2 bg-white/10 rounded-full hover:bg-white/20 text-white transition-colors z-10"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+          <img
+            src={card.imageUrlHiRes || card.imageUrl}
+            alt={card.name}
+            className="max-w-full max-h-full object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
       <div className="bg-white border border-slate-100 w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
         {/* Modal Header & Card Details */}
@@ -85,16 +105,23 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
           
-          <div 
+          <div
             onClick={onClose}
-            className="w-32 aspect-[2/2.8] rounded-2xl overflow-hidden shadow-2xl mb-3 cursor-pointer"
+            className="relative w-32 aspect-[2/2.8] rounded-2xl overflow-hidden shadow-2xl mb-3 cursor-pointer"
           >
-            <img 
-              src={card.imageUrlHiRes || card.imageUrl} 
-              alt={card.name} 
-              className="w-full h-full object-cover" 
+            <img
+              src={card.imageUrlHiRes || card.imageUrl}
+              alt={card.name}
+              className="w-full h-full object-cover"
               loading="lazy"
             />
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowFullscreen(true); }}
+              className="absolute bottom-1.5 right-1.5 p-1.5 bg-black/50 backdrop-blur-sm rounded-full text-white hover:bg-black/70 transition-colors"
+              title="Ver em tela cheia"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/></svg>
+            </button>
           </div>
           
           <h2 className="text-base font-bold text-slate-800 mb-0.5 text-center uppercase tracking-tight">{card.name}</h2>

@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { User, PokemonSet, Card, UserCardData } from '../types';
+import { User, PokemonSet, Card, UserCardData, CardCondition } from '../types';
 import { fetchSets, fetchCardsBySet, searchCards } from '../api';
 import CardItem, { CardViewMode } from '../components/CardItem';
 import CardViewModeSelector from '../components/CardViewModeSelector';
 import CardModal from '../components/CardModal';
-import { getCardTotalQuantity, getCompleteCardNumber, getCardEstimatedValue } from '../db';
+import { getCardTotalQuantity, getCompleteCardNumber, getCardEstimatedValue, getNormalizedVariations } from '../db';
 import { getInitialCardViewMode, saveCardViewMode, getCardGridClassName } from '../viewMode';
 
 interface HomeViewProps {
@@ -160,10 +160,11 @@ const HomeView: React.FC<HomeViewProps> = ({
       return dates[0];
     };
 
+    // Ordem decrescente: era mais recente (ex.: Mega Evolution) primeiro, Base Set por último.
     return uniqueSeries.sort((a, b) => {
       const dateA = getEraOldestReleaseDate(a);
       const dateB = getEraOldestReleaseDate(b);
-      return dateA.localeCompare(dateB);
+      return dateB.localeCompare(dateA);
     });
   }, [sets]);
 
@@ -213,6 +214,26 @@ const HomeView: React.FC<HomeViewProps> = ({
 
     return base;
   }, [setCards, filterTab, searchQuery, user.ownedCards]);
+
+  // Marca de uma vez todas as cartas da coleção atual que ainda não são possuídas como
+  // 1x Standard NM (mesmo padrão do toque individual), sem sobrescrever cartas já possuídas.
+  const handleSelectAllInSet = () => {
+    const updatedOwnedCards = { ...user.ownedCards };
+    setCards.forEach(card => {
+      const current = updatedOwnedCards[card.id];
+      const alreadyOwned = current && getCardTotalQuantity(current.variations) > 0;
+      if (alreadyOwned) return;
+      const normalized = getNormalizedVariations(current?.variations || {});
+      normalized['Standard'][CardCondition.NM].quantity = 1;
+      updatedOwnedCards[card.id] = {
+        cardId: card.id,
+        isOwned: true,
+        isForTrade: current?.isForTrade || false,
+        variations: normalized,
+      };
+    });
+    onUpdateUser({ ...user, ownedCards: updatedOwnedCards });
+  };
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -376,7 +397,7 @@ const HomeView: React.FC<HomeViewProps> = ({
         </div>
 
         {/* Abas de Filtro */}
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-3">
           <div className="flex flex-1 bg-slate-50 p-1 rounded-xl border border-slate-100">
             <button
               onClick={() => setFilterTab('tudo')}
@@ -392,6 +413,15 @@ const HomeView: React.FC<HomeViewProps> = ({
             </button>
           </div>
           <CardViewModeSelector viewMode={viewMode} onChange={setViewMode} />
+        </div>
+
+        <div className="mb-4">
+          <button
+            onClick={handleSelectAllInSet}
+            className="w-full py-2 bg-[#646B99]/5 border border-[#646B99]/20 text-[#646B99] text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-[#646B99]/10 transition-colors"
+          >
+            Selecionar Todos (1x Standard NM)
+          </button>
         </div>
 
         <div className={getCardGridClassName(viewMode)}>

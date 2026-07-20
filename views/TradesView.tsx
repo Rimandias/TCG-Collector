@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { User, Card, UserCardData, TradeFolder, Friend, Trade, CardCondition, VARIATION_TYPES } from '../types';
+import { User, Card, UserCardData, TradeFolder, TradeFolderVariationSelection, Friend, Trade, CardCondition, VARIATION_TYPES } from '../types';
 import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getCardEstimatedValue } from '../db';
 import { fetchCardsBySet, fetchSets } from '../api';
 import { createTradeRequest, getMyTrades, TradeItemSelection } from '../trades';
@@ -167,6 +167,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [showManageCards, setShowManageCards] = useState(false);
+  const [variationPickerCardId, setVariationPickerCardId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [tradeCards, setTradeCards] = useState<{card: Card, data: UserCardData}[]>([]);
   const [editingCard, setEditingCard] = useState<Card | null>(null);
@@ -191,6 +192,13 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
   // Memoized user folders
   const folders = useMemo<TradeFolder[]>(() => user.folders || [], [user.folders]);
+
+  // IDs das cartas que o usuário possui (quantidade > 0 em alguma variação/condição), usado
+  // para destacar na pasta do amigo quais cartas eu ainda não tenho.
+  const myOwnedCardIds = useMemo(
+    () => Object.keys(user.ownedCards).filter(id => getCardTotalQuantity(user.ownedCards[id]?.variations) > 0),
+    [user.ownedCards]
+  );
 
   // Carrega as informações das cartas que estão marcadas para troca ou possuem duplicatas (>1 cópias)
   useEffect(() => {
@@ -477,9 +485,12 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   const handleRemoveFromFolder = (folderId: string, cardId: string) => {
     const updatedFolders = folders.map(f => {
       if (f.id === folderId) {
+        const variationSelections = { ...(f.variationSelections || {}) };
+        delete variationSelections[cardId];
         return {
           ...f,
-          cardIds: f.cardIds.filter(id => id !== cardId)
+          cardIds: f.cardIds.filter(id => id !== cardId),
+          variationSelections
         };
       }
       return f;
@@ -495,12 +506,50 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     const updatedFolders = folders.map(f => {
       if (f.id === folderId) {
         const exists = f.cardIds.includes(cardId);
-        const newCardIds = exists 
+        const newCardIds = exists
           ? f.cardIds.filter(id => id !== cardId)
           : [...f.cardIds, cardId];
-        return { ...f, cardIds: newCardIds };
+        const variationSelections = { ...(f.variationSelections || {}) };
+        if (exists) delete variationSelections[cardId];
+        return { ...f, cardIds: newCardIds, variationSelections };
       }
       return f;
+    });
+    onUpdateUser({
+      ...user,
+      folders: updatedFolders
+    });
+  };
+
+  // Retorna as seleções de variação/condição/quantidade atuais de uma carta numa pasta.
+  // Sem seleção configurada, cartas já presentes na pasta (formato antigo) contam como
+  // "todas as combinações selecionadas por completo", para manter compatibilidade.
+  const getFolderCardSelections = (
+    folder: TradeFolder,
+    cardId: string,
+    entries: { variation: string; condition: CardCondition; quantity: number }[]
+  ): TradeFolderVariationSelection[] => {
+    const existing = folder.variationSelections?.[cardId];
+    if (existing) return existing;
+    if (folder.cardIds.includes(cardId)) {
+      return entries.map(e => ({ variation: e.variation, condition: e.condition, quantity: e.quantity }));
+    }
+    return [];
+  };
+
+  // Define as combinações variação/condição/quantidade selecionadas de uma carta numa pasta.
+  // Selecionar ao menos uma combinação adiciona a carta à pasta; zerar as seleções a remove.
+  const handleSetVariationSelections = (folderId: string, cardId: string, selections: TradeFolderVariationSelection[]) => {
+    const updatedFolders = folders.map(f => {
+      if (f.id !== folderId) return f;
+      const variationSelections = { ...(f.variationSelections || {}) };
+      if (selections.length > 0) {
+        variationSelections[cardId] = selections;
+        const cardIds = f.cardIds.includes(cardId) ? f.cardIds : [...f.cardIds, cardId];
+        return { ...f, cardIds, variationSelections };
+      }
+      delete variationSelections[cardId];
+      return { ...f, cardIds: f.cardIds.filter(id => id !== cardId), variationSelections };
     });
     onUpdateUser({
       ...user,
@@ -1418,6 +1467,8 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
             submitting={creatingTrade}
             helperText="Selecione as cartas que você quer pedir para essa pessoa."
             onSubmit={(folderId, items, totalValue) => setPendingTradeConfirm({ folderId, items, totalValue })}
+            myOwnedCardIds={myOwnedCardIds}
+            myWishlist={user.wishlist || []}
           />
         )
       )}
@@ -1522,46 +1573,125 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
           const renderManageRow = ({ card, data }: { card: Card, data: UserCardData }) => {
             const isInFolder = currentFolder.cardIds.includes(card.id);
             const normalized = getNormalizedVariations(data.variations);
-            const badges: React.ReactNode[] = [];
+            const entries: { variation: string; condition: CardCondition; quantity: number }[] = [];
             Object.entries(normalized).forEach(([varType, conditionsObj]) => {
               Object.entries(conditionsObj).forEach(([cond, details]) => {
                 if (details.quantity > 0) {
-                  const isOnlyOne = details.quantity === 1;
-                  badges.push(
-                    <span
-                      key={`${varType}-${cond}`}
-                      className={`px-1.5 py-0.5 border rounded text-[8px] font-medium flex items-center gap-1 ${
-                        isOnlyOne
-                          ? 'bg-amber-50 border-amber-200 text-amber-700 font-semibold'
-                          : 'bg-slate-50 border-slate-100 text-[#646B99]'
-                      }`}
-                    >
-                      {isOnlyOne && <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />}
-                      {varType} {cond}: {details.quantity}
-                      {isOnlyOne && ' (Única!)'}
-                    </span>
-                  );
+                  entries.push({ variation: varType, condition: cond as CardCondition, quantity: details.quantity });
                 }
               });
             });
+            const badges = entries.map(e => {
+              const isOnlyOne = e.quantity === 1;
+              return (
+                <span
+                  key={`${e.variation}-${e.condition}`}
+                  className={`px-1.5 py-0.5 border rounded text-[8px] font-medium flex items-center gap-1 ${
+                    isOnlyOne
+                      ? 'bg-amber-50 border-amber-200 text-amber-700 font-semibold'
+                      : 'bg-slate-50 border-slate-100 text-[#646B99]'
+                  }`}
+                >
+                  {isOnlyOne && <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />}
+                  {e.variation} {e.condition}: {e.quantity}
+                  {isOnlyOne && ' (Única!)'}
+                </span>
+              );
+            });
+            const hasMultipleCombos = entries.length > 1;
+            const isPickerOpen = variationPickerCardId === card.id;
+            const selections = getFolderCardSelections(currentFolder, card.id, entries);
+
+            const toggleEntry = (entry: { variation: string; condition: CardCondition; quantity: number }) => {
+              const idx = selections.findIndex(s => s.variation === entry.variation && s.condition === entry.condition);
+              const updated = idx >= 0
+                ? selections.filter((_, i) => i !== idx)
+                : [...selections, { variation: entry.variation, condition: entry.condition, quantity: entry.quantity }];
+              handleSetVariationSelections(currentFolder.id, card.id, updated);
+            };
+
+            const updateEntryQuantity = (entry: { variation: string; condition: CardCondition; quantity: number }, quantity: number) => {
+              const capped = Math.max(1, Math.min(quantity, entry.quantity));
+              const idx = selections.findIndex(s => s.variation === entry.variation && s.condition === entry.condition);
+              const updated = idx >= 0
+                ? selections.map((s, i) => i === idx ? { ...s, quantity: capped } : s)
+                : [...selections, { variation: entry.variation, condition: entry.condition, quantity: capped }];
+              handleSetVariationSelections(currentFolder.id, card.id, updated);
+            };
+
             return (
               <div
                 key={card.id}
-                onClick={() => handleToggleCardInFolder(currentFolder.id, card.id)}
-                className={`flex items-center gap-3 p-2 rounded-xl border cursor-pointer transition-all ${isInFolder ? 'border-[#646B99]/30 bg-[#646B99]/5' : 'border-slate-100 hover:bg-slate-50'}`}
+                className={`rounded-xl border transition-all ${isInFolder ? 'border-[#646B99]/30 bg-[#646B99]/5' : 'border-slate-100 hover:bg-slate-50'}`}
               >
-                <input
-                  type="checkbox"
-                  checked={isInFolder}
-                  onChange={() => {}} // Controlled via onClick on div
-                  className="w-3.5 h-3.5 text-[#646B99] border-slate-300 rounded focus:ring-[#646B99]"
-                />
-                <img src={card.imageUrl} className="w-10 h-14 object-contain rounded bg-white border border-slate-100/50 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-[11px] font-semibold text-slate-700 truncate">{card.name}</h4>
-                  <p className="text-[9px] text-slate-400 truncate">{card.rarity} • #{card.number}</p>
-                  {badges.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{badges}</div>}
+                <div
+                  onClick={() => {
+                    if (hasMultipleCombos) {
+                      setVariationPickerCardId(prev => prev === card.id ? null : card.id);
+                    } else {
+                      handleToggleCardInFolder(currentFolder.id, card.id);
+                    }
+                  }}
+                  className="flex items-center gap-3 p-2 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isInFolder}
+                    onChange={() => {}} // Controlled via onClick
+                    className="w-3.5 h-3.5 text-[#646B99] border-slate-300 rounded focus:ring-[#646B99]"
+                  />
+                  <img src={card.imageUrl} className="w-10 h-14 object-contain rounded bg-white border border-slate-100/50 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-[11px] font-semibold text-slate-700 truncate">{card.name}</h4>
+                    <p className="text-[9px] text-slate-400 truncate">{card.rarity} • #{card.number}</p>
+                    {badges.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{badges}</div>}
+                  </div>
+                  {hasMultipleCombos && (
+                    <svg xmlns="http://www.w3.org/2000/svg" className={`w-3.5 h-3.5 text-slate-400 flex-shrink-0 transition-transform ${isPickerOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                  )}
                 </div>
+
+                {hasMultipleCombos && isPickerOpen && (
+                  <div className="px-2.5 pb-2.5 space-y-1.5 border-t border-slate-100/70 pt-2 animate-in slide-in-from-top-1 duration-150">
+                    <p className="text-[8px] text-slate-400 uppercase tracking-widest">Selecione variação/condição e quantidade:</p>
+                    {entries.map(entry => {
+                      const sel = selections.find(s => s.variation === entry.variation && s.condition === entry.condition);
+                      const checked = !!sel;
+                      return (
+                        <div key={`${entry.variation}-${entry.condition}`} className="flex items-center gap-2 bg-white border border-slate-100 rounded-lg p-1.5">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleEntry(entry)}
+                            className="w-3.5 h-3.5 text-[#646B99] border-slate-300 rounded focus:ring-[#646B99] flex-shrink-0"
+                          />
+                          <span className="text-[10px] text-slate-600 flex-1 min-w-0 truncate">
+                            {entry.variation} {entry.condition} <span className="text-slate-300">(possui {entry.quantity})</span>
+                          </span>
+                          {checked && (
+                            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg overflow-hidden h-6 flex-shrink-0">
+                              <button
+                                onClick={() => updateEntryQuantity(entry, (sel?.quantity || 1) - 1)}
+                                className="w-6 h-full flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors font-bold text-xs"
+                              >
+                                -
+                              </button>
+                              <span className="w-6 text-center text-[10px] text-[#646B99] font-semibold tabular-nums">
+                                {sel?.quantity}
+                              </span>
+                              <button
+                                onClick={() => updateEntryQuantity(entry, (sel?.quantity || 1) + 1)}
+                                className="w-6 h-full flex items-center justify-center text-slate-400 hover:text-emerald-500 transition-colors font-bold text-xs"
+                              >
+                                +
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           };
@@ -1709,7 +1839,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
                   <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
                     <button
-                      onClick={() => setShowManageCards(false)}
+                      onClick={() => { setShowManageCards(false); setVariationPickerCardId(null); }}
                       className="w-full py-2.5 bg-[#646B99] hover:bg-[#4d5275] text-white text-xs font-semibold rounded-xl transition-colors"
                     >
                       Concluído
@@ -1733,6 +1863,8 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
         <TradeActionModal
           trade={activeTradeModal}
           myUserId={user.id}
+          myOwnedCardIds={myOwnedCardIds}
+          myWishlist={user.wishlist || []}
           onClose={closeTradeModal}
           onChanged={handleTradeChanged}
           onStartNewTrade={() => {
