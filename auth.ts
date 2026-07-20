@@ -45,7 +45,10 @@ export const registerUser = async (username: string, email: string, password: st
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { username: username || 'Treinador' } },
+    options: {
+      data: { username: username || 'Treinador' },
+      emailRedirectTo: window.location.origin,
+    },
   });
   if (error) throw new AuthError(mapAuthErrorMessage(error.message));
   if (!data.session) {
