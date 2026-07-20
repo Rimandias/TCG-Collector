@@ -235,6 +235,18 @@ const HomeView: React.FC<HomeViewProps> = ({
     onUpdateUser({ ...user, ownedCards: updatedOwnedCards });
   };
 
+  // Marca todas as cartas já possuídas da coleção atual (mesmo as de 1 cópia só) como
+  // para troca, sem alterar quantidade/variação - só a flag isForTrade.
+  const handleMarkAllForTradeInSet = () => {
+    const updatedOwnedCards = { ...user.ownedCards };
+    setCards.forEach(card => {
+      const current = updatedOwnedCards[card.id];
+      if (!current || getCardTotalQuantity(current.variations) <= 0) return;
+      updatedOwnedCards[card.id] = { ...current, isForTrade: true };
+    });
+    onUpdateUser({ ...user, ownedCards: updatedOwnedCards });
+  };
+
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
     // O backend já filtra por nome/número/coleção/artista; aqui só restringe à era atual
@@ -415,12 +427,18 @@ const HomeView: React.FC<HomeViewProps> = ({
           <CardViewModeSelector viewMode={viewMode} onChange={setViewMode} />
         </div>
 
-        <div className="mb-4">
+        <div className="mb-4 flex gap-2">
           <button
             onClick={handleSelectAllInSet}
-            className="w-full py-2 bg-[#646B99]/5 border border-[#646B99]/20 text-[#646B99] text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-[#646B99]/10 transition-colors"
+            className="flex-1 py-2 bg-[#646B99]/5 border border-[#646B99]/20 text-[#646B99] text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-[#646B99]/10 transition-colors"
           >
             Selecionar Todos (1x Standard NM)
+          </button>
+          <button
+            onClick={handleMarkAllForTradeInSet}
+            className="flex-1 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-emerald-100 transition-colors"
+          >
+            Colocar Todas Para Troca
           </button>
         </div>
 

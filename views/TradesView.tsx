@@ -13,7 +13,28 @@ import Pagination, { PAGE_SIZE } from '../components/Pagination';
 
 const TRADE_POLL_INTERVAL_MS = 15000;
 
+// ID fixo da pasta "Pasta de Repetidas" (a mesma pasta automática exibida no topo de
+// Minhas Pastas) - agora também é uma pasta real persistida (ver efeito de sincronização
+// abaixo), pra poder ficar visível para amigos como qualquer outra. Ela não tem botão de
+// excluir na UI e sua lista de cartas é sempre recalculada automaticamente, nunca editada
+// manualmente pelo usuário.
+const DEFAULT_FOLDER_ID = 'default';
+
 const languageLabel = (code?: string) => (!code ? null : (LANGUAGE_OPTIONS.find(l => l.code === code)?.label || code));
+
+// Mesma regra usada para popular a "Pasta de Repetidas": cartas marcadas para troca ou com
+// mais de 1 cópia em alguma variação/condição.
+function computeAutoTradeCardIds(ownedCards: Record<string, UserCardData>): string[] {
+  return Object.entries(ownedCards)
+    .filter(([_, data]) => {
+      const normalized = getNormalizedVariations(data.variations);
+      const hasDuplicate = Object.values(normalized).some(conditionsObj =>
+        Object.values(conditionsObj).some(details => details.quantity > 1)
+      );
+      return data.isForTrade || hasDuplicate;
+    })
+    .map(([id]) => id);
+}
 
 function needsMyAction(trade: Trade, myId: string): boolean {
   if (trade.status === 'completed' || trade.status === 'cancelled') return false;
@@ -219,6 +240,27 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
   // Memoized user folders
   const folders = useMemo<TradeFolder[]>(() => user.folders || [], [user.folders]);
+
+  // Mantém a "Pasta de Repetidas" sempre existindo como uma pasta real (visível para
+  // amigos, ver getVisibleFolders no backend) com a lista de cartas sincronizada com a
+  // regra automática (isForTrade ou mais de 1 cópia) - o usuário nunca edita isso na mão,
+  // só via Home ("Colocar Todas Para Troca") ou marcando cartas individualmente.
+  useEffect(() => {
+    const idealIds = computeAutoTradeCardIds(user.ownedCards);
+    const existing = (user.folders || []).find(f => f.id === DEFAULT_FOLDER_ID);
+    const currentSet = new Set(existing?.cardIds || []);
+    const sameMembership = !!existing && idealIds.length === currentSet.size && idealIds.every(id => currentSet.has(id));
+    if (sameMembership) return;
+
+    const nextFolders = existing
+      ? (user.folders || []).map(f => (f.id === DEFAULT_FOLDER_ID ? { ...f, cardIds: idealIds } : f))
+      : [
+          ...(user.folders || []),
+          { id: DEFAULT_FOLDER_ID, name: 'Pasta de Repetidas', cardIds: idealIds, visibleToFriends: true },
+        ];
+    onUpdateUser({ ...user, folders: nextFolders });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.ownedCards]);
 
   // IDs das cartas que o usuário possui (quantidade > 0 em alguma variação/condição), usado
   // para destacar na pasta do amigo quais cartas eu ainda não tenho.
@@ -604,6 +646,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   };
 
   const handleDeleteFolder = (folderId: string) => {
+    if (folderId === DEFAULT_FOLDER_ID) return; // Pasta de Repetidas não pode ser excluída
     if (window.confirm("Tem certeza de que deseja excluir esta pasta? As cartas não serão removidas de suas trocas gerais.")) {
       const updatedFolders = folders.filter(f => f.id !== folderId);
       onUpdateUser({
@@ -736,7 +779,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
             ) : (
               <div className="grid gap-3">
                 {/* 1. Pasta de Repetidas */}
-                <div 
+                <div
                   onClick={() => setSelectedFolderId('duplicates')}
                   className="flex items-center justify-between bg-gradient-to-r from-slate-50 to-white p-4 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:border-[#646B99]/30 transition-all group animate-in fade-in"
                 >
@@ -746,7 +789,9 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                     </div>
                     <div>
                       <h3 className="text-sm font-semibold text-slate-800">Pasta de Repetidas</h3>
-                      <p className="text-[10px] text-slate-400">Cartas repetidas ou para troca</p>
+                      <p className="text-[10px] text-slate-400">
+                        {folders.find(f => f.id === DEFAULT_FOLDER_ID)?.visibleToFriends ? 'Visível para amigos' : 'Cartas repetidas ou para troca'}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -756,6 +801,20 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                     <span className="text-[9px] bg-[#646B99]/10 text-[#646B99] px-2 py-0.5 rounded uppercase tracking-wider font-semibold">
                       Automática
                     </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleFolderVisibility(DEFAULT_FOLDER_ID);
+                      }}
+                      className={`p-1.5 rounded-lg transition-all ${folders.find(f => f.id === DEFAULT_FOLDER_ID)?.visibleToFriends ? 'text-[#646B99] bg-[#646B99]/10' : 'text-slate-300 hover:text-[#646B99] hover:bg-[#646B99]/5'}`}
+                      title={folders.find(f => f.id === DEFAULT_FOLDER_ID)?.visibleToFriends ? 'Visível para amigos (clique para ocultar)' : 'Oculta para amigos (clique para exibir)'}
+                    >
+                      {folders.find(f => f.id === DEFAULT_FOLDER_ID)?.visibleToFriends ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -790,7 +849,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                 </div>
 
                 {/* 3. Custom Folders */}
-                {folders.map(folder => {
+                {folders.filter(folder => folder.id !== DEFAULT_FOLDER_ID).map(folder => {
                   const validCardsCount = folder.cardIds.filter(id => 
                     tradeCards.some(tc => tc.card.id === id)
                   ).length;
