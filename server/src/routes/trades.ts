@@ -5,6 +5,7 @@ import { supabase } from '../supabase.js';
 import { requireAuth, requirePremium, type AuthedRequest } from '../middleware/auth.js';
 import {
   areFriends,
+  computeItemsAvailability,
   createTrade,
   finalizeTrade,
   getTrade,
@@ -34,6 +35,7 @@ const itemSelectionSchema = z.object({
   cardId: z.string().regex(cardIdPattern),
   variation: z.string().min(1).max(40),
   condition: z.string().min(1).max(10),
+  language: z.string().max(10).optional(),
   quantity: z.number().int().positive().max(10000),
 });
 
@@ -48,17 +50,25 @@ async function usernameOf(userId: string): Promise<string> {
   return data?.username || 'Treinador';
 }
 
+// Anexa a disponibilidade real de cada item (ver computeItemsAvailability) e recalcula o
+// valor considerando só os itens ainda disponíveis - cartas já consumidas por outra troca
+// concluída não pesam mais no valor exibido nem são transferidas ao concluir.
 async function serializeTrade(trade: Trade) {
-  const [initiatorUsername, recipientUsername] = await Promise.all([
+  const isOpen = trade.status !== 'completed' && trade.status !== 'cancelled';
+  const [initiatorUsername, recipientUsername, requestedItems, offeredItems] = await Promise.all([
     usernameOf(trade.initiatorId),
     usernameOf(trade.recipientId),
+    isOpen ? computeItemsAvailability(trade.recipientId, trade.requestedItems) : trade.requestedItems.map((i) => ({ ...i, available: true })),
+    isOpen ? computeItemsAvailability(trade.initiatorId, trade.offeredItems) : trade.offeredItems.map((i) => ({ ...i, available: true })),
   ]);
   return {
     ...trade,
+    requestedItems,
+    offeredItems,
     initiatorUsername,
     recipientUsername,
-    requestedValue: tradeItemsValue(trade.requestedItems),
-    offeredValue: tradeItemsValue(trade.offeredItems),
+    requestedValue: tradeItemsValue(requestedItems.filter((i) => i.available)),
+    offeredValue: tradeItemsValue(offeredItems.filter((i) => i.available)),
   };
 }
 
@@ -71,7 +81,9 @@ async function resolveItems(
   const items: TradeItem[] = [];
   for (const sel of selections) {
     const entries = await getVariationEntries(ownerId, sel.cardId);
-    const match = entries.find((e) => e.variation === sel.variation && e.condition === sel.condition);
+    const match = entries.find(
+      (e) => e.variation === sel.variation && e.condition === sel.condition && (e.language || '') === (sel.language || '')
+    );
     if (!match || match.quantity < sel.quantity) {
       throw new Error(`Carta ${sel.cardId} (${sel.variation}/${sel.condition}) indisponível na quantidade pedida.`);
     }
@@ -79,6 +91,7 @@ async function resolveItems(
       cardId: sel.cardId,
       variation: sel.variation,
       condition: sel.condition,
+      language: sel.language,
       quantity: sel.quantity,
       unitPrice: match.price,
     });
@@ -138,10 +151,15 @@ const submitOfferSchema = z.object({
   action: z.literal('submit_offer'),
   items: z.array(itemSelectionSchema).min(1).max(200),
 });
+const editItemsSchema = z.object({
+  action: z.literal('edit_items'),
+  target: z.enum(['requested', 'offered']),
+  items: z.array(itemSelectionSchema).max(200),
+});
 const simpleActionSchema = z.object({
   action: z.enum(['choose_payment', 'choose_offer', 'confirm', 'cancel']),
 });
-const patchSchema = z.union([submitOfferSchema, simpleActionSchema]);
+const patchSchema = z.union([submitOfferSchema, editItemsSchema, simpleActionSchema]);
 
 tradesRouter.patch(
   '/:id',
@@ -197,6 +215,42 @@ tradesRouter.patch(
 
         trade.offeredItems = await resolveItems(trade.initiatorId, items);
         trade.status = 'awaiting_value_diff_confirmation';
+        trade.initiatorConfirmed = false;
+        trade.recipientConfirmed = false;
+        await saveTrade(trade);
+        return res.json({ trade: await serializeTrade(trade) });
+      }
+
+      if (action === 'edit_items') {
+        if (trade.status === 'completed' || trade.status === 'cancelled') {
+          return res.status(409).json({ error: 'Essa troca já foi encerrada.' });
+        }
+        const { target, items } = parsed.data as z.infer<typeof editItemsSchema>;
+        if (target === 'requested' && !isInitiator) {
+          return res.status(403).json({ error: 'Apenas quem pediu a troca pode editar as cartas solicitadas.' });
+        }
+        if (target === 'offered' && !isRecipient) {
+          return res.status(403).json({ error: 'Apenas quem escolheu as cartas do amigo pode editá-las.' });
+        }
+        const currentItems = target === 'requested' ? trade.requestedItems : trade.offeredItems;
+        const nextItems: TradeItem[] = [];
+        for (const sel of items) {
+          const match = currentItems.find(
+            (e) => e.cardId === sel.cardId && e.variation === sel.variation && e.condition === sel.condition && (e.language || '') === (sel.language || '')
+          );
+          if (!match || sel.quantity > match.quantity) {
+            return res.status(400).json({ error: 'Só é possível remover ou reduzir cartas já presentes na negociação.' });
+          }
+          nextItems.push({ ...match, quantity: sel.quantity });
+        }
+        if (target === 'requested' && nextItems.length === 0) {
+          return res.status(400).json({ error: 'A troca precisa ter ao menos uma carta solicitada. Para desistir de tudo, cancele a troca.' });
+        }
+        if (target === 'requested') {
+          trade.requestedItems = nextItems;
+        } else {
+          trade.offeredItems = nextItems;
+        }
         trade.initiatorConfirmed = false;
         trade.recipientConfirmed = false;
         await saveTrade(trade);

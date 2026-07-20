@@ -10,6 +10,7 @@ export interface FriendEntry {
 export interface TradeFolderVariationSelection {
   variation: string;
   condition: string;
+  language?: string;
   quantity: number;
 }
 

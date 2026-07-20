@@ -18,9 +18,10 @@ export const VARIATION_TYPES = [
   'First Edition'
 ];
 
-// Mesmos códigos de idioma usados pela planilha de importação (LigaPokemon).
+// Mesmos códigos de idioma usados pela planilha de importação (LigaPokemon), exceto
+// BR (idioma padrão do app) no lugar de PT - a importação de CSV converte PT -> BR.
 export const LANGUAGE_OPTIONS: { code: string; label: string }[] = [
-  { code: 'PT', label: 'Português' },
+  { code: 'BR', label: 'Português' },
   { code: 'EN', label: 'Inglês' },
   { code: 'JP', label: 'Japonês' },
   { code: 'DE', label: 'Alemão' },
@@ -109,6 +110,7 @@ export interface User {
 export interface TradeFolderVariationSelection {
   variation: string;
   condition: string;
+  language?: string;
   quantity: number;
 }
 
@@ -124,8 +126,13 @@ export interface TradeItem {
   cardId: string;
   variation: string;
   condition: string;
+  language?: string;
   quantity: number;
   unitPrice: number;
+  // Presente (calculado no servidor) em trocas ainda abertas: false quando a carta já não
+  // está mais disponível na quantidade negociada (ex: consumida por outra troca concluída
+  // enquanto esta ainda estava em andamento) - não conta no valor nem é transferida ao concluir.
+  available?: boolean;
 }
 
 export type TradeStatus =
@@ -156,6 +163,7 @@ export interface Trade {
 export interface VisibleFolderCardEntry {
   variation: string;
   condition: string;
+  language?: string;
   quantity: number;
   price: number;
 }

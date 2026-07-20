@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, User, CardCondition, VARIATION_TYPES, LANGUAGE_OPTIONS, ConditionDetails } from '../types';
-import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, getCardEstimatedValue, adjustLanguageQuantity, setLanguagePrice } from '../db';
+import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, getCardEstimatedValue, adjustLanguageQuantity, setLanguagePrice, renameLanguageEntry } from '../db';
 import { fetchCardStats, CardPriceStats } from '../api';
 
+const DEFAULT_LANGUAGE = 'BR';
 const languageLabel = (code: string) => (code === '' ? 'Não especificado' : (LANGUAGE_OPTIONS.find(l => l.code === code)?.label || code));
 
 interface CardModalProps {
@@ -57,9 +58,9 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
 
     if (updates.quantity !== undefined) {
       // Cartas já detalhadas por idioma mantêm o total consistente somando/subtraindo
-      // num idioma "não especificado", em vez de sobrescrever o agregado direto.
+      // no idioma padrão (Português/BR), em vez de sobrescrever o agregado direto.
       if (details.languages) {
-        updated[variation][condition] = adjustLanguageQuantity(details, '', updates.quantity - details.quantity);
+        updated[variation][condition] = adjustLanguageQuantity(details, DEFAULT_LANGUAGE, updates.quantity - details.quantity);
       } else {
         updated[variation][condition].quantity = Math.max(0, updates.quantity);
       }
@@ -75,7 +76,8 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
   const conditionKey = (variation: string, condition: CardCondition) => `${variation}::${condition}`;
 
   // Inicia o detalhamento por idioma de uma condição: se já havia quantidade sem
-  // idioma definido, ela vira o balde "não especificado" (não perde a contagem).
+  // idioma definido, ela vira a primeira linha, registrada como Português (BR) por
+  // padrão - o código dessa linha pode ser editado depois, como qualquer outra.
   const startLanguageBreakdown = (variation: string, condition: CardCondition) => {
     const details = normalizedVariations[variation][condition];
     if (!details.languages) {
@@ -83,7 +85,7 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
       updated[variation][condition] = {
         ...details,
         price: details.quantity > 0 ? '' : details.price,
-        languages: details.quantity > 0 ? { '': { quantity: details.quantity, price: details.price || '' } } : undefined,
+        languages: details.quantity > 0 ? { [DEFAULT_LANGUAGE]: { quantity: details.quantity, price: details.price || '' } } : undefined,
       };
       onUpdateUser(updateCardStatus(user, card.id, { variations: updated }));
     }
@@ -99,6 +101,12 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
   const updateLanguagePriceValue = (variation: string, condition: CardCondition, code: string, price: string) => {
     const updated = { ...normalizedVariations };
     updated[variation][condition] = setLanguagePrice(updated[variation][condition], code, price);
+    onUpdateUser(updateCardStatus(user, card.id, { variations: updated }));
+  };
+
+  const changeLanguageCode = (variation: string, condition: CardCondition, oldCode: string, newCode: string) => {
+    const updated = { ...normalizedVariations };
+    updated[variation][condition] = renameLanguageEntry(updated[variation][condition], oldCode, newCode);
     onUpdateUser(updateCardStatus(user, card.id, { variations: updated }));
   };
 
@@ -325,7 +333,18 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
                                   <p className="text-[8px] text-slate-400 uppercase tracking-widest">Quantidade por idioma:</p>
                                   {Object.entries(details.languages!).map(([code, lang]) => (
                                     <div key={code} className="flex items-center gap-2 bg-slate-50/60 border border-slate-100 rounded-lg p-1.5">
-                                      <span className="text-[10px] text-slate-600 flex-1 min-w-0 truncate">{languageLabel(code)}</span>
+                                      <select
+                                        value={code}
+                                        onChange={(e) => changeLanguageCode(variation, cond, code, e.target.value)}
+                                        className="flex-1 min-w-0 bg-white border border-slate-200 rounded-md px-1.5 py-1 text-[10px] text-slate-600 outline-none focus:ring-1 focus:ring-[#646B99]"
+                                      >
+                                        {code !== '' && !LANGUAGE_OPTIONS.some(l => l.code === code) && (
+                                          <option value={code}>{languageLabel(code)}</option>
+                                        )}
+                                        {LANGUAGE_OPTIONS.map(l => (
+                                          <option key={l.code} value={l.code}>{l.label}</option>
+                                        ))}
+                                      </select>
                                       <div className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden h-6 flex-shrink-0">
                                         <button
                                           onClick={() => updateLanguageQuantity(variation, cond, code, -1)}

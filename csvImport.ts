@@ -153,6 +153,11 @@ const VARIATION_FLAG_COLUMNS: { header: string; variation: string }[] = [
   { header: 'Edition One', variation: 'First Edition' },
 ];
 
+// O app usa BR como código padrão pro português (em vez do PT do LigaPokemon).
+const IMPORT_LANGUAGE_ALIASES: Record<string, string> = {
+  PT: 'BR',
+};
+
 // Nosso app não distingue "Mint" de "Near Mint" - trata como NM.
 const QUALITY_TO_CONDITION: Record<string, CardCondition> = {
   M: CardCondition.NM,
@@ -286,7 +291,8 @@ export async function importCollectionCsv(user: User, csvText: string): Promise<
     const qualidadeRaw = (row[idx.qualidade] || '').trim().toUpperCase();
     const condition = QUALITY_TO_CONDITION[qualidadeRaw] || CardCondition.NM;
     const variationName = flagIdx.find((f) => f.idx >= 0 && (row[f.idx] || '').trim() === '1')?.variation || 'Standard';
-    const languageCode = (row[idx.idioma] || '').trim().toUpperCase();
+    const languageRaw = (row[idx.idioma] || '').trim().toUpperCase();
+    const languageCode = IMPORT_LANGUAGE_ALIASES[languageRaw] || languageRaw;
 
     const current = ownedCards[matchedCard.id] || { cardId: matchedCard.id, isOwned: false, isForTrade: false, variations: {} };
     const normalized = getNormalizedVariations(current.variations);

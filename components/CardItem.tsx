@@ -40,9 +40,9 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
     const normalized = getNormalizedVariations(cardData.variations);
     const nmDetails = normalized['Standard'][CardCondition.NM];
     // Cartas com idioma detalhado (ver +Info) mantêm o total consistente somando/
-    // subtraindo num idioma "não especificado", em vez de mexer direto no agregado.
+    // subtraindo no idioma padrão (Português/BR), em vez de mexer direto no agregado.
     if (nmDetails.languages) {
-      normalized['Standard'][CardCondition.NM] = adjustLanguageQuantity(nmDetails, '', delta);
+      normalized['Standard'][CardCondition.NM] = adjustLanguageQuantity(nmDetails, 'BR', delta);
     } else {
       const currentNM = nmDetails.quantity || 0;
       normalized['Standard'][CardCondition.NM].quantity = Math.max(0, currentNM + delta);

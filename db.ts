@@ -144,6 +144,21 @@ export const setLanguagePrice = (details: ConditionDetails, languageCode: string
   return { ...details, languages };
 };
 
+// Troca o código de idioma de uma linha já registrada (ex.: usuário corrige de BR
+// para PTEN). Se o novo código já existir, funde as quantidades.
+export const renameLanguageEntry = (details: ConditionDetails, oldCode: string, newCode: string): ConditionDetails => {
+  if (oldCode === newCode) return details;
+  const languages: Record<string, LanguageDetails> = { ...(details.languages || {}) };
+  const current = languages[oldCode];
+  if (!current) return details;
+  delete languages[oldCode];
+  const existing = languages[newCode];
+  languages[newCode] = existing
+    ? { quantity: existing.quantity + current.quantity, price: existing.price || current.price }
+    : current;
+  return { ...details, languages };
+};
+
 export const getInitialCardData = (cardId: string): UserCardData => {
   const variations: Record<string, any> = {};
   VARIATION_TYPES.forEach(v => {

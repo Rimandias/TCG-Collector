@@ -30,6 +30,7 @@ export interface TradeItemSelection {
   cardId: string;
   variation: string;
   condition: string;
+  language?: string;
   quantity: number;
 }
 
@@ -86,6 +87,25 @@ export const submitTradeOffer = async (
   });
   if (!response.ok) {
     return { error: await parseErrorMessage(response, 'Não foi possível enviar a oferta.') };
+  }
+  const body = await response.json();
+  return { trade: body.trade };
+};
+
+export type EditItemsTarget = 'requested' | 'offered';
+
+export const editTradeItems = async (
+  tradeId: string,
+  target: EditItemsTarget,
+  items: TradeItemSelection[]
+): Promise<{ trade?: Trade; error?: string }> => {
+  const response = await fetch(`${API_BASE}/trades/${encodeURIComponent(tradeId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify({ action: 'edit_items', target, items }),
+  });
+  if (!response.ok) {
+    return { error: await parseErrorMessage(response, 'Não foi possível editar os itens.') };
   }
   const body = await response.json();
   return { trade: body.trade };

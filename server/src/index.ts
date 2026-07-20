@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { env } from './env.js';
 import { tcgRouter } from './routes/tcg.js';
+import { tcgJpRouter } from './routes/tcgJp.js';
 import { usersRouter } from './routes/users.js';
 import { friendsRouter } from './routes/friends.js';
 import { tradesRouter } from './routes/trades.js';
@@ -36,6 +37,7 @@ app.use(globalLimiter);
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
 app.use('/api/tcg', tcgRouter);
+app.use('/api/tcg-jp', tcgJpRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/friends', friendsRouter);
 app.use('/api/trades', tradesRouter);

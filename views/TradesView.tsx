@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { User, Card, UserCardData, TradeFolder, TradeFolderVariationSelection, Friend, Trade, CardCondition, VARIATION_TYPES } from '../types';
+import { User, Card, UserCardData, TradeFolder, TradeFolderVariationSelection, Friend, Trade, CardCondition, VARIATION_TYPES, LANGUAGE_OPTIONS } from '../types';
 import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getCardEstimatedValue } from '../db';
 import { fetchCardsBySet, fetchSets } from '../api';
 import { createTradeRequest, getMyTrades, TradeItemSelection } from '../trades';
@@ -12,6 +12,8 @@ import TradeItemsList from '../components/TradeItemsList';
 import Pagination, { PAGE_SIZE } from '../components/Pagination';
 
 const TRADE_POLL_INTERVAL_MS = 15000;
+
+const languageLabel = (code?: string) => (!code ? null : (LANGUAGE_OPTIONS.find(l => l.code === code)?.label || code));
 
 function needsMyAction(trade: Trade, myId: string): boolean {
   if (trade.status === 'completed' || trade.status === 'cancelled') return false;
@@ -80,8 +82,13 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     };
   }, []);
 
+  // Fila: quando mais de uma troca precisa da minha ação ao mesmo tempo (ex: dois amigos
+  // pediram cartas da mesma pasta), a mais antiga (quem pediu primeiro) aparece primeiro.
   const actionableTrades = useMemo(
-    () => myTrades.filter((t) => needsMyAction(t, user.id) && !dismissedTradeIds.has(t.id)),
+    () =>
+      myTrades
+        .filter((t) => needsMyAction(t, user.id) && !dismissedTradeIds.has(t.id))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     [myTrades, user.id, dismissedTradeIds]
   );
   const activeTrades = useMemo(
@@ -547,12 +554,12 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   const getFolderCardSelections = (
     folder: TradeFolder,
     cardId: string,
-    entries: { variation: string; condition: CardCondition; quantity: number }[]
+    entries: { variation: string; condition: CardCondition; language?: string; quantity: number }[]
   ): TradeFolderVariationSelection[] => {
     const existing = folder.variationSelections?.[cardId];
     if (existing) return existing;
     if (folder.cardIds.includes(cardId)) {
-      return entries.map(e => ({ variation: e.variation, condition: e.condition, quantity: e.quantity }));
+      return entries.map(e => ({ variation: e.variation, condition: e.condition, language: e.language, quantity: e.quantity }));
     }
     return [];
   };
@@ -1627,19 +1634,30 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
           const renderManageRow = ({ card, data }: { card: Card, data: UserCardData }) => {
             const isInFolder = currentFolder.cardIds.includes(card.id);
             const normalized = getNormalizedVariations(data.variations);
-            const entries: { variation: string; condition: CardCondition; quantity: number }[] = [];
+            const entries: { variation: string; condition: CardCondition; language?: string; quantity: number }[] = [];
             Object.entries(normalized).forEach(([varType, conditionsObj]) => {
               Object.entries(conditionsObj).forEach(([cond, details]) => {
+                const languages = details.languages;
+                if (languages && Object.keys(languages).length > 0) {
+                  Object.entries(languages).forEach(([lang, langDetails]) => {
+                    if (langDetails.quantity > 0) {
+                      entries.push({ variation: varType, condition: cond as CardCondition, language: lang, quantity: langDetails.quantity });
+                    }
+                  });
+                  return;
+                }
                 if (details.quantity > 0) {
                   entries.push({ variation: varType, condition: cond as CardCondition, quantity: details.quantity });
                 }
               });
             });
+            const entryKey = (e: { variation: string; condition: string; language?: string }) => `${e.variation}-${e.condition}-${e.language || ''}`;
             const badges = entries.map(e => {
               const isOnlyOne = e.quantity === 1;
+              const langLabel = languageLabel(e.language);
               return (
                 <span
-                  key={`${e.variation}-${e.condition}`}
+                  key={entryKey(e)}
                   className={`px-1.5 py-0.5 border rounded text-[8px] font-medium flex items-center gap-1 ${
                     isOnlyOne
                       ? 'bg-amber-50 border-amber-200 text-amber-700 font-semibold'
@@ -1647,7 +1665,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                   }`}
                 >
                   {isOnlyOne && <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />}
-                  {e.variation} {e.condition}: {e.quantity}
+                  {e.variation} {e.condition}{langLabel ? ` (${langLabel})` : ''}: {e.quantity}
                   {isOnlyOne && ' (Única!)'}
                 </span>
               );
@@ -1656,20 +1674,20 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
             const isPickerOpen = variationPickerCardId === card.id;
             const selections = getFolderCardSelections(currentFolder, card.id, entries);
 
-            const toggleEntry = (entry: { variation: string; condition: CardCondition; quantity: number }) => {
-              const idx = selections.findIndex(s => s.variation === entry.variation && s.condition === entry.condition);
+            const toggleEntry = (entry: { variation: string; condition: CardCondition; language?: string; quantity: number }) => {
+              const idx = selections.findIndex(s => s.variation === entry.variation && s.condition === entry.condition && (s.language || '') === (entry.language || ''));
               const updated = idx >= 0
                 ? selections.filter((_, i) => i !== idx)
-                : [...selections, { variation: entry.variation, condition: entry.condition, quantity: entry.quantity }];
+                : [...selections, { variation: entry.variation, condition: entry.condition, language: entry.language, quantity: entry.quantity }];
               handleSetVariationSelections(currentFolder.id, card.id, updated);
             };
 
-            const updateEntryQuantity = (entry: { variation: string; condition: CardCondition; quantity: number }, quantity: number) => {
+            const updateEntryQuantity = (entry: { variation: string; condition: CardCondition; language?: string; quantity: number }, quantity: number) => {
               const capped = Math.max(1, Math.min(quantity, entry.quantity));
-              const idx = selections.findIndex(s => s.variation === entry.variation && s.condition === entry.condition);
+              const idx = selections.findIndex(s => s.variation === entry.variation && s.condition === entry.condition && (s.language || '') === (entry.language || ''));
               const updated = idx >= 0
                 ? selections.map((s, i) => i === idx ? { ...s, quantity: capped } : s)
-                : [...selections, { variation: entry.variation, condition: entry.condition, quantity: capped }];
+                : [...selections, { variation: entry.variation, condition: entry.condition, language: entry.language, quantity: capped }];
               handleSetVariationSelections(currentFolder.id, card.id, updated);
             };
 
@@ -1709,10 +1727,11 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                   <div className="px-2.5 pb-2.5 space-y-1.5 border-t border-slate-100/70 pt-2 animate-in slide-in-from-top-1 duration-150">
                     <p className="text-[8px] text-slate-400 uppercase tracking-widest">Selecione variação/condição e quantidade:</p>
                     {entries.map(entry => {
-                      const sel = selections.find(s => s.variation === entry.variation && s.condition === entry.condition);
+                      const sel = selections.find(s => s.variation === entry.variation && s.condition === entry.condition && (s.language || '') === (entry.language || ''));
                       const checked = !!sel;
+                      const langLabel = languageLabel(entry.language);
                       return (
-                        <div key={`${entry.variation}-${entry.condition}`} className="flex items-center gap-2 bg-white border border-slate-100 rounded-lg p-1.5">
+                        <div key={entryKey(entry)} className="flex items-center gap-2 bg-white border border-slate-100 rounded-lg p-1.5">
                           <input
                             type="checkbox"
                             checked={checked}
@@ -1720,7 +1739,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                             className="w-3.5 h-3.5 text-[#646B99] border-slate-300 rounded focus:ring-[#646B99] flex-shrink-0"
                           />
                           <span className="text-[10px] text-slate-600 flex-1 min-w-0 truncate">
-                            {entry.variation} {entry.condition} <span className="text-slate-300">(possui {entry.quantity})</span>
+                            {entry.variation} {entry.condition}{langLabel ? ` · ${langLabel}` : ''} <span className="text-slate-300">(possui {entry.quantity})</span>
                           </span>
                           {checked && (
                             <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg overflow-hidden h-6 flex-shrink-0">

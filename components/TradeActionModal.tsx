@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Trade, TradeItem } from '../types';
 import { fetchCardsBySet } from '../api';
-import { patchTrade, submitTradeOffer, TradeItemSelection } from '../trades';
+import { editTradeItems, EditItemsTarget, patchTrade, submitTradeOffer, TradeItemSelection } from '../trades';
 import FriendFolderBrowser from './FriendFolderBrowser';
 import TradeItemsList from './TradeItemsList';
 
@@ -15,9 +15,12 @@ interface TradeActionModalProps {
   onStartNewTrade?: () => void;
 }
 
+// Cartas marcadas indisponíveis (available === false, ver TradeItemView no backend) não
+// contam nem na quantidade nem no valor - já saíram da negociação de fato.
 const describeItems = (items: TradeItem[]) => {
-  const total = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
-  return { count: items.reduce((sum, i) => sum + i.quantity, 0), total };
+  const usable = items.filter((i) => i.available !== false);
+  const total = usable.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
+  return { count: usable.reduce((sum, i) => sum + i.quantity, 0), total };
 };
 
 const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, myOwnedCardIds, myWishlist, onClose, onChanged, onStartNewTrade }) => {
@@ -84,6 +87,27 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, my
     setBusy(true);
     setError(null);
     const { trade: updated, error: err } = await submitTradeOffer(trade.id, items);
+    setBusy(false);
+    if (err) {
+      setError(err);
+      return;
+    }
+    if (updated) onChanged(updated);
+  };
+
+  // Remove uma carta da negociação (ex: o usuário viu a condição real da carta física
+  // depois de selecioná-la sem estar diante dela). Só quem escolheu aquele lado pode editá-lo:
+  // requested = quem pediu a troca (initiator); offered = quem escolheu as cartas do amigo (recipient).
+  const handleRemoveItem = async (target: EditItemsTarget, index: number) => {
+    const currentItems = target === 'requested' ? trade.requestedItems : trade.offeredItems;
+    const nextItems = currentItems.filter((_, i) => i !== index);
+    setBusy(true);
+    setError(null);
+    const { trade: updated, error: err } = await editTradeItems(
+      trade.id,
+      target,
+      nextItems.map((i) => ({ cardId: i.cardId, variation: i.variation, condition: i.condition, language: i.language, quantity: i.quantity }))
+    );
     setBusy(false);
     if (err) {
       setError(err);
@@ -205,7 +229,12 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, my
               ? `Você paga R$${requested.total.toFixed(2)} para ${counterpartName} e recebe ${requested.count} carta(s).`
               : `Você recebe R$${requested.total.toFixed(2)} de ${counterpartName} e entrega ${requested.count} carta(s).`}
           </p>
-          <TradeItemsList items={trade.requestedItems} cardsById={cardsById} />
+          <TradeItemsList
+            items={trade.requestedItems}
+            cardsById={cardsById}
+            onRemoveItem={isInitiator ? (idx) => handleRemoveItem('requested', idx) : undefined}
+            removeDisabled={busy}
+          />
           <div className="mb-3" />
           {myConfirmed ? (
             <p className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded-lg p-3 mb-4">
@@ -262,13 +291,23 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, my
           {trade.requestedItems.length > 0 && (
             <div className="mb-3">
               <p className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-1.5">Cartas de {trade.recipientUsername}</p>
-              <TradeItemsList items={trade.requestedItems} cardsById={cardsById} />
+              <TradeItemsList
+                items={trade.requestedItems}
+                cardsById={cardsById}
+                onRemoveItem={isInitiator ? (idx) => handleRemoveItem('requested', idx) : undefined}
+                removeDisabled={busy}
+              />
             </div>
           )}
           {trade.offeredItems.length > 0 && (
             <div className="mb-3">
               <p className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-1.5">Cartas de {trade.initiatorUsername}</p>
-              <TradeItemsList items={trade.offeredItems} cardsById={cardsById} />
+              <TradeItemsList
+                items={trade.offeredItems}
+                cardsById={cardsById}
+                onRemoveItem={isRecipient ? (idx) => handleRemoveItem('offered', idx) : undefined}
+                removeDisabled={busy}
+              />
             </div>
           )}
 
@@ -313,9 +352,16 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, my
       <div className={wrapperClass}>
         <div className={cardClass}>
           <h3 className="text-sm font-semibold text-slate-800 mb-1">Aguardando resposta</h3>
-          <p className="text-[10px] text-slate-400 mb-4">
+          <p className="text-[10px] text-slate-400 mb-3">
             Seu pedido de {requested.count} carta(s) (R${requested.total.toFixed(2)}) para {counterpartName} ainda não foi respondido.
           </p>
+          <TradeItemsList
+            items={trade.requestedItems}
+            cardsById={cardsById}
+            onRemoveItem={(idx) => handleRemoveItem('requested', idx)}
+            removeDisabled={busy}
+          />
+          <div className="mb-3" />
           {error && <p className="text-red-500 text-[10px] mb-3">{error}</p>}
           <div className="flex gap-3">
             <button onClick={onClose} className="flex-1 py-2 bg-slate-50 text-slate-400 text-xs rounded-lg hover:bg-slate-100 transition-colors">

@@ -3,6 +3,9 @@ import { supabase } from './supabase.js';
 export interface VariationEntry {
   variation: string;
   condition: string;
+  // Ausente = carta sem idioma detalhado (comportamento legado); presente = uma
+  // combinação variação/condição/idioma específica (ver ConditionDetails.languages).
+  language?: string;
   quantity: number;
   price: number;
 }
@@ -11,6 +14,7 @@ export interface TradeItem {
   cardId: string;
   variation: string;
   condition: string;
+  language?: string;
   quantity: number;
   unitPrice: number;
 }
@@ -57,6 +61,18 @@ function entriesFromVariations(variations: any): VariationEntry[] {
   for (const [variation, conditions] of Object.entries<any>(variations || {})) {
     if (!conditions || typeof conditions !== 'object') continue;
     for (const [condition, details] of Object.entries<any>(conditions)) {
+      const languages = details?.languages;
+      if (languages && typeof languages === 'object' && Object.keys(languages).length > 0) {
+        // Condição detalhada por idioma (ver +Info): uma entrada por idioma, cada
+        // uma com sua própria quantidade/preço - não uma entrada agregada só.
+        for (const [language, langDetails] of Object.entries<any>(languages)) {
+          const quantity = typeof langDetails?.quantity === 'number' ? langDetails.quantity : 0;
+          if (quantity > 0) {
+            entries.push({ variation, condition, language, quantity, price: parsePrice(langDetails?.price) });
+          }
+        }
+        continue;
+      }
       const quantity = typeof details?.quantity === 'number' ? details.quantity : 0;
       if (quantity > 0) {
         entries.push({ variation, condition, quantity, price: parsePrice(details?.price) });
@@ -89,11 +105,16 @@ export interface VisibleFolder {
 // pasta (quando houver seleção configurada), limitando a quantidade exposta à quantidade
 // realmente possuída. Sem seleção configurada para o cardId, expõe todas as combinações
 // (comportamento anterior, mantido por compatibilidade).
-function applySelection(entries: VariationEntry[], selections?: { variation: string; condition: string; quantity: number }[]): VariationEntry[] {
+function applySelection(
+  entries: VariationEntry[],
+  selections?: { variation: string; condition: string; language?: string; quantity: number }[]
+): VariationEntry[] {
   if (!selections || selections.length === 0) return entries;
   const result: VariationEntry[] = [];
   for (const sel of selections) {
-    const owned = entries.find((e) => e.variation === sel.variation && e.condition === sel.condition);
+    const owned = entries.find(
+      (e) => e.variation === sel.variation && e.condition === sel.condition && (e.language || '') === (sel.language || '')
+    );
     if (!owned) continue;
     const quantity = Math.min(sel.quantity, owned.quantity);
     if (quantity > 0) result.push({ ...owned, quantity });
@@ -214,6 +235,32 @@ export function tradeItemsValue(items: TradeItem[]): number {
   return items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
 }
 
+export interface TradeItemView extends TradeItem {
+  // false quando a carta não está mais disponível na quantidade negociada (ex: já foi
+  // consumida por outra troca concluída enquanto esta ainda estava em andamento) - o
+  // item some do cálculo de valor e o pop-up avisa o usuário que ela saiu da negociação.
+  available: boolean;
+}
+
+// Confere, para cada item de uma troca, se o dono ainda possui a quantidade negociada
+// daquela combinação exata de variação/condição/idioma.
+export async function computeItemsAvailability(ownerId: string, items: TradeItem[]): Promise<TradeItemView[]> {
+  const entriesByCard = new Map<string, VariationEntry[]>();
+  const results: TradeItemView[] = [];
+  for (const item of items) {
+    let entries = entriesByCard.get(item.cardId);
+    if (!entries) {
+      entries = await getVariationEntries(ownerId, item.cardId);
+      entriesByCard.set(item.cardId, entries);
+    }
+    const match = entries.find(
+      (e) => e.variation === item.variation && e.condition === item.condition && (e.language || '') === (item.language || '')
+    );
+    results.push({ ...item, available: !!match && match.quantity >= item.quantity });
+  }
+  return results;
+}
+
 function totalQuantity(variations: any): number {
   let total = 0;
   for (const conditions of Object.values<any>(variations || {})) {
@@ -248,8 +295,51 @@ async function applyCardVariations(userId: string, cardId: string, variations: a
   if (error) throw error;
 }
 
-// Move um conjunto de itens (carta/variação/condição/quantidade) de um usuário para outro,
-// preservando a qualidade e o preço do dono original quando o destinatário ainda não tinha a carta.
+// Quantidade realmente disponível de uma condição, considerando o idioma específico
+// do item (quando informado) ou o agregado legado (quando a condição não tem idiomas).
+function availableQuantity(details: any, language?: string): number {
+  if (language) return typeof details?.languages?.[language]?.quantity === 'number' ? details.languages[language].quantity : 0;
+  if (details?.languages) return 0; // condição com idiomas exige item.language definido
+  return typeof details?.quantity === 'number' ? details.quantity : 0;
+}
+
+// Remove `amount` unidades de uma condição (de um idioma específico, se informado) e
+// retorna o novo objeto da condição, ou undefined se a condição deve ser removida por inteiro.
+function debitCondition(details: any, language: string | undefined, amount: number): any {
+  if (language) {
+    const languages = { ...(details?.languages || {}) };
+    const current = languages[language] || { quantity: 0, price: '' };
+    const nextQty = (current.quantity || 0) - amount;
+    if (nextQty > 0) {
+      languages[language] = { ...current, quantity: nextQty };
+    } else {
+      delete languages[language];
+    }
+    if (Object.keys(languages).length === 0) return undefined;
+    const quantity = Object.values<any>(languages).reduce((sum, l) => sum + (l.quantity || 0), 0);
+    return { ...details, quantity, languages };
+  }
+  const remaining = (details?.quantity || 0) - amount;
+  return remaining > 0 ? { ...details, quantity: remaining } : undefined;
+}
+
+// Soma `amount` unidades a uma condição (de um idioma específico, se informado),
+// preservando o preço do dono original quando o destinatário ainda não tinha a carta.
+function creditCondition(details: any, language: string | undefined, amount: number, unitPrice: number): any {
+  if (language) {
+    const languages = { ...(details?.languages || {}) };
+    const current = languages[language] || { quantity: 0, price: '' };
+    languages[language] = { quantity: (current.quantity || 0) + amount, price: current.price || String(unitPrice) };
+    const quantity = Object.values<any>(languages).reduce((sum, l) => sum + (l.quantity || 0), 0);
+    return { quantity, price: '', languages };
+  }
+  const currentQty = typeof details?.quantity === 'number' ? details.quantity : 0;
+  return currentQty > 0 ? { ...details, quantity: currentQty + amount } : { quantity: amount, price: String(unitPrice) };
+}
+
+// Move um conjunto de itens (carta/variação/condição/idioma/quantidade) de um usuário
+// para outro, preservando a qualidade e o preço do dono original quando o destinatário
+// ainda não tinha a carta.
 async function transferItems(fromUserId: string, toUserId: string, items: TradeItem[]): Promise<void> {
   for (const item of items) {
     const { data: fromRow, error: fromErr } = await supabase
@@ -262,7 +352,7 @@ async function transferItems(fromUserId: string, toUserId: string, items: TradeI
 
     const fromVariations = fromRow?.variations || {};
     const fromDetails = fromVariations?.[item.variation]?.[item.condition];
-    const availableQty = typeof fromDetails?.quantity === 'number' ? fromDetails.quantity : 0;
+    const availableQty = availableQuantity(fromDetails, item.language);
 
     if (availableQty < item.quantity) {
       throw new Error(
@@ -270,11 +360,11 @@ async function transferItems(fromUserId: string, toUserId: string, items: TradeI
       );
     }
 
-    const remaining = availableQty - item.quantity;
-    if (remaining > 0) {
-      fromVariations[item.variation][item.condition] = { ...fromDetails, quantity: remaining };
-    } else {
+    const nextFromDetails = debitCondition(fromDetails, item.language, item.quantity);
+    if (nextFromDetails === undefined) {
       delete fromVariations[item.variation][item.condition];
+    } else {
+      fromVariations[item.variation][item.condition] = nextFromDetails;
     }
     await applyCardVariations(fromUserId, item.cardId, fromVariations);
 
@@ -289,18 +379,21 @@ async function transferItems(fromUserId: string, toUserId: string, items: TradeI
     const toVariations = toRow?.variations || {};
     if (!toVariations[item.variation]) toVariations[item.variation] = {};
     const existingDetails = toVariations[item.variation][item.condition];
-    const existingQty = typeof existingDetails?.quantity === 'number' ? existingDetails.quantity : 0;
-
-    toVariations[item.variation][item.condition] =
-      existingQty > 0
-        ? { ...existingDetails, quantity: existingQty + item.quantity }
-        : { quantity: item.quantity, price: String(item.unitPrice) };
+    toVariations[item.variation][item.condition] = creditCondition(existingDetails, item.language, item.quantity, item.unitPrice);
 
     await applyCardVariations(toUserId, item.cardId, toVariations);
   }
 }
 
+// Cartas que já não estão mais disponíveis (ex: consumidas por outra troca concluída
+// enquanto esta ainda estava em andamento) são retiradas silenciosamente da troca em vez
+// de travar a conclusão inteira - o pop-up já avisou o usuário disso antes de ele confirmar.
 export async function finalizeTrade(trade: Trade): Promise<void> {
+  const requestedAvailability = await computeItemsAvailability(trade.recipientId, trade.requestedItems);
+  const offeredAvailability = await computeItemsAvailability(trade.initiatorId, trade.offeredItems);
+  trade.requestedItems = requestedAvailability.filter((i) => i.available).map(({ available, ...item }) => item);
+  trade.offeredItems = offeredAvailability.filter((i) => i.available).map(({ available, ...item }) => item);
+
   await transferItems(trade.recipientId, trade.initiatorId, trade.requestedItems);
   if (trade.offeredItems.length > 0) {
     await transferItems(trade.initiatorId, trade.recipientId, trade.offeredItems);
