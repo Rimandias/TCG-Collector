@@ -16,7 +16,11 @@ app.disable('x-powered-by');
 app.use(helmet());
 app.use(
   cors({
-    origin: env.clientOrigin,
+    origin: (origin, callback) => {
+      // Sem Origin (ex: curl, apps mobile) ou origem na lista permitida (ver env.ts)
+      if (!origin || env.clientOrigins.includes(origin)) return callback(null, true);
+      callback(new Error('Origem não permitida por CORS.'));
+    },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   })
 );
