@@ -18,9 +18,37 @@ export const VARIATION_TYPES = [
   'First Edition'
 ];
 
+// Mesmos códigos de idioma usados pela planilha de importação (LigaPokemon).
+export const LANGUAGE_OPTIONS: { code: string; label: string }[] = [
+  { code: 'PT', label: 'Português' },
+  { code: 'EN', label: 'Inglês' },
+  { code: 'JP', label: 'Japonês' },
+  { code: 'DE', label: 'Alemão' },
+  { code: 'ES', label: 'Espanhol' },
+  { code: 'FR', label: 'Francês' },
+  { code: 'IT', label: 'Italiano' },
+  { code: 'PL', label: 'Polonês' },
+  { code: 'RU', label: 'Russo' },
+  { code: 'KO', label: 'Coreano' },
+  { code: 'ID', label: 'Indonésio' },
+  { code: 'TH', label: 'Tailandês' },
+  { code: 'TW', label: 'Chinês (Taiwan)' },
+  { code: 'TK', label: 'Turco' },
+  { code: 'PTEN', label: 'Português/Inglês' },
+];
+
+export interface LanguageDetails {
+  quantity: number;
+  price?: string;
+}
+
 export interface ConditionDetails {
   quantity: number;
   price?: string;
+  // Detalhamento opcional por idioma de impressão. Quando presente, quantity/price
+  // acima são o agregado (soma) de todos os idiomas - o resto do app (trocas,
+  // estatísticas, pasta de amigos) continua lendo só quantity/price normalmente.
+  languages?: Record<string, LanguageDetails>;
 }
 
 export interface Card {
