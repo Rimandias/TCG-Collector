@@ -7,7 +7,6 @@ import CardViewModeSelector from '../components/CardViewModeSelector';
 import CardModal from '../components/CardModal';
 import { getCardTotalQuantity, getCompleteCardNumber, getCardEstimatedValue, getNormalizedVariations } from '../db';
 import { getInitialCardViewMode, saveCardViewMode, getCardGridClassName } from '../viewMode';
-import HomeViewJp from './HomeViewJp';
 
 interface HomeViewProps {
   user: User;
@@ -40,7 +39,6 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [globalSearchResults, setGlobalSearchResults] = useState<Card[]>([]);
   const [searchingGlobal, setSearchingGlobal] = useState(false);
   const [viewMode, setViewMode] = useState<CardViewMode>(getInitialCardViewMode);
-  const [catalogMode, setCatalogMode] = useState<'ocidental' | 'oriental'>('ocidental');
 
   useEffect(() => {
     saveCardViewMode(viewMode);
@@ -274,10 +272,6 @@ const HomeView: React.FC<HomeViewProps> = ({
       progress: (ownedCardsInSet.length / setCards.length) * 100
     };
   }, [selectedSet, setCards, user.ownedCards]);
-
-  if (catalogMode === 'oriental') {
-    return <HomeViewJp user={user} onUpdateUser={onUpdateUser} onBackToWestern={() => setCatalogMode('ocidental')} />;
-  }
 
   if (loading) {
     return (
@@ -597,21 +591,6 @@ const HomeView: React.FC<HomeViewProps> = ({
       ) : (
         // Se não houver pesquisa, mostra a seleção normal de Eras
         <>
-          <div className="w-full flex bg-slate-50 p-1 rounded-xl border border-slate-100 mb-6">
-            <button
-              onClick={() => setCatalogMode('ocidental')}
-              className={`flex-1 py-2 rounded-lg text-[10px] font-semibold uppercase tracking-widest transition-all ${catalogMode === 'ocidental' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400'}`}
-            >
-              Ocidental
-            </button>
-            <button
-              onClick={() => setCatalogMode('oriental')}
-              className={`flex-1 py-2 rounded-lg text-[10px] font-semibold uppercase tracking-widest transition-all ${(catalogMode as string) === 'oriental' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400'}`}
-            >
-              Oriental
-            </button>
-          </div>
-
           <div className="text-center mt-2">
               <p className="text-[10px] text-slate-300 uppercase tracking-[0.3em] mb-4">Selecione a Era</p>
           </div>
