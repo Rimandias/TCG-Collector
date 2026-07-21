@@ -1,7 +1,7 @@
 
 import React, { useRef, useState } from 'react';
 import { User } from '../types';
-import { addFriendByCode, removeFriend as removeFriendRequest, changePassword, deleteAccount } from '../auth';
+import { addFriendByCode, removeFriend as removeFriendRequest, changePassword, deleteAccount, persistUser } from '../auth';
 import { importCollectionCsv, ImportSummary } from '../csvImport';
 
 interface SettingsViewProps {
@@ -57,6 +57,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
   const [importError, setImportError] = useState<string | null>(null);
   const [csvSummary, setCsvSummary] = useState<ImportSummary | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [savingImport, setSavingImport] = useState(false);
 
   const handleChangeAvatar = () => {
     const newAvatar = `https://picsum.photos/seed/${Math.random()}/200`;
@@ -167,9 +168,20 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
     }
   };
 
-  const handleConfirmImport = () => {
-    if (csvSummary) {
-      onUpdateUser(csvSummary.updatedUser);
+  // Salva direto no servidor (sem passar pelo debounce de 500ms do onUpdateUser normal) e
+  // só fecha o modal depois que o servidor confirmar - um import grande é justamente o tipo
+  // de ação em que o usuário tende a atualizar a página logo em seguida pra conferir, o que
+  // cancelava o salvamento pendente e fazia as cartas importadas "sumirem".
+  const handleConfirmImport = async () => {
+    if (!csvSummary) return;
+    setSavingImport(true);
+    setImportError(null);
+    onUpdateUser(csvSummary.updatedUser);
+    const saved = await persistUser(csvSummary.updatedUser);
+    setSavingImport(false);
+    if (!saved) {
+      setImportError('Não foi possível salvar a importação no servidor. Tente novamente antes de sair ou atualizar a página.');
+      return;
     }
     setShowImportModal(false);
     setCsvSummary(null);
@@ -491,19 +503,24 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
               </div>
             )}
 
+            {importError && (
+              <p className="text-[10px] text-red-500 bg-red-50 border border-red-100 rounded-lg p-2 mb-3 flex-shrink-0">{importError}</p>
+            )}
+
             <div className="flex gap-3 mt-auto pt-2 flex-shrink-0">
               <button
                 onClick={() => { setShowImportModal(false); setCsvSummary(null); }}
-                className="flex-1 py-2 bg-slate-50 text-slate-400 text-xs rounded-lg hover:bg-slate-100 transition-colors"
+                disabled={savingImport}
+                className="flex-1 py-2 bg-slate-50 text-slate-400 text-xs rounded-lg hover:bg-slate-100 transition-colors disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleConfirmImport}
-                disabled={csvSummary.importedCount === 0}
+                disabled={csvSummary.importedCount === 0 || savingImport}
                 className="flex-1 py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors disabled:opacity-50"
               >
-                Aplicar {csvSummary.importedCount} carta(s)
+                {savingImport ? 'Salvando...' : `Aplicar ${csvSummary.importedCount} carta(s)`}
               </button>
             </div>
           </div>
