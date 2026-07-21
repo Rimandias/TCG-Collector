@@ -199,6 +199,20 @@ tcgRouter.get(
       for (const [variation, conditions] of Object.entries<any>(variations)) {
         if (!conditions || typeof conditions !== 'object') continue;
         for (const [condition, details] of Object.entries<any>(conditions)) {
+          const languages = details?.languages;
+          if (languages && typeof languages === 'object' && Object.keys(languages).length > 0) {
+            // Preço médio da comunidade não distingue idioma/nacionalidade da carta -
+            // cada idioma informado entra na mesma estatística de variação/condição.
+            for (const lang of Object.values<any>(languages)) {
+              const quantity = typeof lang?.quantity === 'number' ? lang.quantity : 0;
+              const price = parseFloat(lang?.price);
+              if (quantity <= 0 || !isFinite(price) || price <= 0) continue;
+              buckets[variation] ??= {};
+              buckets[variation][condition] ??= [];
+              buckets[variation][condition].push(price);
+            }
+            continue;
+          }
           const quantity = typeof details?.quantity === 'number' ? details.quantity : 0;
           const price = parseFloat(details?.price);
           if (quantity <= 0 || !isFinite(price) || price <= 0) continue;

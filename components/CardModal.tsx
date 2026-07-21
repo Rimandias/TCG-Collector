@@ -32,17 +32,9 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
     };
   }, [card.id]);
 
-  const communityAverage = useMemo(() => {
-    let sum = 0;
-    let count = 0;
-    for (const conditions of Object.values(priceStats)) {
-      for (const stat of Object.values(conditions)) {
-        sum += stat.avg * stat.count;
-        count += stat.count;
-      }
-    }
-    return count > 0 ? { avg: sum / count, count } : null;
-  }, [priceStats]);
+  // Preço médio da comunidade é sempre por variação/condição (D, HP, MP, SP, NM, Foil...) -
+  // misturar tudo numa média só não faz sentido, já que o valor varia muito por condição.
+  const hasPriceStats = Object.keys(priceStats).length > 0;
 
   const cardData = user.ownedCards[card.id] || {
     isOwned: false,
@@ -413,26 +405,23 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
               </div>
 
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 text-left">
-                <p className="text-slate-400 text-[10px] mb-1.5 uppercase tracking-[0.2em] font-bold text-center">Preço da Comunidade</p>
-                {communityAverage ? (
-                  <>
-                    <div className="text-3xl font-extrabold text-[#646B99] text-center">
-                      R${communityAverage.avg.toFixed(2)}
-                    </div>
-                    <p className="text-[9px] text-slate-300 mt-1 mb-4 uppercase tracking-wider text-center">
-                      Média de {communityAverage.count} preço(s) informado(s) por usuários
-                    </p>
-                    <div className="space-y-1.5">
-                      {Object.entries(priceStats).map(([variation, conditions]) =>
-                        Object.entries(conditions).map(([condition, stat]) => (
-                          <div key={`${variation}-${condition}`} className="flex items-center justify-between text-[10px] text-slate-400 bg-white border border-slate-100 rounded-lg px-3 py-1.5">
-                            <span className="font-medium text-slate-500">{variation} {condition}</span>
-                            <span>R${stat.min.toFixed(2)} – R${stat.max.toFixed(2)}</span>
+                <p className="text-slate-400 text-[10px] mb-3 uppercase tracking-[0.2em] font-bold text-center">Preço da Comunidade</p>
+                {hasPriceStats ? (
+                  <div className="space-y-1.5">
+                    {Object.entries(priceStats).map(([variation, conditions]) =>
+                      Object.entries(conditions).map(([condition, stat]) => (
+                        <div key={`${variation}-${condition}`} className="flex items-center justify-between bg-white border border-slate-100 rounded-xl px-3 py-2">
+                          <div>
+                            <p className="text-[11px] font-semibold text-slate-600">{variation} {condition}</p>
+                            <p className="text-[9px] text-slate-300 uppercase tracking-wide">
+                              {stat.count} preço(s) · R${stat.min.toFixed(2)} – R${stat.max.toFixed(2)}
+                            </p>
                           </div>
-                        ))
-                      )}
-                    </div>
-                  </>
+                          <span className="text-base font-bold text-[#646B99] flex-shrink-0">R${stat.avg.toFixed(2)}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 ) : (
                   <p className="text-slate-400 text-xs text-center py-2">Nenhum preço informado por usuários ainda.</p>
                 )}
