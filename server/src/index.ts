@@ -24,7 +24,10 @@ app.use(
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   })
 );
-app.use(express.json({ limit: '1mb' }));
+// Coleções grandes (muitas cartas, cada uma com a matriz completa de variação/condição/
+// idioma) podem passar de 1MB só na estrutura de dados, especialmente logo após um import
+// de CSV grande - 1mb já rejeitava uma coleção real de ~800 cartas.
+app.use(express.json({ limit: '10mb' }));
 
 // Alto porque esse limitador roda ANTES dos limitadores específicos de cada rota
 // (ex: tcgLimiter) - se ficar mais baixo que eles, vira o teto efetivo e anula o
