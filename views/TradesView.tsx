@@ -231,6 +231,9 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   const [folderViewMode, setFolderViewMode] = useState<'cards' | 'collections'>('cards');
   const [selectedFolderSeries, setSelectedFolderSeries] = useState<string | null>(null);
   const [selectedFolderSetId, setSelectedFolderSetId] = useState<string | null>(null);
+  // Lista (padrão, mantido) vs grade - só afeta como as cartas dentro de uma pasta são exibidas,
+  // não a lógica de quais cartas aparecem.
+  const [folderCardsLayout, setFolderCardsLayout] = useState<'list' | 'grid'>('list');
 
   // Search/Filters states inside folders
   const [searchQuery, setSearchQuery] = useState('');
@@ -930,6 +933,39 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
               return null;
             }
 
+            const handleRemoveTile = (cardId: string) => {
+              if (isWishlist) {
+                onUpdateUser({ ...user, wishlist: (user.wishlist || []).filter(id => id !== cardId) });
+              } else if (isDuplicates) {
+                handleRemoveFromTrade(cardId);
+              } else if (currentFolder) {
+                handleRemoveFromFolder(currentFolder.id, cardId);
+              }
+            };
+
+            // Visualização compacta em grade - alternativa à lista detalhada de sempre, sem
+            // substituí-la. 3 colunas no mobile, 6 a partir de telas grandes (lg).
+            const renderGridTile = ({ card, data }: { card: Card; data: UserCardData }) => (
+              <div key={card.id} className="relative bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all p-1.5 flex flex-col items-center">
+                <button
+                  onClick={() => handleRemoveTile(card.id)}
+                  title={isWishlist ? "Remover da lista de desejos" : isDuplicates ? "Remover de todas as trocas" : "Remover desta pasta"}
+                  className="absolute top-1 right-1 z-10 p-1 bg-white/95 text-slate-300 hover:text-red-500 border border-slate-100 rounded-lg shadow-sm"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+                <img
+                  src={card.imageUrl}
+                  onClick={() => setEditingCard(card)}
+                  className="w-full aspect-[5/7] rounded-lg object-contain bg-slate-50/50 border border-slate-100/40 cursor-pointer hover:scale-105 transition-transform"
+                />
+                <h4 onClick={() => setEditingCard(card)} className="text-slate-700 font-semibold truncate w-full text-center text-[9px] mt-1 cursor-pointer hover:text-[#646B99] transition-colors">
+                  {card.name}
+                </h4>
+                <p className="text-[8px] text-emerald-500 font-semibold">R${getCardEstimatedValue(data.variations).toFixed(2)}</p>
+              </div>
+            );
+
             return (
               <div className="space-y-4 animate-in fade-in duration-300">
                 {/* Navigation Header */}
@@ -995,13 +1031,31 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                       />
                     </div>
                     {(folderViewMode === 'cards' || selectedFolderSetId !== null) && (
-                      <button
-                        onClick={() => setShowFolderFilters(!showFolderFilters)}
-                        className={`px-3 py-2 border rounded-xl flex items-center gap-1.5 text-xs font-semibold transition-all ${showFolderFilters ? 'bg-[#646B99] text-white border-[#646B99]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-                        Filtros
-                      </button>
+                      <>
+                        <div className="flex bg-white border border-slate-200 rounded-xl overflow-hidden flex-shrink-0">
+                          <button
+                            onClick={() => setFolderCardsLayout('list')}
+                            title="Ver em lista"
+                            className={`px-2.5 py-2 flex items-center justify-center transition-all ${folderCardsLayout === 'list' ? 'bg-[#646B99] text-white' : 'text-slate-400 hover:text-slate-600'}`}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                          </button>
+                          <button
+                            onClick={() => setFolderCardsLayout('grid')}
+                            title="Ver em grade"
+                            className={`px-2.5 py-2 flex items-center justify-center border-l border-slate-200 transition-all ${folderCardsLayout === 'grid' ? 'bg-[#646B99] text-white' : 'text-slate-400 hover:text-slate-600'}`}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => setShowFolderFilters(!showFolderFilters)}
+                          className={`px-3 py-2 border rounded-xl flex items-center gap-1.5 text-xs font-semibold transition-all flex-shrink-0 ${showFolderFilters ? 'bg-[#646B99] text-white border-[#646B99]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                          Filtros
+                        </button>
+                      </>
                     )}
                   </div>
 
@@ -1117,6 +1171,13 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                       <p className="text-[10px] text-slate-300 mt-1 uppercase tracking-wider">
                         Tente ajustar os filtros ou a pesquisa
                       </p>
+                    </div>
+                  ) : folderCardsLayout === 'grid' ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-3 lg:grid-cols-6 gap-2">
+                        {paginatedFolderCards.map(renderGridTile)}
+                      </div>
+                      <Pagination page={folderCardsPage} totalPages={Math.max(1, Math.ceil(filteredFolderCards.length / PAGE_SIZE))} onPageChange={setFolderCardsPage} />
                     </div>
                   ) : (
                     <div className="grid gap-3">
@@ -1249,11 +1310,18 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                               <p className="text-slate-400 font-medium text-xs uppercase tracking-widest">Nenhuma carta nesta coleção</p>
                               <p className="text-[10px] text-slate-300 mt-1 uppercase tracking-wider">corresponde aos filtros ativos</p>
                             </div>
+                          ) : folderCardsLayout === 'grid' ? (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-3 lg:grid-cols-6 gap-2">
+                                {setCardsInFolder.slice((setCardsPage - 1) * PAGE_SIZE, setCardsPage * PAGE_SIZE).map(renderGridTile)}
+                              </div>
+                              <Pagination page={setCardsPage} totalPages={Math.max(1, Math.ceil(setCardsInFolder.length / PAGE_SIZE))} onPageChange={setSetCardsPage} />
+                            </div>
                           ) : (
                             <div className="grid gap-3">
                               {setCardsInFolder.slice((setCardsPage - 1) * PAGE_SIZE, setCardsPage * PAGE_SIZE).map(({ card, data }) => (
                                 <div key={card.id} className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
-                                  <img 
+                                  <img
                                     src={card.imageUrl} 
                                     onClick={() => setEditingCard(card)}
                                     className="w-14 h-20 rounded-lg object-contain bg-slate-50/50 border border-slate-100/40 cursor-pointer hover:scale-105 transition-transform" 
@@ -1736,7 +1804,11 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                 </span>
               );
             });
-            const hasMultipleCombos = entries.length > 1;
+            // Precisa do seletor não só quando há mais de uma combinação variação/condição/idioma,
+            // mas também quando a única combinação existente tem mais de 1 cópia - senão não tem
+            // como escolher quantas das cópias entram na pasta (o toggle simples sempre inclui
+            // "todas", ver getFolderCardSelections).
+            const needsPicker = entries.length > 1 || (entries.length === 1 && entries[0].quantity > 1);
             const isPickerOpen = variationPickerCardId === card.id;
             const selections = getFolderCardSelections(currentFolder, card.id, entries);
 
@@ -1764,7 +1836,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
               >
                 <div
                   onClick={() => {
-                    if (hasMultipleCombos) {
+                    if (needsPicker) {
                       setVariationPickerCardId(prev => prev === card.id ? null : card.id);
                     } else {
                       handleToggleCardInFolder(currentFolder.id, card.id);
@@ -1784,12 +1856,12 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                     <p className="text-[9px] text-slate-400 truncate">{card.rarity} • #{card.number}</p>
                     {badges.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{badges}</div>}
                   </div>
-                  {hasMultipleCombos && (
+                  {needsPicker && (
                     <svg xmlns="http://www.w3.org/2000/svg" className={`w-3.5 h-3.5 text-slate-400 flex-shrink-0 transition-transform ${isPickerOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                   )}
                 </div>
 
-                {hasMultipleCombos && isPickerOpen && (
+                {needsPicker && isPickerOpen && (
                   <div className="px-2.5 pb-2.5 space-y-1.5 border-t border-slate-100/70 pt-2 animate-in slide-in-from-top-1 duration-150">
                     <p className="text-[8px] text-slate-400 uppercase tracking-widest">Selecione variação/condição e quantidade:</p>
                     {entries.map(entry => {
