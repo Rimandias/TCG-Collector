@@ -25,6 +25,16 @@ const App: React.FC = () => {
   // a digitação.
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Alteração mais recente ainda não confirmada como salva no servidor - fica preenchido
+  // desde o instante do onUpdateUser até a resposta do PUT chegar, e é a base de tudo que
+  // protege contra perda de dado num refresh/fechamento de aba no meio do caminho.
+  const pendingUserRef = useRef<User | null>(null);
+  const isSavingRef = useRef(false);
+  const [saveState, setSaveState] = useState<'idle' | 'pending' | 'saving' | 'error'>('idle');
+  // Só fica true durante uma navegação que precisou esperar um salvamento em andamento -
+  // é o que dispara o popup bloqueante, sem incomodar o usuário nos outros 99% do tempo em
+  // que o debounce/flush acontece em segundo plano sem ninguém tentando sair da tela.
+  const [blockingSave, setBlockingSave] = useState(false);
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -51,18 +61,100 @@ const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
+    if (pendingUserRef.current || isSavingRef.current) {
+      setBlockingSave(true);
+      await flushPendingSave();
+      setBlockingSave(false);
+    }
     setUser(null);
     await clearSession();
   };
 
+  // Salva de verdade no servidor a alteração mais recente pendente. Chamado tanto pelo timer
+  // normal (500ms depois do último onUpdateUser) quanto forçadamente antes de qualquer ponto
+  // em que o usuário possa sair da página (troca de aba, aba/janela perdendo foco) - assim o
+  // debounce só serve pra agrupar cliques rápidos, nunca pra arriscar perder uma alteração.
+  const flushPendingSave = async () => {
+    if (persistTimer.current) {
+      clearTimeout(persistTimer.current);
+      persistTimer.current = null;
+    }
+    const toSave = pendingUserRef.current;
+    if (!toSave || isSavingRef.current) return;
+    pendingUserRef.current = null;
+    isSavingRef.current = true;
+    setSaveState('saving');
+    const saved = await persistUser(toSave);
+    isSavingRef.current = false;
+    if (saved) {
+      setSaveState((current) => (pendingUserRef.current ? current : 'idle'));
+    } else {
+      // Falhou - mantém marcado como pendente pra tentar de novo na próxima oportunidade
+      // (troca de aba, perda de foco, ou o usuário tentando sair, que aciona o aviso nativo).
+      pendingUserRef.current = toSave;
+      setSaveState('error');
+    }
+  };
+
   const handleUpdateUser = (updatedUser: User) => {
     setUser(updatedUser);
+    pendingUserRef.current = updatedUser;
+    setSaveState('pending');
 
     // Agrupa atualizações rápidas (ex: cliques repetidos de +/-) em uma única gravação no servidor
     if (persistTimer.current) clearTimeout(persistTimer.current);
     persistTimer.current = setTimeout(() => {
-      persistUser(updatedUser);
+      flushPendingSave();
     }, 500);
+  };
+
+  // Protege contra perda de alteração pendente: aviso nativo do navegador ao tentar fechar/
+  // recarregar a página com algo ainda não confirmado como salvo, e salvamento forçado
+  // imediato ao perder o foco da aba (troca de app, minimizar, etc) - momento em que o
+  // navegador/SO pode suspender a aba sem nunca disparar o beforeunload.
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (pendingUserRef.current || isSavingRef.current) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && pendingUserRef.current) {
+        flushPendingSave();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  // Falha de salvamento não fica só esperando o usuário notar o aviso e tocar nele - tenta de
+  // novo sozinho depois de alguns segundos, já que a causa mais comum (erro passageiro de rede
+  // ou uma corrida no servidor) tende a se resolver numa nova tentativa.
+  useEffect(() => {
+    if (saveState !== 'error') return;
+    const retryTimer = setTimeout(() => {
+      flushPendingSave();
+    }, 3000);
+    return () => clearTimeout(retryTimer);
+  }, [saveState]);
+
+  // Troca de aba dentro do app (Home/Coleção/Trocas/Opções) é outro momento comum antes de um
+  // refresh manual. Se já não há nada pendente/em andamento, troca na hora (caso comum, sem
+  // atrito nenhum). Se há, ESPERA o salvamento terminar antes de trocar de aba - só nesse caso
+  // aparece o popup bloqueante avisando que é preciso aguardar, exatamente para que um refresh
+  // logo em seguida nunca aborte uma gravação que ainda estava em voo.
+  const handleTabChange = async (tab: AppTab) => {
+    if (pendingUserRef.current || isSavingRef.current) {
+      setBlockingSave(true);
+      await flushPendingSave();
+      setBlockingSave(false);
+    }
+    setActiveTab(tab);
   };
 
   if (checkingSession) {
@@ -133,7 +225,7 @@ const App: React.FC = () => {
                   setSelectedSeries(null);
                   setSearchQuery('');
                 } else {
-                  setActiveTab(AppTab.HOME);
+                  handleTabChange(AppTab.HOME);
                 }
               }}
               className="p-2 text-slate-500 hover:text-slate-800 transition-colors bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-center w-9 h-9"
@@ -171,7 +263,7 @@ const App: React.FC = () => {
               if (activeTab !== AppTab.HOME) {
                 setSelectedSet(null);
                 setSelectedSeries(null);
-                setActiveTab(AppTab.HOME);
+                handleTabChange(AppTab.HOME);
               }
             }}
             className="w-full bg-slate-50 border border-slate-200/80 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-[#646B99] focus:bg-white transition-all"
@@ -199,7 +291,37 @@ const App: React.FC = () => {
         {renderContent()}
       </main>
 
-      <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+      {blockingSave && (
+        <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center px-6">
+          <div className="bg-white rounded-2xl shadow-xl px-6 py-5 flex flex-col items-center gap-3 max-w-xs text-center">
+            <span className="w-8 h-8 border-4 border-[#646B99] border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm font-semibold text-slate-700">Salvando alterações...</p>
+            <p className="text-xs text-slate-400">Aguarde um instante antes de continuar, para não perder o que você acabou de mudar.</p>
+          </div>
+        </div>
+      )}
+
+      {saveState !== 'idle' && (
+        <div className="fixed bottom-16 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
+          <div
+            onClick={saveState === 'error' ? () => flushPendingSave() : undefined}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-semibold shadow-lg border pointer-events-auto ${
+              saveState === 'error'
+                ? 'bg-red-50 border-red-200 text-red-600 cursor-pointer'
+                : 'bg-white border-slate-200 text-slate-500'
+            }`}
+          >
+            {saveState !== 'error' && (
+              <span className="w-2.5 h-2.5 border-2 border-[#646B99] border-t-transparent rounded-full animate-spin" />
+            )}
+            {saveState === 'pending' && 'Salvando alterações...'}
+            {saveState === 'saving' && 'Salvando alterações...'}
+            {saveState === 'error' && 'Erro ao salvar - toque para tentar de novo'}
+          </div>
+        </div>
+      )}
+
+      <BottomNav activeTab={activeTab} setActiveTab={handleTabChange} />
     </div>
   );
 };

@@ -13,12 +13,14 @@ import Pagination, { PAGE_SIZE } from '../components/Pagination';
 
 const TRADE_POLL_INTERVAL_MS = 15000;
 
-// ID fixo da pasta "Pasta de Repetidas" (a mesma pasta automática exibida no topo de
-// Minhas Pastas) - agora também é uma pasta real persistida (ver efeito de sincronização
-// abaixo), pra poder ficar visível para amigos como qualquer outra. Ela não tem botão de
-// excluir na UI e sua lista de cartas é sempre recalculada automaticamente, nunca editada
-// manualmente pelo usuário.
-const DEFAULT_FOLDER_ID = 'default';
+// ID da pasta "Pasta de Repetidas" (a mesma pasta automática exibida no topo de Minhas
+// Pastas) - agora também é uma pasta real persistida (ver efeito de sincronização abaixo),
+// pra poder ficar visível para amigos como qualquer outra. Ela não tem botão de excluir na
+// UI e sua lista de cartas é sempre recalculada automaticamente, nunca editada manualmente
+// pelo usuário. O id da linha em trade_folders é uma chave primária única no BANCO INTEIRO
+// (não só por usuário), então precisa incorporar o id do usuário - um valor fixo como
+// 'default' colidiria entre contas diferentes assim que mais de uma usasse a feature.
+const defaultFolderId = (userId: string) => `default-${userId}`;
 
 const languageLabel = (code?: string) => (!code ? null : (LANGUAGE_OPTIONS.find(l => l.code === code)?.label || code));
 
@@ -240,6 +242,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
   // Memoized user folders
   const folders = useMemo<TradeFolder[]>(() => user.folders || [], [user.folders]);
+  const DEFAULT_FOLDER_ID = useMemo(() => defaultFolderId(user.id), [user.id]);
 
   // Mantém a "Pasta de Repetidas" sempre existindo como uma pasta real (visível para
   // amigos, ver getVisibleFolders no backend) com a lista de cartas sincronizada com a
@@ -247,20 +250,22 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   // só via Home ("Colocar Todas Para Troca") ou marcando cartas individualmente.
   useEffect(() => {
     const idealIds = computeAutoTradeCardIds(user.ownedCards);
-    const existing = (user.folders || []).find(f => f.id === DEFAULT_FOLDER_ID);
+    // 'default' (sem o prefixo do usuário) é o id legado de antes da correção acima -
+    // se ainda existir, é adotado/renomeado aqui em vez de duplicado.
+    const existing = (user.folders || []).find(f => f.id === DEFAULT_FOLDER_ID || f.id === 'default');
     const currentSet = new Set(existing?.cardIds || []);
-    const sameMembership = !!existing && idealIds.length === currentSet.size && idealIds.every(id => currentSet.has(id));
+    const sameMembership = !!existing && existing.id === DEFAULT_FOLDER_ID && idealIds.length === currentSet.size && idealIds.every(id => currentSet.has(id));
     if (sameMembership) return;
 
     const nextFolders = existing
-      ? (user.folders || []).map(f => (f.id === DEFAULT_FOLDER_ID ? { ...f, cardIds: idealIds } : f))
+      ? (user.folders || []).map(f => (f === existing ? { ...f, id: DEFAULT_FOLDER_ID, cardIds: idealIds } : f))
       : [
           ...(user.folders || []),
           { id: DEFAULT_FOLDER_ID, name: 'Pasta de Repetidas', cardIds: idealIds, visibleToFriends: true },
         ];
     onUpdateUser({ ...user, folders: nextFolders });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user.ownedCards]);
+  }, [user.ownedCards, DEFAULT_FOLDER_ID]);
 
   // IDs das cartas que o usuário possui (quantidade > 0 em alguma variação/condição), usado
   // para destacar na pasta do amigo quais cartas eu ainda não tenho.
@@ -630,7 +635,9 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     if (!newFolderName.trim()) return;
 
     const newFolder: TradeFolder = {
-      id: Date.now().toString(),
+      // Prefixado com o id do usuário pelo mesmo motivo da Pasta de Repetidas: trade_folders.id
+      // é chave primária única no banco inteiro, não só por usuário.
+      id: `${user.id}-${Date.now()}`,
       name: newFolderName.trim(),
       cardIds: [],
       visibleToFriends: false
