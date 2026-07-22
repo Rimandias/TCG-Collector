@@ -35,6 +35,11 @@ const App: React.FC = () => {
   // é o que dispara o popup bloqueante, sem incomodar o usuário nos outros 99% do tempo em
   // que o debounce/flush acontece em segundo plano sem ninguém tentando sair da tela.
   const [blockingSave, setBlockingSave] = useState(false);
+  // Popup próprio (texto customizado) pedindo confirmação de saída, disparado quando o
+  // usuário tenta recarregar via atalho de teclado (F5/Ctrl+R) enquanto algo ainda está
+  // sendo salvo - navegadores não permitem customizar o texto do beforeunload nativo, então
+  // esse é o único jeito de perguntar "quer mesmo sair?" com uma mensagem de verdade.
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -124,11 +129,23 @@ const App: React.FC = () => {
         flushPendingSave();
       }
     };
+    // F5/Ctrl+R/Cmd+R disparam o reload direto do navegador sem chance de mostrar nada -
+    // interceptados aqui pra abrir nosso próprio popup com texto de verdade em vez de depender
+    // só do aviso genérico (e não customizável) do beforeunload nativo.
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isReloadShortcut = e.key === 'F5' || ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R'));
+      if (isReloadShortcut && (pendingUserRef.current || isSavingRef.current)) {
+        e.preventDefault();
+        setShowLeaveConfirm(true);
+      }
+    };
     window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
 
@@ -297,6 +314,30 @@ const App: React.FC = () => {
             <span className="w-8 h-8 border-4 border-[#646B99] border-t-transparent rounded-full animate-spin" />
             <p className="text-sm font-semibold text-slate-700">Salvando alterações...</p>
             <p className="text-xs text-slate-400">Aguarde um instante antes de continuar, para não perder o que você acabou de mudar.</p>
+          </div>
+        </div>
+      )}
+
+      {showLeaveConfirm && (
+        <div className="fixed inset-0 z-[110] bg-black/50 flex items-center justify-center px-6">
+          <div className="bg-white rounded-2xl shadow-xl px-6 py-5 flex flex-col items-center gap-3 max-w-xs text-center">
+            <span className="w-8 h-8 border-4 border-amber-400 border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm font-semibold text-slate-700">Suas atualizações ainda estão sendo salvas.</p>
+            <p className="text-xs text-slate-400">Se sair ou atualizar a página agora, a alteração mais recente pode não ser salva. Quer mesmo sair?</p>
+            <div className="flex gap-2 w-full mt-1">
+              <button
+                onClick={() => setShowLeaveConfirm(false)}
+                className="flex-1 bg-[#646B99] text-white text-xs font-semibold py-2 rounded-xl hover:bg-[#575d87] transition-colors"
+              >
+                Continuar aguardando
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="flex-1 bg-slate-50 text-slate-500 text-xs font-semibold py-2 rounded-xl border border-slate-200 hover:bg-slate-100 transition-colors"
+              >
+                Sair mesmo assim
+              </button>
+            </div>
           </div>
         </div>
       )}
