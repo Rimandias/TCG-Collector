@@ -128,8 +128,14 @@ export async function replaceUserData(userId: string, data: UserDataInput): Prom
     .eq('id', userId);
   if (profileErr) throw profileErr;
 
-  const { error: deleteCardsErr } = await supabase.from('user_cards').delete().eq('user_id', userId);
-  if (deleteCardsErr) throw deleteCardsErr;
+  // upsert + apagar só as linhas removidas (calculado por diff, nunca "delete tudo depois
+  // reinsere"): duas chamadas de PUT /api/users/me para o mesmo usuário podem se sobrepor no
+  // tempo (ex: o efeito de sincronização da "Pasta de Repetidas" disparando junto de outra
+  // alteração do usuário) - com delete-then-insert, a segunda chamada tenta inserir uma linha
+  // que a primeira já reinseriu, violando a chave primária (23505). upsert é idempotente mesmo
+  // com chamadas concorrentes. O diff é feito buscando os ids atuais e comparando em memória
+  // (em vez de um NOT IN com a lista inteira de cartas mantidas) porque coleções reais chegam a
+  // ter 700+ cartas - um filtro NOT IN desse tamanho vira uma query string enorme.
   const cardRows = Object.entries(data.ownedCards || {}).map(([cardId, card]) => ({
     user_id: userId,
     card_id: cardId,
@@ -138,32 +144,71 @@ export async function replaceUserData(userId: string, data: UserDataInput): Prom
     variations: card.variations || {},
   }));
   if (cardRows.length > 0) {
-    const { error } = await supabase.from('user_cards').insert(cardRows);
+    const { error } = await supabase.from('user_cards').upsert(cardRows, { onConflict: 'user_id,card_id' });
     if (error) throw error;
   }
+  {
+    const keepIds = new Set(Object.keys(data.ownedCards || {}));
+    const { data: existing, error: existingErr } = await supabase.from('user_cards').select('card_id').eq('user_id', userId);
+    if (existingErr) throw existingErr;
+    const staleIds = (existing || []).map((r) => r.card_id).filter((id) => !keepIds.has(id));
+    if (staleIds.length > 0) {
+      const { error } = await supabase.from('user_cards').delete().eq('user_id', userId).in('card_id', staleIds);
+      if (error) throw error;
+    }
+  }
 
-  const { error: deleteWishlistErr } = await supabase.from('wishlist').delete().eq('user_id', userId);
-  if (deleteWishlistErr) throw deleteWishlistErr;
   const wishlistRows = (data.wishlist || []).map((cardId) => ({ user_id: userId, card_id: cardId }));
   if (wishlistRows.length > 0) {
-    const { error } = await supabase.from('wishlist').insert(wishlistRows);
+    const { error } = await supabase.from('wishlist').upsert(wishlistRows, { onConflict: 'user_id,card_id' });
     if (error) throw error;
   }
+  {
+    const keepIds = new Set(data.wishlist || []);
+    const { data: existing, error: existingErr } = await supabase.from('wishlist').select('card_id').eq('user_id', userId);
+    if (existingErr) throw existingErr;
+    const staleIds = (existing || []).map((r) => r.card_id).filter((id) => !keepIds.has(id));
+    if (staleIds.length > 0) {
+      const { error } = await supabase.from('wishlist').delete().eq('user_id', userId).in('card_id', staleIds);
+      if (error) throw error;
+    }
+  }
 
-  // trade_folder_cards é removido em cascata quando as linhas de trade_folders são apagadas
-  const { error: deleteFoldersErr } = await supabase.from('trade_folders').delete().eq('user_id', userId);
-  if (deleteFoldersErr) throw deleteFoldersErr;
   const folders = data.folders || [];
   if (folders.length > 0) {
-    const { error: foldersInsertErr } = await supabase
+    const { error: foldersUpsertErr } = await supabase
       .from('trade_folders')
-      .insert(folders.map((f) => ({ id: f.id, user_id: userId, name: f.name, visible_to_friends: !!f.visibleToFriends, variation_selections: f.variationSelections || {} })));
-    if (foldersInsertErr) throw foldersInsertErr;
+      .upsert(
+        folders.map((f) => ({ id: f.id, user_id: userId, name: f.name, visible_to_friends: !!f.visibleToFriends, variation_selections: f.variationSelections || {} })),
+        { onConflict: 'id' }
+      );
+    if (foldersUpsertErr) throw foldersUpsertErr;
+  }
+  {
+    const keepFolderIds = new Set(folders.map((f) => f.id));
+    const { data: existing, error: existingErr } = await supabase.from('trade_folders').select('id').eq('user_id', userId);
+    if (existingErr) throw existingErr;
+    const staleFolderIds = (existing || []).map((r) => r.id).filter((id) => !keepFolderIds.has(id));
+    // trade_folder_cards é removido em cascata quando a linha de trade_folders correspondente é apagada
+    if (staleFolderIds.length > 0) {
+      const { error } = await supabase.from('trade_folders').delete().eq('user_id', userId).in('id', staleFolderIds);
+      if (error) throw error;
+    }
+  }
 
-    const folderCardRows = folders.flatMap((f) => (f.cardIds || []).map((cardId) => ({ folder_id: f.id, card_id: cardId })));
+  for (const folder of folders) {
+    const keepCardIds = new Set(folder.cardIds || []);
+    const { data: existing, error: existingErr } = await supabase.from('trade_folder_cards').select('card_id').eq('folder_id', folder.id);
+    if (existingErr) throw existingErr;
+    const staleCardIds = (existing || []).map((r) => r.card_id).filter((id) => !keepCardIds.has(id));
+    if (staleCardIds.length > 0) {
+      const { error } = await supabase.from('trade_folder_cards').delete().eq('folder_id', folder.id).in('card_id', staleCardIds);
+      if (error) throw error;
+    }
+    const folderCardRows = (folder.cardIds || []).map((cardId) => ({ folder_id: folder.id, card_id: cardId }));
     if (folderCardRows.length > 0) {
-      const { error: fcErr } = await supabase.from('trade_folder_cards').insert(folderCardRows);
-      if (fcErr) throw fcErr;
+      const { error } = await supabase.from('trade_folder_cards').upsert(folderCardRows, { onConflict: 'folder_id,card_id' });
+      if (error) throw error;
     }
   }
 }
