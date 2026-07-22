@@ -10,6 +10,9 @@ import FriendFolderBrowser from '../components/FriendFolderBrowser';
 import TradeActionModal from '../components/TradeActionModal';
 import TradeItemsList from '../components/TradeItemsList';
 import Pagination, { PAGE_SIZE } from '../components/Pagination';
+import CardViewModeSelector from '../components/CardViewModeSelector';
+import { CardViewMode } from '../components/CardItem';
+import { getCardGridClassName } from '../viewMode';
 
 const TRADE_POLL_INTERVAL_MS = 15000;
 
@@ -231,9 +234,10 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   const [folderViewMode, setFolderViewMode] = useState<'cards' | 'collections'>('cards');
   const [selectedFolderSeries, setSelectedFolderSeries] = useState<string | null>(null);
   const [selectedFolderSetId, setSelectedFolderSetId] = useState<string | null>(null);
-  // Lista (padrão, mantido) vs grade - só afeta como as cartas dentro de uma pasta são exibidas,
-  // não a lógica de quais cartas aparecem.
-  const [folderCardsLayout, setFolderCardsLayout] = useState<'list' | 'grid'>('list');
+  // Lista (padrão, mantido) vs grade de 3/6 - mesmo seletor usado em Home/Coleção
+  // (CardViewModeSelector), só afeta como as cartas dentro de uma pasta são exibidas, não a
+  // lógica de quais cartas aparecem.
+  const [folderCardsLayout, setFolderCardsLayout] = useState<CardViewMode>('list');
 
   // Search/Filters states inside folders
   const [searchQuery, setSearchQuery] = useState('');
@@ -714,7 +718,11 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   }
 
   return (
-    <div className="animate-in fade-in duration-500 px-6 max-w-lg mx-auto pb-8 pt-4">
+    // Sem max-width fixo: essa era a razão de Trocas ficar preso ao layout mobile mesmo no
+    // desktop, diferente de Home/Coleção (que só usam padding, sem teto de largura próprio) -
+    // agora usa a largura inteira disponível, e o respiro de ~128px no desktop já vem do
+    // padding do <main> em App.tsx.
+    <div className="animate-in fade-in duration-500 px-6 pb-8 pt-4">
       <div className="mb-6 flex flex-col gap-4">
         <div>
           <h2 className="text-2xl text-slate-800">Central de Trocas</h2>
@@ -1032,22 +1040,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                     </div>
                     {(folderViewMode === 'cards' || selectedFolderSetId !== null) && (
                       <>
-                        <div className="flex bg-white border border-slate-200 rounded-xl overflow-hidden flex-shrink-0">
-                          <button
-                            onClick={() => setFolderCardsLayout('list')}
-                            title="Ver em lista"
-                            className={`px-2.5 py-2 flex items-center justify-center transition-all ${folderCardsLayout === 'list' ? 'bg-[#646B99] text-white' : 'text-slate-400 hover:text-slate-600'}`}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                          </button>
-                          <button
-                            onClick={() => setFolderCardsLayout('grid')}
-                            title="Ver em grade"
-                            className={`px-2.5 py-2 flex items-center justify-center border-l border-slate-200 transition-all ${folderCardsLayout === 'grid' ? 'bg-[#646B99] text-white' : 'text-slate-400 hover:text-slate-600'}`}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-                          </button>
-                        </div>
+                        <CardViewModeSelector viewMode={folderCardsLayout} onChange={setFolderCardsLayout} />
                         <button
                           onClick={() => setShowFolderFilters(!showFolderFilters)}
                           className={`px-3 py-2 border rounded-xl flex items-center gap-1.5 text-xs font-semibold transition-all flex-shrink-0 ${showFolderFilters ? 'bg-[#646B99] text-white border-[#646B99]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
@@ -1172,9 +1165,9 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                         Tente ajustar os filtros ou a pesquisa
                       </p>
                     </div>
-                  ) : folderCardsLayout === 'grid' ? (
+                  ) : folderCardsLayout !== 'list' ? (
                     <div className="space-y-3">
-                      <div className="grid grid-cols-3 lg:grid-cols-6 gap-2">
+                      <div className={getCardGridClassName(folderCardsLayout)}>
                         {paginatedFolderCards.map(renderGridTile)}
                       </div>
                       <Pagination page={folderCardsPage} totalPages={Math.max(1, Math.ceil(filteredFolderCards.length / PAGE_SIZE))} onPageChange={setFolderCardsPage} />
@@ -1310,9 +1303,9 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                               <p className="text-slate-400 font-medium text-xs uppercase tracking-widest">Nenhuma carta nesta coleção</p>
                               <p className="text-[10px] text-slate-300 mt-1 uppercase tracking-wider">corresponde aos filtros ativos</p>
                             </div>
-                          ) : folderCardsLayout === 'grid' ? (
+                          ) : folderCardsLayout !== 'list' ? (
                             <div className="space-y-3">
-                              <div className="grid grid-cols-3 lg:grid-cols-6 gap-2">
+                              <div className={getCardGridClassName(folderCardsLayout)}>
                                 {setCardsInFolder.slice((setCardsPage - 1) * PAGE_SIZE, setCardsPage * PAGE_SIZE).map(renderGridTile)}
                               </div>
                               <Pagination page={setCardsPage} totalPages={Math.max(1, Math.ceil(setCardsInFolder.length / PAGE_SIZE))} onPageChange={setSetCardsPage} />
@@ -1439,7 +1432,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                             </span>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                             {sets
                               .filter(s => s.series === selectedFolderSeries)
                               .sort((a, b) => a.releaseDate.localeCompare(b.releaseDate))

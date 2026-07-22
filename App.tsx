@@ -304,7 +304,10 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-16">
+      {/* md:px-32 dá ~128px de respiro nas laterais no desktop, sem mexer no header nem no
+          menu inferior (ambos fora deste elemento) - no mobile fica sem padding extra, igual
+          a antes. */}
+      <main className="flex-1 overflow-y-auto pb-16 md:px-32">
         {renderContent()}
       </main>
 

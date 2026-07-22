@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, LANGUAGE_OPTIONS, PokemonSet, VisibleFolder } from '../types';
+import { Card, LANGUAGE_OPTIONS, PokemonSet, VisibleFolder, VARIATION_TYPES, CardCondition } from '../types';
 import { getCompleteCardNumber } from '../db';
 import { fetchCardsBySet, fetchSets } from '../api';
 import { getFriendVisibleFolders, TradeItemSelection } from '../trades';
 import Pagination, { PAGE_SIZE } from './Pagination';
+import CardViewModeSelector from './CardViewModeSelector';
+import { CardViewMode } from './CardItem';
+import { getCardGridClassName } from '../viewMode';
 
 interface FriendFolderBrowserProps {
   friendUserId: string;
@@ -63,6 +66,14 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
   const [selectedEra, setSelectedEra] = useState<string | null>(null);
   const [selectedSetId, setSelectedSetId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  // Mesmo seletor lista/grade-3/grade-6 usado em Home, Coleção e nas próprias pastas
+  // (TradesView) - padronização entre todas as visualizações de pasta do app.
+  const [cardsLayout, setCardsLayout] = useState<CardViewMode>('list');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterRarity, setFilterRarity] = useState('all');
+  const [filterSet, setFilterSet] = useState('all');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterQuality, setFilterQuality] = useState('all');
 
   useEffect(() => {
     const load = async () => {
@@ -126,22 +137,40 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
   }, [selectedFolder, cardsById]);
 
   const filteredLines = useMemo(() => {
-    const base = !searchQuery.trim()
-      ? lines
-      : lines.filter((line) => {
-          const q = searchQuery.toLowerCase().trim();
-          if (!line.card) return line.cardId.toLowerCase().includes(q);
-          const fullNum = getCompleteCardNumber(line.card).toLowerCase();
-          return (
-            line.card.name.toLowerCase().includes(q) ||
-            line.card.number.toLowerCase().includes(q) ||
-            fullNum.includes(q) ||
-            line.card.set.name.toLowerCase().includes(q) ||
-            (line.card.artist || '').toLowerCase().includes(q)
-          );
-        });
+    const base = lines.filter((line) => {
+      if (searchQuery.trim() !== '') {
+        const q = searchQuery.toLowerCase().trim();
+        const matches = !line.card
+          ? line.cardId.toLowerCase().includes(q)
+          : (
+              line.card.name.toLowerCase().includes(q) ||
+              line.card.number.toLowerCase().includes(q) ||
+              getCompleteCardNumber(line.card).toLowerCase().includes(q) ||
+              line.card.set.name.toLowerCase().includes(q) ||
+              (line.card.artist || '').toLowerCase().includes(q)
+            );
+        if (!matches) return false;
+      }
+      if (filterRarity !== 'all' && line.card?.rarity !== filterRarity) return false;
+      if (filterSet !== 'all' && line.card?.set.id !== filterSet) return false;
+      if (filterCategory !== 'all' && line.variation !== filterCategory) return false;
+      if (filterQuality !== 'all' && line.condition !== filterQuality) return false;
+      return true;
+    });
     return [...base].sort((a, b) => getCardPriority(a.cardId) - getCardPriority(b.cardId));
-  }, [lines, searchQuery, ownedCardIdSet, wishlistCardIdSet]);
+  }, [lines, searchQuery, filterRarity, filterSet, filterCategory, filterQuality, ownedCardIdSet, wishlistCardIdSet]);
+
+  // Opções para preencher os seletores de filtro, com base nas cartas desta pasta
+  const folderRarities = useMemo(() => {
+    const r = lines.map((line) => line.card?.rarity).filter((r): r is string => !!r);
+    return Array.from(new Set(r)).sort();
+  }, [lines]);
+
+  const folderSets = useMemo(() => {
+    const unique = new Map<string, string>();
+    lines.forEach((line) => { if (line.card) unique.set(line.card.set.id, line.card.set.name); });
+    return Array.from(unique.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [lines]);
 
   // Reseta a página sempre que a lista filtrada ou a navegação de coleção mudam
   useEffect(() => {
@@ -184,6 +213,10 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
     setSelectedEra(null);
     setSelectedSetId(null);
     setPage(1);
+    setFilterRarity('all');
+    setFilterSet('all');
+    setFilterCategory('all');
+    setFilterQuality('all');
   };
 
   const renderLine = (line: ResolvedLine) => {
@@ -244,6 +277,57 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
             <span className="text-xs font-bold text-[#646B99]">R${(qty * line.price).toFixed(2)}</span>
           )}
         </div>
+      </div>
+    );
+  };
+
+  // Contraparte compacta de renderLine para as visualizações em grade (3/6 colunas) - mesma
+  // prioridade de exibição (já vem de filteredLines, pré-ordenada) e os mesmos indicadores de
+  // desejado/não possuo, só que compactos o bastante pra caber lado a lado.
+  const renderGridTile = (line: ResolvedLine) => {
+    const key = selectionKey(line.cardId, line.variation, line.condition, line.language);
+    const qty = selectedQuantities[key] || 0;
+    const isSelected = qty > 0;
+    const iDontOwn = !ownedCardIdSet.has(line.cardId);
+    const isWishlisted = wishlistCardIdSet.has(line.cardId);
+    return (
+      <div
+        key={key}
+        className={`relative bg-white rounded-xl border p-1.5 flex flex-col items-center gap-1 ${isSelected ? 'border-[#646B99]/40 bg-[#646B99]/5' : 'border-slate-100'}`}
+      >
+        {isWishlisted && (
+          <span className="absolute top-1 left-1 z-10 w-4 h-4 bg-rose-500 rounded-full flex items-center justify-center shadow-sm" title="Na sua lista de desejos">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21s-6.716-4.35-9.428-8.06C.89 10.31 1.2 6.6 4.2 4.9c2.29-1.3 4.94-.62 6.3 1.24l1.5 2.05 1.5-2.05c1.36-1.86 4.01-2.54 6.3-1.24 3 1.7 3.31 5.41 1.63 8.04C18.716 16.65 12 21 12 21z"/></svg>
+          </span>
+        )}
+        {line.card && (
+          <img src={line.card.imageUrl} className="w-full aspect-[5/7] rounded-lg object-contain bg-slate-50 border border-slate-100/40" />
+        )}
+        <p className="text-[9px] text-slate-700 font-semibold truncate w-full text-center">{line.card ? line.card.name : line.cardId}</p>
+        {iDontOwn && (
+          <span className="px-1 py-0.5 bg-amber-50 border border-amber-200 text-amber-700 text-[7px] font-bold rounded uppercase tracking-wider">
+            Não possuo
+          </span>
+        )}
+        <p className="text-[8px] text-slate-400 text-center leading-tight">{line.variation} · {line.condition}</p>
+        <div className="flex items-center bg-slate-50 border border-slate-200 rounded-full overflow-hidden h-6 w-full justify-between flex-shrink-0">
+          <button
+            onClick={() => setLineQuantity(line, qty - 1)}
+            disabled={qty === 0}
+            className="w-6 h-full flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors disabled:opacity-30"
+          >
+            -
+          </button>
+          <span className="text-[10px] text-[#646B99] tabular-nums">{qty}</span>
+          <button
+            onClick={() => setLineQuantity(line, qty + 1)}
+            disabled={qty >= line.availableQuantity}
+            className="w-6 h-full flex items-center justify-center text-slate-400 hover:text-emerald-500 transition-colors disabled:opacity-30"
+          >
+            +
+          </button>
+        </div>
+        <p className="text-[8px] font-semibold text-emerald-500">R${line.price.toFixed(2)}/un</p>
       </div>
     );
   };
@@ -320,17 +404,31 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
       ) : (
         <>
           <div className="space-y-2">
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-              </span>
-              <input
-                type="text"
-                placeholder="Buscar por nome, número ou set..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#646B99] transition-all shadow-sm"
-              />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                </span>
+                <input
+                  type="text"
+                  placeholder="Buscar por nome, número ou set..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#646B99] transition-all shadow-sm"
+                />
+              </div>
+              {(viewMode === 'cards' || selectedSetId !== null) && (
+                <>
+                  <CardViewModeSelector viewMode={cardsLayout} onChange={setCardsLayout} />
+                  <button
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={`px-3 py-2 border rounded-xl flex items-center gap-1.5 text-xs font-semibold transition-all flex-shrink-0 ${showFilters ? 'bg-[#646B99] text-white border-[#646B99]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                    Filtros
+                  </button>
+                </>
+              )}
             </div>
             <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
               <button
@@ -346,12 +444,96 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                 Coleções
               </button>
             </div>
+
+            {(viewMode === 'cards' || selectedSetId !== null) && showFilters && (
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 animate-in fade-in duration-200">
+                <div className="flex flex-col gap-1">
+                  <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Raridade</span>
+                  <select
+                    value={filterRarity}
+                    onChange={(e) => setFilterRarity(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
+                  >
+                    <option value="all">Todas as Raridades</option>
+                    {folderRarities.map((r) => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {viewMode === 'cards' && (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Coleção</span>
+                    <select
+                      value={filterSet}
+                      onChange={(e) => setFilterSet(e.target.value)}
+                      className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
+                    >
+                      <option value="all">Todas as Coleções</option>
+                      {folderSets.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-1">
+                  <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Categoria</span>
+                  <select
+                    value={filterCategory}
+                    onChange={(e) => setFilterCategory(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
+                  >
+                    <option value="all">Todas as Categorias</option>
+                    {VARIATION_TYPES.map((v) => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Qualidade</span>
+                  <select
+                    value={filterQuality}
+                    onChange={(e) => setFilterQuality(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
+                  >
+                    <option value="all">Todas as Qualidades</option>
+                    {Object.keys(CardCondition).map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="col-span-2 flex justify-end mt-1">
+                  <button
+                    onClick={() => {
+                      setFilterRarity('all');
+                      setFilterSet('all');
+                      setFilterCategory('all');
+                      setFilterQuality('all');
+                      setSearchQuery('');
+                    }}
+                    className="text-[10px] font-semibold text-slate-400 hover:text-[#646B99] transition-colors"
+                  >
+                    Limpar Filtros
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {viewMode === 'cards' ? (
             filteredLines.length === 0 ? (
               <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-100">
                 <p className="text-slate-400 text-sm">Nenhuma carta encontrada.</p>
+              </div>
+            ) : cardsLayout !== 'list' ? (
+              <div className="space-y-3">
+                <div className={getCardGridClassName(cardsLayout)}>
+                  {filteredLines.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map(renderGridTile)}
+                </div>
+                <Pagination page={page} totalPages={Math.max(1, Math.ceil(filteredLines.length / PAGE_SIZE))} onPageChange={setPage} />
               </div>
             ) : (
               <div className="grid gap-3">
@@ -381,6 +563,13 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                     <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-100">
                       <p className="text-slate-400 text-sm">Nenhuma carta encontrada.</p>
                     </div>
+                  ) : cardsLayout !== 'list' ? (
+                    <>
+                      <div className={getCardGridClassName(cardsLayout)}>
+                        {setLines.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map(renderGridTile)}
+                      </div>
+                      <Pagination page={page} totalPages={Math.max(1, Math.ceil(setLines.length / PAGE_SIZE))} onPageChange={setPage} />
+                    </>
                   ) : (
                     <>
                       {setLines.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map(renderLine)}
@@ -399,7 +588,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
                 Voltar para Eras
               </button>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {sets
                   .filter((s) => s.series === selectedEra)
                   .sort((a, b) => a.releaseDate.localeCompare(b.releaseDate))
