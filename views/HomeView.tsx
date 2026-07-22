@@ -526,7 +526,8 @@ const HomeView: React.FC<HomeViewProps> = ({
                )}
              </div>
            ) : (
-             <div className="grid grid-cols-2 gap-4 px-2">
+             // md:grid-cols-3 é só no desktop - no mobile continua o grid-cols-2 de sempre
+             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 px-2">
              {setsInSeries.map(set => {
                 const progress = calculateProgress(set.id, set.total);
                 return (
@@ -613,7 +614,8 @@ const HomeView: React.FC<HomeViewProps> = ({
               <p className="text-[10px] text-slate-300 uppercase tracking-[0.3em] mb-4">Selecione a Era</p>
           </div>
 
-          <div className="w-full flex flex-col gap-4">
+          {/* md:grid-cols-3 é só no desktop - no mobile continua a mesma pilha de 1 coluna de sempre */}
+          <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-4">
             {eras.map(era => (
               <button
                 key={era}
@@ -621,10 +623,13 @@ const HomeView: React.FC<HomeViewProps> = ({
                 className="w-full flex flex-col items-center justify-between bg-transparent p-5 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group gap-3 min-h-[130px]"
               >
                 <div className="h-16 w-full flex items-center justify-center px-4">
-                    <img 
-                        src={getSetLogoForSeries(era)} 
-                        alt={era} 
-                        className="max-h-full max-w-full object-contain filter group-hover:scale-110 transition-all duration-500" 
+                    <img
+                        src={getSetLogoForSeries(era)}
+                        alt={era}
+                        // Largura máxima baseada no tamanho do logo do Sword & Shield (a referência
+                        // considerada ideal) - logos com proporção mais larga (ex: Black & White)
+                        // não esticam além disso; logos já mais estreitos não são forçados a crescer.
+                        className="max-h-full max-w-[min(100%,328px)] object-contain filter group-hover:scale-110 transition-all duration-500"
                     />
                 </div>
                 <div className="text-center">
