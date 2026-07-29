@@ -141,15 +141,14 @@ function findMatchingSet(edicao: string, sets: PokemonSet[]): PokemonSet | undef
 }
 
 // Colunas de flag (0/1) da planilha -> variação correspondente no nosso modelo.
-// Assinada/Promo/Textless/Alterada/Shadowless/Oversize/Misprint/Shattered Holo não
-// têm variação equivalente no app hoje, então não alteram a variação escolhida.
+// Assinada/Promo/Textless/Alterada/Shadowless/Oversize/Misprint/Shattered Holo/Pre
+// Release/Staff não têm variação equivalente no app hoje, então não alteram a
+// variação escolhida.
 const VARIATION_FLAG_COLUMNS: { header: string; variation: string }[] = [
   { header: 'Foil', variation: 'Foil' },
   { header: 'Reverse Foil', variation: 'Reverse Foil' },
   { header: 'Pokeball Foil', variation: 'Pokeball' },
   { header: 'Master Ball', variation: 'Master Ball' },
-  { header: 'Pre Release', variation: 'Pre release' },
-  { header: 'Staff', variation: 'Staff' },
   { header: 'Edition One', variation: 'First Edition' },
 ];
 
