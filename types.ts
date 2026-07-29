@@ -13,8 +13,6 @@ export const VARIATION_TYPES = [
   'Reverse Foil',
   'Pokeball',
   'Master Ball',
-  'Pre release',
-  'Staff',
   'First Edition'
 ];
 
