@@ -12,6 +12,10 @@ import { premiumRouter } from './routes/premium.js';
 
 const app = express();
 
+// Render fica atrás de um único proxy reverso, que adiciona o header X-Forwarded-For -
+// sem confiar nesse primeiro hop, o express-rate-limit não consegue identificar o IP
+// real do cliente (e loga ERR_ERL_UNEXPECTED_X_FORWARDED_FOR a cada requisição).
+app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(helmet());
 app.use(
