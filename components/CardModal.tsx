@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, User, CardCondition, VARIATION_TYPES, LANGUAGE_OPTIONS, ConditionDetails } from '../types';
 import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, getCardEstimatedValue, adjustLanguageQuantity, setLanguagePrice, renameLanguageEntry } from '../db';
-import { fetchCardStats, CardPriceStats } from '../api';
+import { fetchCardStats, CardPriceStats, fetchCardVariants, CardVariantInfo } from '../api';
 
 const DEFAULT_LANGUAGE = 'BR';
 const languageLabel = (code: string) => (code === '' ? 'Não especificado' : (LANGUAGE_OPTIONS.find(l => l.code === code)?.label || code));
@@ -21,11 +21,23 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
   const [showFullscreen, setShowFullscreen] = useState(false);
   const [languageEditKey, setLanguageEditKey] = useState<string | null>(null);
   const [pendingLanguageCode, setPendingLanguageCode] = useState<string>(LANGUAGE_OPTIONS[0].code);
+  const [variantInfo, setVariantInfo] = useState<CardVariantInfo | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     fetchCardStats(card.id).then((stats) => {
       if (!cancelled) setPriceStats(stats);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [card.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setVariantInfo(null);
+    fetchCardVariants(card.id).then((info) => {
+      if (!cancelled) setVariantInfo(info);
     });
     return () => {
       cancelled = true;
@@ -116,6 +128,17 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
     return Object.values(variationData).reduce((sum, cond) => sum + (cond.quantity || 0), 0);
   };
 
+  // Esconde variações que a TCGdex confirma não existir pra essa carta (ex: nem toda
+  // carta tem Pokeball/Master Ball) - mas nunca esconde uma que já tem dado real do
+  // usuário, nem quando o dado ainda não carregou ou a TCGdex não tem info sobre ela.
+  const visibleVariationTypes = VARIATION_TYPES.filter(variation => {
+    const subtotal = getVariationSubtotal(normalizedVariations[variation]);
+    if (subtotal > 0) return true;
+    if (!variantInfo) return true;
+    if (!(variation in variantInfo.flags)) return true;
+    return variantInfo.flags[variation] !== false;
+  });
+
   const toggleExpand = (varName: string) => {
     setExpandedVariation(prev => prev === varName ? null : varName);
   };
@@ -198,7 +221,7 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
         <div className="px-4 pb-4 pt-2 flex-1 overflow-y-auto min-h-0">
           {activeTab === 'variations' ? (
             <div className="space-y-3">
-              {VARIATION_TYPES.map(variation => {
+              {visibleVariationTypes.map(variation => {
                 const variationData = normalizedVariations[variation];
                 const subtotal = getVariationSubtotal(variationData);
                 const isExpanded = expandedVariation === variation;
