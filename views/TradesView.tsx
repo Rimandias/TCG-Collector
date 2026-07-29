@@ -11,6 +11,7 @@ import TradeActionModal from '../components/TradeActionModal';
 import TradeItemsList from '../components/TradeItemsList';
 import Pagination, { PAGE_SIZE } from '../components/Pagination';
 import CardViewModeSelector from '../components/CardViewModeSelector';
+import CardImage from '../components/CardImage';
 import { CardViewMode } from '../components/CardItem';
 import { getCardGridClassName } from '../viewMode';
 
@@ -962,8 +963,9 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                 </button>
-                <img
+                <CardImage
                   src={card.imageUrl}
+                  alt={card.name}
                   onClick={() => setEditingCard(card)}
                   className="w-full aspect-[5/7] rounded-lg object-contain bg-slate-50/50 border border-slate-100/40 cursor-pointer hover:scale-105 transition-transform"
                 />
@@ -1176,8 +1178,9 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                     <div className="grid gap-3">
                       {paginatedFolderCards.map(({ card, data }) => (
                         <div key={card.id} className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
-                          <img
+                          <CardImage
                             src={card.imageUrl}
+                            alt={card.name}
                             onClick={() => setEditingCard(card)}
                             className="w-14 h-20 rounded-lg object-contain bg-slate-50/50 border border-slate-100/40 cursor-pointer hover:scale-105 transition-transform"
                           />
@@ -1314,10 +1317,11 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                             <div className="grid gap-3">
                               {setCardsInFolder.slice((setCardsPage - 1) * PAGE_SIZE, setCardsPage * PAGE_SIZE).map(({ card, data }) => (
                                 <div key={card.id} className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
-                                  <img
-                                    src={card.imageUrl} 
+                                  <CardImage
+                                    src={card.imageUrl}
+                                    alt={card.name}
                                     onClick={() => setEditingCard(card)}
-                                    className="w-14 h-20 rounded-lg object-contain bg-slate-50/50 border border-slate-100/40 cursor-pointer hover:scale-105 transition-transform" 
+                                    className="w-14 h-20 rounded-lg object-contain bg-slate-50/50 border border-slate-100/40 cursor-pointer hover:scale-105 transition-transform"
                                   />
                                   
                                   <div className="flex-1 min-w-0">
@@ -1843,7 +1847,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                     onChange={() => {}} // Controlled via onClick
                     className="w-3.5 h-3.5 text-[#646B99] border-slate-300 rounded focus:ring-[#646B99]"
                   />
-                  <img src={card.imageUrl} className="w-10 h-14 object-contain rounded bg-white border border-slate-100/50 flex-shrink-0" />
+                  <CardImage src={card.imageUrl} alt={card.name} className="w-10 h-14 object-contain rounded bg-white border border-slate-100/50 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <h4 className="text-[11px] font-semibold text-slate-700 truncate">{card.name}</h4>
                     <p className="text-[9px] text-slate-400 truncate">{card.rarity} • #{card.number}</p>

@@ -7,6 +7,7 @@ import Pagination, { PAGE_SIZE } from './Pagination';
 import CardViewModeSelector from './CardViewModeSelector';
 import { CardViewMode } from './CardItem';
 import { getCardGridClassName } from '../viewMode';
+import CardImage from './CardImage';
 
 interface FriendFolderBrowserProps {
   friendUserId: string;
@@ -232,7 +233,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
         className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${isSelected ? 'border-[#646B99]/40 bg-[#646B99]/5' : 'border-slate-100 bg-white'}`}
       >
         {line.card && (
-          <img src={line.card.imageUrl} className="w-12 h-16 rounded-lg object-contain bg-slate-50 border border-slate-100/40 flex-shrink-0" />
+          <CardImage src={line.card.imageUrl} alt={line.card.name} className="w-12 h-16 rounded-lg object-contain bg-slate-50 border border-slate-100/40 flex-shrink-0" />
         )}
         <div className="flex-1 min-w-0">
           <h4 className="text-xs font-semibold text-slate-800 truncate flex items-center gap-1.5">
@@ -301,7 +302,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
           </span>
         )}
         {line.card && (
-          <img src={line.card.imageUrl} className="w-full aspect-[5/7] rounded-lg object-contain bg-slate-50 border border-slate-100/40" />
+          <CardImage src={line.card.imageUrl} alt={line.card.name} className="w-full aspect-[5/7] rounded-lg object-contain bg-slate-50 border border-slate-100/40" />
         )}
         <p className="text-[9px] text-slate-700 font-semibold truncate w-full text-center">{line.card ? line.card.name : line.cardId}</p>
         {iDontOwn && (

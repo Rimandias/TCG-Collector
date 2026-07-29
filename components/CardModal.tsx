@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Card, User, CardCondition, VARIATION_TYPES, LANGUAGE_OPTIONS, ConditionDetails } from '../types';
 import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, getCardEstimatedValue, adjustLanguageQuantity, setLanguagePrice, renameLanguageEntry } from '../db';
 import { fetchCardStats, CardPriceStats, fetchCardVariants, CardVariantInfo } from '../api';
+import CardImage from './CardImage';
 
 const DEFAULT_LANGUAGE = 'BR';
 const languageLabel = (code: string) => (code === '' ? 'Não especificado' : (LANGUAGE_OPTIONS.find(l => l.code === code)?.label || code));
@@ -156,7 +157,7 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
-          <img
+          <CardImage
             src={card.imageUrlHiRes || card.imageUrl}
             alt={card.name}
             className="max-w-full max-h-full object-contain rounded-lg"
@@ -179,10 +180,10 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
             onClick={onClose}
             className="relative w-32 aspect-[2/2.8] rounded-2xl overflow-hidden shadow-2xl mb-3 cursor-pointer"
           >
-            <img
+            <CardImage
               src={card.imageUrlHiRes || card.imageUrl}
               alt={card.name}
-              className="w-full h-full object-cover"
+              className={`w-full h-full object-cover ${!(card.imageUrlHiRes || card.imageUrl) ? 'bg-slate-100' : ''}`}
               loading="lazy"
             />
             <button
