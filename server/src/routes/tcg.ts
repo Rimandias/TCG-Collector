@@ -116,6 +116,56 @@ function mapTcgdexEra(raw: any): string {
   return SERIE_ID_TO_ERA[serieId] || raw.serie?.name || 'Outras';
 }
 
+// Algumas coleções (ex: "Astros Cintilantes Galeria de Treinador", "MEP Black Star
+// Promos", McDonald's) não têm logo/símbolo próprio em NENHUM locale da TCGdex - são
+// sub-coleções/promos sem asset visual dedicado. Pra essas, pega emprestado o logo/
+// símbolo da coleção-mãe (quando o usuário indicou uma) ou da coleção-carro-chefe da
+// mesma era (quando não há uma coleção-mãe óbvia), em vez de deixar o card sem imagem.
+const FALLBACK_LOGO_SET_ID: Record<string, string> = {
+  mee: 'me01', // Megaevolução Energia -> Megaevolução
+  mep: 'me01', // MEP Black Star Promos -> Megaevolução
+  sve: 'sv01', // Escarlate e Violeta Energia -> Escarlate e Violeta
+  svp: 'sv01', // SVP Black Star Promos -> Escarlate e Violeta
+  '2023sv': 'sv01', // McDonald's Collection 2023 -> Escarlate e Violeta
+  mfb: 'sv01', // My First Battle -> Escarlate e Violeta
+  sv08: 'sv01', // Fagulhas Impetuosas (símbolo ausente nos dois locales) -> Escarlate e Violeta
+  'sv08.5': 'sv01', // Evoluções Prismáticas (símbolo ausente nos dois locales) -> Escarlate e Violeta
+  '2022swsh': 'swsh1', // McDonald's Collection 2022 -> Espada e Escudo
+  '2021swsh': 'swsh1', // McDonald's Collection 2021 -> Espada e Escudo
+  'swsh4.5sv': 'swsh4.5', // Destinos Brilhantes Cofre Brilhante -> Destinos Brilhantes
+  cel25cc: 'cel25', // Celebrações Coleção Clássica -> Celebrações
+  'swsh9.5tg': 'swsh9', // Astros Cintilantes Galeria de Treinador -> Astros Cintilantes
+  'swsh10.5tg': 'swsh10', // Estrelas Radiantes Galeria de Treinador -> Estrelas Radiantes
+  'swsh11.5tg': 'swsh11', // Origem Perdida Galeria de Treinador -> Origem Perdida
+  'swsh12.5tg': 'swsh12', // Tempestade Prateada Galeria de Treinador -> Tempestade Prateada
+  'swsh12.5gg': 'swsh12.5', // Realeza Absoluta Galeria de Galar -> Realeza Absoluta
+  me02: 'me01', // Fogo Fantasmagórico (símbolo ausente nos dois locales) -> Megaevolução
+  bog: 'ecard1', // Best of game (logo ausente nos dois locales) -> Expedition Base Set
+
+  // Mesmo padrão acima, pro restante do catálogo com a mesma lacuna (McDonald's de anos
+  // sem cobertura, Trainer Kits e sub-coleções avulsas sem asset visual próprio na TCGdex).
+  '2011bw': 'bw1', '2012bw': 'bw1',
+  '2014xy': 'xy1', '2015xy': 'xy1', '2016xy': 'xy1',
+  '2017sm': 'sm1', '2018sm': 'sm1', '2019sm': 'sm1',
+  '2024sv': 'sv01',
+  miscp: 'base1', wp: 'base1', jumbo: 'base1',
+  'tk-ex-latia': 'ex1', 'tk-ex-latio': 'ex1', 'tk-ex-m': 'ex1', 'tk-ex-p': 'ex1',
+  'tk-dp-l': 'dp1', 'tk-dp-m': 'dp1',
+  'tk-hs-r': 'hgss1', 'tk-hs-g': 'hgss1',
+  'tk-bw-z': 'bw1', 'tk-bw-e': 'bw1',
+  'tk-xy-sy': 'xy1', 'tk-xy-n': 'xy1', 'tk-xy-b': 'xy1', 'tk-xy-w': 'xy1',
+  'tk-xy-latia': 'xy1', 'tk-xy-latio': 'xy1', 'tk-xy-su': 'xy1', 'tk-xy-p': 'xy1',
+  'tk-sm-r': 'sm1', 'tk-sm-l': 'sm1',
+  'ex5.5': 'ex1', // Poké Card Creator Pack
+  exu: 'ex10', // Unseen Forces Unown Collection -> Unseen Forces (mesmo dia de lançamento)
+  rc: 'bw11', // Radiant Collection -> Tesouros Lendários (mesmo dia de lançamento)
+  xya: 'xy1', // Yellow A Alternate
+  'sm3.5': 'sm3', // Lendas Luminescentes -> Sombras Ardentes (mesma era, lançamento próximo)
+  'sm7.5': 'sm7', // Dragões Soberanos -> Tempestade Celestial (mesma era, lançamento próximo)
+  sma: 'sm115', // Destinos Ocultos Cofre Brilhante -> Destinos Ocultos (mesmo dia de lançamento)
+  sv07: 'sv01', // Coroa Estelar (símbolo ausente nos dois locales)
+};
+
 function mapSet(raw: any) {
   return {
     id: raw.id,
@@ -148,8 +198,9 @@ tcgRouter.get(
       const list = await fetchTcgdex('en', '/sets');
       const filtered = (list || []).filter((s: any) => !EXCLUDED_SET_IDS.has(s.id));
       const details = await mapConcurrent(filtered, 15, async (s: any) => {
+        let detail: any;
         try {
-          return await fetchTcgdex('pt', `/sets/${s.id}`);
+          detail = await fetchTcgdex('pt', `/sets/${s.id}`);
         } catch {
           try {
             return await fetchTcgdex('en', `/sets/${s.id}`);
@@ -157,11 +208,36 @@ tcgRouter.get(
             return null;
           }
         }
+        // O locale `pt` traduz nome/cartas de muita coisa, mas o asset de logo em si só
+        // existe em `pt` pra coleções bem recentes - eras inteiras (Sun & Moon, XY, Black
+        // & White, HeartGold & SoulSilver...) têm cartas traduzidas mas nenhum logo/símbolo
+        // em `pt`, só em `en`. Busca o detalhe em inglês só quando falta algo visual.
+        if (!detail.logo || !detail.symbol) {
+          try {
+            const enDetail = await fetchTcgdex('en', `/sets/${s.id}`);
+            detail.logo = detail.logo || enDetail.logo;
+            detail.symbol = detail.symbol || enDetail.symbol;
+          } catch {
+            // Sem logo/símbolo em nenhum dos dois locales - resolvido pelo fallback
+            // entre coleções relacionadas logo abaixo (FALLBACK_LOGO_SET_ID).
+          }
+        }
+        return detail;
       });
       const mapped = details
         .filter(Boolean)
         .filter((raw: any) => !EXCLUDED_SERIE_IDS.has(raw.serie?.id))
         .map(mapSet);
+
+      const byId = new Map(mapped.map((s: any) => [s.id, s]));
+      for (const [setId, fallbackId] of Object.entries(FALLBACK_LOGO_SET_ID)) {
+        const set = byId.get(setId);
+        const fallbackSet = byId.get(fallbackId);
+        if (!set || !fallbackSet) continue;
+        if (!set.logoUrl) set.logoUrl = fallbackSet.logoUrl;
+        if (!set.symbolUrl) set.symbolUrl = fallbackSet.symbolUrl;
+      }
+
       await supabase.from('sets_cache').upsert({ id: 'all', data: mapped, updated_at: new Date().toISOString() });
       return res.json({ data: mapped, source: 'live' });
     } catch (err) {
