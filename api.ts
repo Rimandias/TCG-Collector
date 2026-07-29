@@ -139,7 +139,10 @@ export const fetchCardsBySet = async (setId: string, skipBackgroundSync = false)
   }
 
   try {
-    const body = await fetchDeduped(`${API_BASE}/tcg/cards/${encodeURIComponent(setId)}`, 8000);
+    // 20s (igual à revalidação em segundo plano acima): coleções sem cartas traduzidas em
+    // `pt` fazem 2 requisições sequenciais na TCGdex (pt vazio, depois en) só pro primeiro
+    // acesso sem cache - 8s abortava sob carga (várias coleções carregando juntas no login).
+    const body = await fetchDeduped(`${API_BASE}/tcg/cards/${encodeURIComponent(setId)}`, 20000);
     if (!body?.data) throw new Error('Invalid data format received from backend');
 
     try {

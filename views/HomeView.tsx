@@ -19,7 +19,28 @@ interface HomeViewProps {
   setSearchQuery: (query: string) => void;
 }
 
-const HomeView: React.FC<HomeViewProps> = ({ 
+// Coleção que representa cada era na Home (usada pro logo mostrado no card da era).
+// Por id da TCGdex, que é estável - o nome dessas coleções vem traduzido e nem sempre
+// bate mais com o nome da era em inglês (ver getSetLogoForSeries).
+const ERA_FLAGSHIP_SET_ID: Record<string, string> = {
+  'Mega Evolution': 'me01',
+  'Scarlet & Violet': 'sv01',
+  'Sword & Shield': 'swsh1',
+  'Sun & Moon': 'sm1',
+  'XY': 'xy1',
+  'Black & White': 'bw1',
+  'HeartGold & SoulSilver': 'hgss1',
+  'Platinum': 'pl1',
+  'Diamond & Pearl': 'dp1',
+  'POP': 'pop1',
+  'EX': 'ex1',
+  'E-Card': 'ecard1',
+  'Neo': 'neo1',
+  'Gym': 'gym1',
+  'Base': 'base1',
+};
+
+const HomeView: React.FC<HomeViewProps> = ({
   user, 
   onUpdateUser,
   selectedSeries,
@@ -54,10 +75,15 @@ const HomeView: React.FC<HomeViewProps> = ({
   const getSetLogoForSeries = useCallback((seriesName: string) => {
     const seriesSets = sets.filter(s => s.series === seriesName);
     if (seriesSets.length === 0) return '';
-    // Prefere a coleção-base com o mesmo nome da era (ex.: set "Black & White" na era
-    // "Black & White"), em vez de simplesmente a mais antiga por data de lançamento —
-    // vários "X Black Star Promos" são lançados no mesmo dia ou antes da coleção-base
-    // e acabavam "vencendo" o sort por data, mostrando o logo do promo em vez do oficial.
+    // Coleção-carro-chefe de cada era, por id (estável) - o nome da coleção-base vem
+    // traduzido pela TCGdex (ex.: "HeartGold SoulSilver", sem "&") e não bate mais
+    // literalmente com o nome da era em inglês que o app usa há mais tempo, então
+    // comparar por nome (como antes) parava de funcionar assim que a tradução chegou.
+    const flagshipId = ERA_FLAGSHIP_SET_ID[seriesName];
+    const flagshipSet = flagshipId && seriesSets.find(s => s.id === flagshipId);
+    if (flagshipSet) return flagshipSet.logoUrl || '';
+    // Era sem carro-chefe mapeado (ou o set não veio nessa carga): cai pro nome exato
+    // e, por fim, pra coleção mais antiga por data de lançamento.
     const baseSet = seriesSets.find(s => s.name.trim().toLowerCase() === seriesName.trim().toLowerCase());
     if (baseSet) return baseSet.logoUrl || '';
     const sorted = [...seriesSets].sort((a, b) => a.releaseDate.localeCompare(b.releaseDate));
