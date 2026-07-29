@@ -2,6 +2,7 @@
 import React from 'react';
 import { Card, User, CardCondition } from '../types';
 import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, adjustLanguageQuantity } from '../db';
+import CardImage from './CardImage';
 
 export type CardViewMode = 'grid3' | 'grid6' | 'list';
 
@@ -143,10 +144,10 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
         onClick={toggleOwned}
         className="relative aspect-[2/2.8] overflow-hidden rounded-md cursor-pointer transition-transform active:scale-95 shadow-sm border border-slate-100"
       >
-        <img
+        <CardImage
           src={card.imageUrl}
           alt={card.name}
-          className={`w-full h-full object-cover transition-all duration-500 ${isColor ? 'grayscale-0' : 'grayscale brightness-[0.8] opacity-40'}`}
+          className={`w-full h-full object-cover transition-all duration-500 ${isColor ? 'grayscale-0' : 'grayscale brightness-[0.8] opacity-40'} ${!card.imageUrl ? 'bg-slate-100' : ''}`}
         />
         {cardData.isForTrade && (
           <div className="absolute top-1 left-1 w-5 h-5 bg-[#646B99] rounded-full flex items-center justify-center shadow-md border border-white">

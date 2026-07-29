@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, LANGUAGE_OPTIONS, TradeItem } from '../types';
 import { getCompleteCardNumber } from '../db';
+import CardImage from './CardImage';
 
 const languageLabel = (code?: string) => (!code ? null : (LANGUAGE_OPTIONS.find(l => l.code === code)?.label || code));
 
@@ -27,7 +28,7 @@ const TradeItemsList: React.FC<{
             className={`flex items-center gap-3 p-2 rounded-xl border ${isUnavailable ? 'border-red-100 bg-red-50/50' : 'border-slate-100 bg-slate-50/50'}`}
           >
             {card && (
-              <img src={card.imageUrl} className={`w-10 h-14 rounded-lg object-contain bg-white border border-slate-100/50 flex-shrink-0 ${isUnavailable ? 'opacity-40 grayscale' : ''}`} />
+              <CardImage src={card.imageUrl} alt={card.name} className={`w-10 h-14 rounded-lg object-contain bg-white border border-slate-100/50 flex-shrink-0 ${isUnavailable ? 'opacity-40 grayscale' : ''}`} />
             )}
             <div className="flex-1 min-w-0">
               <p className={`text-[11px] font-semibold truncate ${isUnavailable ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{card ? card.name : item.cardId}</p>
