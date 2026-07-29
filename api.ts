@@ -318,9 +318,43 @@ export interface CardVariantInfo {
 
 const cardVariantsCache = new Map<string, Promise<CardVariantInfo>>();
 
+// Persistido entre sessões (30 dias, igual ao cache do servidor) - variação de carta é
+// dado histórico que praticamente não muda, então uma vez buscada não precisa de rede de
+// novo. Isso é o que permite o CardModal abrir sem o "flash" de mostrar tudo e corrigir
+// depois, e o toque rápido pra marcar como possuída (CardItem) escolher a variação certa
+// sem esperar uma requisição toda vez.
+const CARD_VARIANTS_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+function readCachedCardVariants(cardId: string): CardVariantInfo | null {
+  try {
+    const raw = localStorage.getItem(`poketracker_cache_variants_${cardId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.cachedAt !== 'number' || Date.now() - parsed.cachedAt > CARD_VARIANTS_TTL_MS) return null;
+    return parsed.data || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedCardVariants(cardId: string, data: CardVariantInfo) {
+  try {
+    localStorage.setItem(`poketracker_cache_variants_${cardId}`, JSON.stringify({ data, cachedAt: Date.now() }));
+  } catch {
+    // localStorage cheio/indisponível - só perde a persistência entre sessões, não é crítico
+  }
+}
+
 export const fetchCardVariants = (cardId: string): Promise<CardVariantInfo> => {
   const existing = cardVariantsCache.get(cardId);
   if (existing) return existing;
+
+  const cached = readCachedCardVariants(cardId);
+  if (cached) {
+    const resolved = Promise.resolve(cached);
+    cardVariantsCache.set(cardId, resolved);
+    return resolved;
+  }
 
   const request = (async () => {
     const controller = new AbortController();
@@ -332,7 +366,9 @@ export const fetchCardVariants = (cardId: string): Promise<CardVariantInfo> => {
       });
       if (!response.ok) return { flags: {}, rarity: '', artist: '' };
       const body = await response.json();
-      return { flags: body?.flags || {}, rarity: body?.rarity || '', artist: body?.artist || '' };
+      const result = { flags: body?.flags || {}, rarity: body?.rarity || '', artist: body?.artist || '' };
+      writeCachedCardVariants(cardId, result);
+      return result;
     } catch (err) {
       if ((err as Error)?.name !== 'AbortError') {
         console.warn(`Could not load variant info for ${cardId}:`, (err as Error).message);

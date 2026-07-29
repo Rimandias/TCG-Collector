@@ -105,6 +105,18 @@ export const getNormalizedVariations = (variations: Record<string, any>): Record
   return normalized;
 };
 
+// Qual variação usar quando o app precisa escolher uma sozinho (toque rápido pra marcar
+// como possuída, +/- na grade) - nunca deve ser sempre "Standard": várias cartas (promos,
+// Pokeball/Master Ball exclusivas, etc.) não têm Standard de verdade. Prioriza Standard se
+// a carta realmente tem essa variação; senão, a primeira variação real seguindo a ordem de
+// VARIATION_TYPES; se não houver nenhum dado de variação (flags vazio - API fora do ar ou
+// carta ainda não consultada), mantém o comportamento antigo (Standard) por segurança.
+export const getDefaultVariationType = (flags: Record<string, boolean> | undefined | null): string => {
+  if (!flags || Object.keys(flags).length === 0) return 'Standard';
+  const available = VARIATION_TYPES.find(v => flags[v] !== false);
+  return available || 'Standard';
+};
+
 // Ajusta a quantidade de um idioma específico dentro de uma condição, recalculando
 // o agregado (quantity/price) usado pelo resto do app (trocas, estatísticas, etc.).
 // delta pode ser negativo (para diminuir). Quando price é informado, atualiza o
