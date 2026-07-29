@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
-import { assembleFullUser, replaceUserData } from '../userStore.js';
+import { assembleFullUser, replaceUserData, buildUserResponseFromInput } from '../userStore.js';
 import { asyncHandler } from '../asyncHandler.js';
 import { supabase } from '../supabase.js';
 
@@ -57,9 +57,9 @@ usersRouter.put(
       return res.status(400).json({ error: 'Dados inválidos.', details: parsed.error.flatten() });
     }
 
-    await replaceUserData(req.userId!, parsed.data);
+    const { friendCode, isPremium } = await replaceUserData(req.userId!, parsed.data);
 
-    const user = await assembleFullUser(req.userId!, req.userEmail!);
+    const user = await buildUserResponseFromInput(req.userId!, req.userEmail!, friendCode, isPremium, parsed.data);
     return res.json({ user });
   })
 );
