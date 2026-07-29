@@ -11,9 +11,12 @@ export const tcgRouter = Router();
 const TCGDEX_BASE = 'https://api.tcgdex.net/v2';
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 horas
 
-// "Pokémon TCG Pocket" é o joguinho de celular, não o TCG físico - fora do escopo do app.
+// `serie.id` é estável entre locales - `serie.name` não é (ex: "Pokémon TCG Pocket" em
+// `en` vira "Pokémon Estampas Ilustradas Pocket" em `pt`, e como a maioria dos sets busca
+// o detalhe em `pt` primeiro, filtrar pelo nome em inglês deixava passar o Pocket batido).
+// 'tcgp' é o joguinho de celular (Pokémon TCG Pocket), não o TCG físico - fora do escopo.
 // 'sp' ("Sample") é um set de teste/placeholder da própria TCGdex, sem cartas reais.
-const EXCLUDED_SERIES = new Set(['Pokémon TCG Pocket']);
+const EXCLUDED_SERIE_IDS = new Set(['tcgp']);
 const EXCLUDED_SET_IDS = new Set(['sp']);
 
 // Limite alto porque a Home carrega as cartas de todas as ~200 coleções do catálogo
@@ -57,11 +60,67 @@ async function mapConcurrent<T, R>(items: T[], limit: number, fn: (item: T) => P
   return results;
 }
 
+// Era canônica por `serie.id` da TCGdex (estável entre locales, ao contrário de
+// `serie.name`). Levantado comparando o catálogo completo da TCGdex com o da
+// pokemontcg.io (cujo campo `series` já vinha nesses nomes em inglês, que o app usa
+// desde sempre pra agrupar Home/Coleções por era).
+const SERIE_ID_TO_ERA: Record<string, string> = {
+  base: 'Base',
+  gym: 'Gym',
+  neo: 'Neo',
+  ecard: 'E-Card',
+  ex: 'EX',
+  dp: 'Diamond & Pearl',
+  pl: 'Platinum',
+  hgss: 'HeartGold & SoulSilver',
+  bw: 'Black & White',
+  xy: 'XY',
+  sm: 'Sun & Moon',
+  swsh: 'Sword & Shield',
+  sv: 'Scarlet & Violet',
+  me: 'Mega Evolution',
+  pop: 'POP',
+};
+
+// "McDonald's Collection", "Trainer kits", "Legendary Collection", "Call of Legends" e
+// "Miscellaneous" são séries próprias na TCGdex, mas na pokemontcg.io (referência que o
+// app sempre usou) essas coleções ficam dentro da era em que foram lançadas - decompõe
+// por id/data pra manter a mesma agrupação de eras que a Home já tinha antes da migração.
+// Usa o id do set (não o nome) porque o nome já vem traduzido nesse ponto do código.
+const FLAT_SERIE_IDS = new Set(['mc', 'tk', 'lc', 'col', 'misc']);
+const SET_ID_ERA_OVERRIDE: Record<string, string> = {
+  lc: 'E-Card', // Legendary Collection
+  col1: 'HeartGold & SoulSilver', // Call of Legends
+};
+
+function eraByReleaseYear(releaseDate: string): string {
+  const year = parseInt((releaseDate || '').split('-')[0], 10);
+  if (!year) return 'Promos / Outras';
+  if (year <= 2002) return 'Base';
+  if (year <= 2006) return 'EX';
+  if (year <= 2008) return 'Diamond & Pearl';
+  if (year <= 2010) return 'HeartGold & SoulSilver';
+  if (year <= 2013) return 'Black & White';
+  if (year <= 2016) return 'XY';
+  if (year <= 2019) return 'Sun & Moon';
+  if (year <= 2022) return 'Sword & Shield';
+  return 'Scarlet & Violet';
+}
+
+function mapTcgdexEra(raw: any): string {
+  const serieId = raw.serie?.id;
+  if (!serieId || FLAT_SERIE_IDS.has(serieId)) {
+    if (SET_ID_ERA_OVERRIDE[raw.id]) return SET_ID_ERA_OVERRIDE[raw.id];
+    return eraByReleaseYear(raw.releaseDate);
+  }
+  return SERIE_ID_TO_ERA[serieId] || raw.serie?.name || 'Outras';
+}
+
 function mapSet(raw: any) {
-  const mapped = {
+  return {
     id: raw.id,
     name: raw.name,
-    series: raw.serie?.name || 'Outras',
+    series: mapTcgdexEra(raw),
     printedTotal: raw.cardCount?.official || 0,
     total: raw.cardCount?.total || raw.cardCount?.official || 0,
     logoUrl: raw.logo ? `${raw.logo}.webp` : '',
@@ -69,8 +128,6 @@ function mapSet(raw: any) {
     releaseDate: raw.releaseDate || '',
     updatedAt: raw.releaseDate || '',
   };
-  mapped.series = mapSetSeries(mapped);
-  return mapped;
 }
 
 tcgRouter.get(
@@ -103,7 +160,7 @@ tcgRouter.get(
       });
       const mapped = details
         .filter(Boolean)
-        .filter((raw: any) => !EXCLUDED_SERIES.has(raw.serie?.name))
+        .filter((raw: any) => !EXCLUDED_SERIE_IDS.has(raw.serie?.id))
         .map(mapSet);
       await supabase.from('sets_cache').upsert({ id: 'all', data: mapped, updated_at: new Date().toISOString() });
       return res.json({ data: mapped, source: 'live' });
