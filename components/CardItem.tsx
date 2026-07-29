@@ -1,8 +1,8 @@
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Card, User, CardCondition } from '../types';
 import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, adjustLanguageQuantity, getDefaultVariationType } from '../db';
-import { fetchCardVariants } from '../api';
+import { fetchCardVariants, peekCachedCardVariants } from '../api';
 import CardImage from './CardImage';
 
 export type CardViewMode = 'grid3' | 'grid6' | 'list';
@@ -24,15 +24,49 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
 
   const totalQuantity = getCardTotalQuantity(cardData.variations);
 
-  const toggleOwned = async () => {
+  // Uma chamada a /api/tcg/card-variants leva ~1s de ida e volta (rede até o Render/
+  // Supabase) mesmo já cacheada no servidor - esperar por ela antes de aplicar o toque
+  // deixaria a interação visivelmente lenta. Em vez disso, usa o que já se sabe
+  // instantaneamente (cache local, se essa carta já foi consultada antes) e, se ainda não
+  // souber, aplica o toque como Standard (chute otimista, igual sempre foi) e corrige
+  // sozinho em segundo plano assim que a resposta real chegar - sem travar nada.
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  const reconcileVariation = (guessedVariation: string, quantityGuessed: number, isToggle: boolean) => {
+    fetchCardVariants(card.id).then((info) => {
+      const correctVariation = getDefaultVariationType(info.flags);
+      if (correctVariation === guessedVariation) return;
+      const latestUser = userRef.current;
+      const latestCardData = latestUser.ownedCards[card.id];
+      if (!latestCardData) return;
+      const latestNormalized = getNormalizedVariations(latestCardData.variations);
+      const guessedNow = latestNormalized[guessedVariation][CardCondition.NM].quantity;
+      const correctNow = latestNormalized[correctVariation][CardCondition.NM].quantity;
+      // Só migra se a variação "chutada" ainda tem exatamente o que colocamos lá e a
+      // variação certa ainda está zerada - sinal de que nada mais mexeu nessa carta nesse
+      // meio-tempo (ex: usuário abriu o +Info e editou manualmente). Se mexeu, não arrisca
+      // sobrescrever - o dado fica onde está, só sem a correção automática dessa vez.
+      if (guessedNow !== quantityGuessed || correctNow !== 0) return;
+      if (getCardTotalQuantity(latestCardData.variations) !== quantityGuessed) return;
+      latestNormalized[correctVariation][CardCondition.NM].quantity = quantityGuessed;
+      latestNormalized[guessedVariation][CardCondition.NM].quantity = 0;
+      onUpdateUser(updateCardStatus(latestUser, card.id, isToggle ? { isOwned: true, variations: latestNormalized } : { variations: latestNormalized }));
+    });
+  };
+
+  const toggleOwned = () => {
     // Se não tiver nenhuma, ao clicar na carta marcamos como possuída - na variação que a
     // carta realmente tem (nem toda carta tem Standard; ver getDefaultVariationType).
     if (totalQuantity === 0) {
-      const { flags } = await fetchCardVariants(card.id);
-      const variation = getDefaultVariationType(flags);
+      const cachedInfo = peekCachedCardVariants(card.id);
+      const variation = getDefaultVariationType(cachedInfo?.flags);
       const normalized = getNormalizedVariations(cardData.variations);
       normalized[variation][CardCondition.NM].quantity = 1;
       onUpdateUser(updateCardStatus(user, card.id, { isOwned: true, variations: normalized }));
+      if (!cachedInfo) reconcileVariation(variation, 1, true);
     } else {
       // Se já tem, o clique na carta apenas alterna a visualização (colorida/p&b) via isOwned se solicitado,
       // mas o comportamento padrão solicitado agora vincula a cor ao contador > 0.
@@ -41,9 +75,9 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
     }
   };
 
-  const adjustQuantity = async (delta: number) => {
-    const { flags } = await fetchCardVariants(card.id);
-    const variation = getDefaultVariationType(flags);
+  const adjustQuantity = (delta: number) => {
+    const cachedInfo = peekCachedCardVariants(card.id);
+    const variation = getDefaultVariationType(cachedInfo?.flags);
     const normalized = getNormalizedVariations(cardData.variations);
     const nmDetails = normalized[variation][CardCondition.NM];
     // Cartas com idioma detalhado (ver +Info) mantêm o total consistente somando/
@@ -56,6 +90,7 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
     }
     const hasCards = getCardTotalQuantity(normalized) > 0;
     onUpdateUser(updateCardStatus(user, card.id, { variations: normalized, isOwned: hasCards }));
+    if (!cachedInfo) reconcileVariation(variation, normalized[variation][CardCondition.NM].quantity, false);
   };
 
   const toggleTrade = (e: React.MouseEvent) => {
