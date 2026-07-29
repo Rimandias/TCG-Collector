@@ -345,6 +345,16 @@ function writeCachedCardVariants(cardId: string, data: CardVariantInfo) {
   }
 }
 
+// Lê o cache de variações sem fazer nenhuma chamada de rede - usado pelo toque rápido de
+// "Gerenciar Pasta" (CardItem), que precisa decidir a variação padrão instantaneamente. Uma
+// requisição a esse endpoint sempre leva ~1s (rede até o Render/Supabase), mesmo já cacheado
+// no servidor, então bloquear o toque nisso deixa a interação visivelmente lenta - melhor
+// usar o que já se sabe (gravado no mesmo instante em que uma busca anterior resolve) e
+// corrigir em segundo plano se o "chute" estiver errado (ver getDefaultVariationType).
+export function peekCachedCardVariants(cardId: string): CardVariantInfo | null {
+  return readCachedCardVariants(cardId);
+}
+
 export const fetchCardVariants = (cardId: string): Promise<CardVariantInfo> => {
   const existing = cardVariantsCache.get(cardId);
   if (existing) return existing;
