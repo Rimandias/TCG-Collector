@@ -2,15 +2,19 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { supabase } from '../supabase.js';
-import { env } from '../env.js';
 import { asyncHandler } from '../asyncHandler.js';
 import { FALLBACK_CARDS, FALLBACK_SETS, generateMockCards, mapSetSeries } from '../fallbackData.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 
 export const tcgRouter = Router();
 
-const API_BASE = 'https://api.pokemontcg.io/v2';
+const TCGDEX_BASE = 'https://api.tcgdex.net/v2';
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 horas
+
+// "Pokémon TCG Pocket" é o joguinho de celular, não o TCG físico - fora do escopo do app.
+// 'sp' ("Sample") é um set de teste/placeholder da própria TCGdex, sem cartas reais.
+const EXCLUDED_SERIES = new Set(['Pokémon TCG Pocket']);
+const EXCLUDED_SET_IDS = new Set(['sp']);
 
 // Limite alto porque a Home carrega as cartas de todas as ~200 coleções do catálogo
 // de uma vez (para a busca global) logo no login - e os dados vêm do nosso próprio
@@ -23,17 +27,13 @@ const tcgLimiter = rateLimit({
 });
 tcgRouter.use(tcgLimiter);
 
-async function fetchFromPokemonTcg(pathAndQuery: string, timeoutMs = 8000): Promise<any> {
+async function fetchTcgdex(locale: string, path: string, timeoutMs = 8000): Promise<any> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const headers: Record<string, string> = { Accept: 'application/json' };
-    if (env.pokemonTcgApiKey) {
-      headers['X-Api-Key'] = env.pokemonTcgApiKey;
-    }
-    const response = await fetch(`${API_BASE}${pathAndQuery}`, { headers, signal: controller.signal });
+    const response = await fetch(`${TCGDEX_BASE}/${locale}${path}`, { headers: { Accept: 'application/json' }, signal: controller.signal });
     if (!response.ok) {
-      throw new Error(`Pokemon TCG API respondeu ${response.status}`);
+      throw new Error(`TCGdex respondeu ${response.status}`);
     }
     return await response.json();
   } finally {
@@ -41,38 +41,36 @@ async function fetchFromPokemonTcg(pathAndQuery: string, timeoutMs = 8000): Prom
   }
 }
 
+// Roda até `limit` requisições em paralelo por vez, ao invés de todas de uma vez - a
+// listagem em lote da TCGdex não traz série/data de lançamento, então cada uma das ~200
+// coleções precisa de uma chamada própria de detalhe (mesmo padrão usado em tcgJp.ts).
+async function mapConcurrent<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const current = cursor++;
+      results[current] = await fn(items[current]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 function mapSet(raw: any) {
   const mapped = {
     id: raw.id,
     name: raw.name,
-    series: raw.series,
-    printedTotal: raw.printedTotal,
-    total: raw.total,
-    logoUrl: raw.images?.logo || '',
-    symbolUrl: raw.images?.symbol || '',
-    releaseDate: raw.releaseDate,
-    updatedAt: raw.updatedAt,
+    series: raw.serie?.name || 'Outras',
+    printedTotal: raw.cardCount?.official || 0,
+    total: raw.cardCount?.total || raw.cardCount?.official || 0,
+    logoUrl: raw.logo ? `${raw.logo}.webp` : '',
+    symbolUrl: raw.symbol ? `${raw.symbol}.webp` : '',
+    releaseDate: raw.releaseDate || '',
+    updatedAt: raw.releaseDate || '',
   };
   mapped.series = mapSetSeries(mapped);
   return mapped;
-}
-
-function mapCard(raw: any) {
-  return {
-    id: raw.id,
-    name: raw.name,
-    imageUrl: raw.images?.small || '',
-    imageUrlHiRes: raw.images?.large || '',
-    number: raw.number,
-    rarity: raw.rarity || 'Common',
-    artist: raw.artist || '',
-    isSecret: parseInt(raw.number) > (raw.set?.printedTotal || 0),
-    set: {
-      id: raw.set?.id,
-      name: raw.set?.name,
-      printedTotal: raw.set?.printedTotal,
-    },
-  };
 }
 
 tcgRouter.get(
@@ -86,12 +84,31 @@ tcgRouter.get(
     }
 
     try {
-      const raw = await fetchFromPokemonTcg('/sets?orderBy=-releaseDate');
-      const mapped = (raw?.data || []).map(mapSet);
+      // A listagem em `en` é a mais completa: dezenas de coleções reais (Base Set 2, Team
+      // Rocket, Neo Genesis, Gym Heroes...) simplesmente não existem em `pt` (404 no detalhe,
+      // não só cartas vazias) - usá-la como base evita perder essas coleções inteiras. O
+      // nome/logo em português (quando existe) ainda vem do detalhe por coleção abaixo.
+      const list = await fetchTcgdex('en', '/sets');
+      const filtered = (list || []).filter((s: any) => !EXCLUDED_SET_IDS.has(s.id));
+      const details = await mapConcurrent(filtered, 15, async (s: any) => {
+        try {
+          return await fetchTcgdex('pt', `/sets/${s.id}`);
+        } catch {
+          try {
+            return await fetchTcgdex('en', `/sets/${s.id}`);
+          } catch {
+            return null;
+          }
+        }
+      });
+      const mapped = details
+        .filter(Boolean)
+        .filter((raw: any) => !EXCLUDED_SERIES.has(raw.serie?.name))
+        .map(mapSet);
       await supabase.from('sets_cache').upsert({ id: 'all', data: mapped, updated_at: new Date().toISOString() });
       return res.json({ data: mapped, source: 'live' });
     } catch (err) {
-      console.warn('[tcg] Falha ao buscar /sets na Pokemon TCG API, usando contingência:', (err as Error).message);
+      console.warn('[tcg] Falha ao buscar /sets na TCGdex, usando contingência:', (err as Error).message);
       if (cached) {
         // Serve cache expirado em vez de fallback genérico
         return res.json({ data: cached.data, source: 'stale-cache' });
@@ -121,10 +138,44 @@ tcgRouter.get(
     }
 
     try {
-      const raw = await fetchFromPokemonTcg(`/cards?q=set.id:${encodeURIComponent(setId)}&orderBy=number`);
-      const mapped = (raw?.data || []).map(mapCard);
+      let setDetail: any;
+      let source = 'live';
+      try {
+        setDetail = await fetchTcgdex('pt', `/sets/${setId}`);
+        // Coleções muito antigas (Base Set até HeartGold/SoulSilver) ainda não têm cartas
+        // traduzidas na TCGdex - o set em si já vem com nome em português, mas a lista de
+        // cartas vem vazia. Só nesse caso cai pro inglês; o id/número da carta é o mesmo
+        // dos dois lados, então nada mais no app é afetado por essa troca de idioma.
+        if (!setDetail?.cards || setDetail.cards.length === 0) {
+          setDetail = await fetchTcgdex('en', `/sets/${setId}`);
+          source = 'live-en-fallback';
+        }
+      } catch {
+        // Dezenas de coleções (Base Set 2, Team Rocket, Neo Genesis...) nem existem em
+        // `pt` (404 direto, não só cartas vazias) - cai pro inglês inteiro nesse caso.
+        setDetail = await fetchTcgdex('en', `/sets/${setId}`);
+        source = 'live-en-fallback';
+      }
+      const printedTotal = setDetail.cardCount?.official || 0;
+      // Raridade e ilustrador só vêm no endpoint de carta individual, não nessa listagem
+      // em lote - ficam vazios aqui (mesma limitação que o catálogo japonês já tinha) e são
+      // preenchidos sob demanda quando o usuário abre a carta (ver /card-variants/:cardId).
+      // Buscar isso pra todo o catálogo aqui multiplicaria uma chamada por coleção em
+      // centenas por coleção, o que é exatamente o problema de lentidão que a busca global
+      // já corrigiu uma vez (ver comentário do limitador de taxa acima).
+      const mapped = (setDetail.cards || []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        imageUrl: c.image ? `${c.image}/low.webp` : '',
+        imageUrlHiRes: c.image ? `${c.image}/high.webp` : '',
+        number: c.localId,
+        rarity: '',
+        artist: '',
+        isSecret: parseInt(c.localId, 10) > printedTotal,
+        set: { id: setId, name: setDetail.name, printedTotal },
+      }));
       await supabase.from('cards_cache').upsert({ set_id: setId, data: mapped, updated_at: new Date().toISOString() });
-      return res.json({ data: mapped, source: 'live' });
+      return res.json({ data: mapped, source });
     } catch (err) {
       console.warn(`[tcg] Falha ao buscar /cards para o set ${setId}, usando contingência:`, (err as Error).message);
       if (cached) {
@@ -238,5 +289,76 @@ tcgRouter.get(
     }
 
     return res.json({ stats });
+  })
+);
+
+// Bandeiras de variação (Standard/Foil/Reverse Foil/First Edition/Pokeball/Master Ball) que
+// realmente existem pra uma carta específica, vindas do endpoint de detalhe da TCGdex (só
+// esse traz `variants`/`variants_detailed`, a listagem em lote não traz). Usado pelo
+// CardModal pra esconder variações que a carta nunca teve, sem nunca esconder uma que já
+// tenha quantidade/preço registrados pelo usuário (isso é decidido no frontend).
+const CACHE_VARIANTS_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias - dado histórico, não muda
+
+function extractVariantFlags(detail: any): { flags: Record<string, boolean>; rarity: string; artist: string } {
+  const v = detail?.variants || {};
+  const flags: Record<string, boolean> = {
+    Standard: !!v.normal,
+    Foil: !!v.holo,
+    'Reverse Foil': !!v.reverse,
+    'First Edition': !!v.firstEdition,
+  };
+
+  const detailed: any[] = Array.isArray(detail?.variants_detailed) ? detail.variants_detailed : [];
+  let pokeball = false;
+  let masterBall = false;
+  for (const entry of detailed) {
+    const foilName = (entry?.foil || '').toLowerCase();
+    if (!foilName) continue;
+    if (foilName.includes('poke') || foilName.includes('poké')) pokeball = true;
+    if (foilName.includes('master')) masterBall = true;
+  }
+  flags['Pokeball'] = pokeball;
+  flags['Master Ball'] = masterBall;
+
+  return { flags, rarity: detail?.rarity || '', artist: detail?.illustrator || '' };
+}
+
+tcgRouter.get(
+  '/card-variants/:cardId',
+  asyncHandler(async (req, res) => {
+    const parsed = cardIdSchema.safeParse(req.params.cardId);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'ID de carta inválido.' });
+    }
+    const cardId = parsed.data;
+
+    const { data: cached } = await supabase.from('card_variants_cache').select('data, updated_at').eq('card_id', cardId).maybeSingle();
+    const isFresh = cached && Date.now() - new Date(cached.updated_at).getTime() < CACHE_VARIANTS_TTL_MS;
+    if (cached && isFresh) {
+      return res.json(cached.data);
+    }
+
+    try {
+      let detail: any;
+      try {
+        detail = await fetchTcgdex('pt', `/cards/${cardId}`);
+        if (!detail || Object.keys(detail).length === 0) {
+          detail = await fetchTcgdex('en', `/cards/${cardId}`);
+        }
+      } catch {
+        // Cartas de coleções sem `pt` (ver /sets acima) 404 direto no detalhe também.
+        detail = await fetchTcgdex('en', `/cards/${cardId}`);
+      }
+      const result = extractVariantFlags(detail);
+      await supabase.from('card_variants_cache').upsert({ card_id: cardId, data: result, updated_at: new Date().toISOString() });
+      return res.json(result);
+    } catch (err) {
+      console.warn(`[tcg] Falha ao buscar variantes da carta ${cardId}:`, (err as Error).message);
+      if (cached) {
+        return res.json(cached.data);
+      }
+      // Sem dado nenhum: devolve flags vazias - o frontend trata "sem dado" como "mostra tudo".
+      return res.json({ flags: {}, rarity: '', artist: '' });
+    }
   })
 );

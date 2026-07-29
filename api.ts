@@ -58,7 +58,9 @@ const shouldRunBackgroundSync = (url: string): boolean => {
 
 // FETCH SETS WITH CLIENT-SIDE SWR CACHING (o backend já cacheia/faz fallback do lado dele)
 export const fetchSets = async () => {
-  const CACHE_KEY = 'poketracker_cache_sets';
+  // v2: catálogo migrou de pokemontcg.io pra TCGdex (nomes/logos em PT-BR) - invalida
+  // qualquer cache antigo do navegador que ainda tenha os dados da API anterior.
+  const CACHE_KEY = 'poketracker_cache_sets_v2';
 
   let cachedData: any[] | null = null;
   try {
@@ -107,11 +109,9 @@ export const fetchSets = async () => {
 
 // FETCH CARDS WITH CLIENT-SIDE SWR CACHING
 export const fetchCardsBySet = async (setId: string, skipBackgroundSync = false) => {
-  // v2: invalida qualquer cache antigo do navegador que possa ter guardado dados de
-  // contingência (nomes/imagens genéricos) de antes da chave da Pokemon TCG API ser
-  // configurada — sem isso, o navegador continuava servindo essas cartas quebradas
-  // mesmo depois do backend já estar corrigido.
-  const CACHE_KEY = `poketracker_cache_cards_v2_${setId}`;
+  // v3: catálogo migrou de pokemontcg.io pra TCGdex (nomes/imagens em PT-BR) - invalida
+  // qualquer cache antigo do navegador que ainda tenha os dados da API anterior.
+  const CACHE_KEY = `poketracker_cache_cards_v3_${setId}`;
 
   let cachedData: any[] | null = null;
   try {
@@ -301,4 +301,45 @@ export const fetchCardStats = async (cardId: string): Promise<CardPriceStats> =>
   } finally {
     clearTimeout(timer);
   }
+};
+
+// Quais variações (Standard/Foil/Reverse Foil/First Edition/Pokeball/Master Ball) existem
+// de verdade pra essa carta, vindas do catálogo (TCGdex) - ausente do mapa significa "sem
+// dado disponível", nunca "não existe" (ver CardModal: variação sem dado sempre é exibida).
+// Também traz raridade/ilustrador, que só vêm nesse endpoint de detalhe por carta.
+export interface CardVariantInfo {
+  flags: Record<string, boolean>;
+  rarity: string;
+  artist: string;
+}
+
+const cardVariantsCache = new Map<string, Promise<CardVariantInfo>>();
+
+export const fetchCardVariants = (cardId: string): Promise<CardVariantInfo> => {
+  const existing = cardVariantsCache.get(cardId);
+  if (existing) return existing;
+
+  const request = (async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch(`${API_BASE}/tcg/card-variants/${encodeURIComponent(cardId)}`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) return { flags: {}, rarity: '', artist: '' };
+      const body = await response.json();
+      return { flags: body?.flags || {}, rarity: body?.rarity || '', artist: body?.artist || '' };
+    } catch (err) {
+      if ((err as Error)?.name !== 'AbortError') {
+        console.warn(`Could not load variant info for ${cardId}:`, (err as Error).message);
+      }
+      return { flags: {}, rarity: '', artist: '' };
+    } finally {
+      clearTimeout(timer);
+    }
+  })();
+
+  cardVariantsCache.set(cardId, request);
+  return request;
 };

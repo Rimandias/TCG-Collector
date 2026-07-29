@@ -21,6 +21,5 @@ export const env = {
   supabaseUrl: required('SUPABASE_URL'),
   supabaseServiceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY'),
   clientOrigins,
-  pokemonTcgApiKey: process.env.POKEMONTCG_API_KEY || '',
   nodeEnv: process.env.NODE_ENV || 'development',
 };
