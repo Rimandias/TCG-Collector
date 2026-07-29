@@ -45,6 +45,16 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
     };
   }, [card.id]);
 
+  // Assim que sabemos quais variações a carta realmente tem, se a que está expandida por
+  // padrão ("Standard") não é uma delas, troca pra primeira que existe de verdade - em vez
+  // de abrir com Standard e o usuário ver a lista mudar embaixo dele um instante depois.
+  useEffect(() => {
+    if (!expandedVariation || !visibleVariationTypes.includes(expandedVariation)) {
+      setExpandedVariation(visibleVariationTypes[0] || null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [variantInfo, card.id]);
+
   // Preço médio da comunidade é sempre por variação/condição (D, HP, MP, SP, NM, Foil...) -
   // misturar tudo numa média só não faz sentido, já que o valor varia muito por condição.
   const hasPriceStats = Object.keys(priceStats).length > 0;
@@ -221,6 +231,15 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
         {/* Active Tab Content */}
         <div className="px-4 pb-4 pt-2 flex-1 overflow-y-auto min-h-0">
           {activeTab === 'variations' ? (
+            variantInfo === null ? (
+              // Enquanto não sabemos quais variações a carta realmente tem, mostra um
+              // carregando em vez da lista inteira sem filtro (que "piscava" Standard e
+              // outras variações inexistentes por um instante até os dados chegarem).
+              <div className="flex flex-col items-center justify-center gap-2 py-12 text-slate-300">
+                <svg className="w-5 h-5 animate-spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                <span className="text-[10px] uppercase tracking-widest">Carregando variações...</span>
+              </div>
+            ) : (
             <div className="space-y-3">
               {visibleVariationTypes.map(variation => {
                 const variationData = normalizedVariations[variation];
@@ -416,6 +435,7 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
                 );
               })}
             </div>
+            )
           ) : (
             <div className="space-y-4 p-2 text-center">
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">

@@ -1,7 +1,8 @@
 
 import React from 'react';
 import { Card, User, CardCondition } from '../types';
-import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, adjustLanguageQuantity } from '../db';
+import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, adjustLanguageQuantity, getDefaultVariationType } from '../db';
+import { fetchCardVariants } from '../api';
 import CardImage from './CardImage';
 
 export type CardViewMode = 'grid3' | 'grid6' | 'list';
@@ -23,11 +24,14 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
 
   const totalQuantity = getCardTotalQuantity(cardData.variations);
 
-  const toggleOwned = () => {
-    // Se não tiver nenhuma, ao clicar na carta marcamos como possuída (Foil NM x1)
+  const toggleOwned = async () => {
+    // Se não tiver nenhuma, ao clicar na carta marcamos como possuída - na variação que a
+    // carta realmente tem (nem toda carta tem Standard; ver getDefaultVariationType).
     if (totalQuantity === 0) {
+      const { flags } = await fetchCardVariants(card.id);
+      const variation = getDefaultVariationType(flags);
       const normalized = getNormalizedVariations(cardData.variations);
-      normalized['Standard'][CardCondition.NM].quantity = 1;
+      normalized[variation][CardCondition.NM].quantity = 1;
       onUpdateUser(updateCardStatus(user, card.id, { isOwned: true, variations: normalized }));
     } else {
       // Se já tem, o clique na carta apenas alterna a visualização (colorida/p&b) via isOwned se solicitado,
@@ -37,16 +41,18 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
     }
   };
 
-  const adjustQuantity = (delta: number) => {
+  const adjustQuantity = async (delta: number) => {
+    const { flags } = await fetchCardVariants(card.id);
+    const variation = getDefaultVariationType(flags);
     const normalized = getNormalizedVariations(cardData.variations);
-    const nmDetails = normalized['Standard'][CardCondition.NM];
+    const nmDetails = normalized[variation][CardCondition.NM];
     // Cartas com idioma detalhado (ver +Info) mantêm o total consistente somando/
     // subtraindo no idioma padrão (Português/BR), em vez de mexer direto no agregado.
     if (nmDetails.languages) {
-      normalized['Standard'][CardCondition.NM] = adjustLanguageQuantity(nmDetails, 'BR', delta);
+      normalized[variation][CardCondition.NM] = adjustLanguageQuantity(nmDetails, 'BR', delta);
     } else {
       const currentNM = nmDetails.quantity || 0;
-      normalized['Standard'][CardCondition.NM].quantity = Math.max(0, currentNM + delta);
+      normalized[variation][CardCondition.NM].quantity = Math.max(0, currentNM + delta);
     }
     const hasCards = getCardTotalQuantity(normalized) > 0;
     onUpdateUser(updateCardStatus(user, card.id, { variations: normalized, isOwned: hasCards }));
