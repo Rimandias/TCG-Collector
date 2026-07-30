@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, PokemonSet, UserCardData } from '../types';
 import { fetchSets } from '../api';
+import CardImage from '../components/CardImage';
 import { getCardTotalQuantity, getCardEstimatedValue } from '../db';
 
 interface CollectionViewProps {
@@ -105,11 +106,11 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
               <div className="flex justify-between items-start mb-6">
                 <div className="flex items-center gap-4">
                    <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center p-2 border border-slate-100">
-                      <img src={set.logoUrl} className="max-h-full max-w-full object-contain" />
+                      <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain" />
                    </div>
                    <div>
                      <div className="flex items-center gap-1.5">
-                       {set.symbolUrl && <img src={set.symbolUrl} alt="" className="w-3.5 h-3.5 object-contain flex-shrink-0" />}
+                       {set.symbolUrl && <CardImage src={set.symbolUrl} alt="" className="w-3.5 h-3.5 object-contain flex-shrink-0" />}
                        <h3 className="text-sm text-slate-800 uppercase tracking-tight leading-tight">{set.name}</h3>
                      </div>
                      <p className="text-[9px] text-slate-400 uppercase tracking-widest mt-0.5">{set.releaseDate}</p>

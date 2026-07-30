@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, PokemonSet, Card, UserCardData, CardCondition } from '../types';
 import { fetchSets, fetchCardsBySet, searchCards } from '../api';
 import CardItem, { CardViewMode } from '../components/CardItem';
+import CardImage from '../components/CardImage';
 import CardViewModeSelector from '../components/CardViewModeSelector';
 import CardModal from '../components/CardModal';
 import { getCardTotalQuantity, getCompleteCardNumber, getCardEstimatedValue, getNormalizedVariations } from '../db';
@@ -398,7 +399,7 @@ const HomeView: React.FC<HomeViewProps> = ({
     return (
       <div className="animate-in slide-in-from-right duration-300 px-4 pb-10">
         <div className="flex items-center justify-center gap-1.5 mb-6 pt-4">
-            {selectedSet.symbolUrl && <img src={selectedSet.symbolUrl} alt="" className="w-3.5 h-3.5 object-contain flex-shrink-0" />}
+            {selectedSet.symbolUrl && <CardImage src={selectedSet.symbolUrl} alt="" className="w-3.5 h-3.5 object-contain flex-shrink-0" />}
             <span className="text-sm text-slate-500 text-center font-medium uppercase tracking-wider">
                 {selectedSet.releaseDate.split('-')[0]} — {selectedSet.name}
             </span>
@@ -563,11 +564,11 @@ const HomeView: React.FC<HomeViewProps> = ({
                     className="flex flex-col items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group min-h-[160px]"
                   >
                     <div className="h-14 w-full flex items-center justify-center mb-2">
-                        <img src={set.logoUrl} className="max-h-full max-w-full object-contain filter group-hover:scale-110 transition-transform" />
+                        <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain filter group-hover:scale-110 transition-transform" />
                     </div>
                     <div className="w-full space-y-2 mt-auto">
                         <p className="text-[10px] font-medium text-slate-600 text-center line-clamp-1 group-hover:text-[#646B99] transition-colors flex items-center justify-center gap-1">
-                            {set.symbolUrl && <img src={set.symbolUrl} alt="" className="w-3 h-3 object-contain flex-shrink-0" />}
+                            {set.symbolUrl && <CardImage src={set.symbolUrl} alt="" className="w-3 h-3 object-contain flex-shrink-0" />}
                             {set.name}
                         </p>
                         <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
@@ -649,7 +650,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                 className="w-full flex flex-col items-center justify-between bg-transparent p-5 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group gap-3 min-h-[130px]"
               >
                 <div className="h-16 w-full flex items-center justify-center px-4">
-                    <img
+                    <CardImage
                         src={getSetLogoForSeries(era)}
                         alt={era}
                         // Largura máxima baseada no tamanho do logo do Sword & Shield (a referência

@@ -603,7 +603,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                         className="flex flex-col items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-[#646B99]/30 transition-all group min-h-[110px]"
                       >
                         <div className="h-10 w-full flex items-center justify-center mb-1">
-                          <img src={set.logoUrl} className="max-h-full max-w-full object-contain group-hover:scale-110 transition-transform" />
+                          <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain group-hover:scale-110 transition-transform" />
                         </div>
                         <p className="text-[10px] font-medium text-slate-600 line-clamp-1 text-center">{set.name}</p>
                         <p className="text-[9px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2 py-0.5 rounded-full mt-1">
