@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
-import { assembleFullUser, replaceUserData, buildUserResponseFromInput } from '../userStore.js';
+import { assembleFullUser, replaceUserData } from '../userStore.js';
 import { asyncHandler } from '../asyncHandler.js';
 import { supabase } from '../supabase.js';
 
@@ -57,10 +57,12 @@ usersRouter.put(
       return res.status(400).json({ error: 'Dados inválidos.', details: parsed.error.flatten() });
     }
 
-    const { friendCode, isPremium } = await replaceUserData(req.userId!, parsed.data);
-
-    const user = await buildUserResponseFromInput(req.userId!, req.userEmail!, friendCode, isPremium, parsed.data);
-    return res.json({ user });
+    // Nenhum caller no frontend usa o `User` que essa rota devolvia (App.tsx e
+    // SettingsView.tsx só checam se o retorno é truthy) - devolver a coleção inteira de
+    // volta a cada salvamento era banda jogada fora, ainda mais frequente que o GET /me
+    // (dispara a cada edição, não só no login). Um ack mínimo é suficiente.
+    await replaceUserData(req.userId!, parsed.data);
+    return res.json({ ok: true });
   })
 );
 
