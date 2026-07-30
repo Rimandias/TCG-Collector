@@ -160,17 +160,13 @@ const App: React.FC = () => {
     return () => clearTimeout(retryTimer);
   }, [saveState]);
 
-  // Troca de aba dentro do app (Home/Coleção/Trocas/Opções) é outro momento comum antes de um
-  // refresh manual. Se já não há nada pendente/em andamento, troca na hora (caso comum, sem
-  // atrito nenhum). Se há, ESPERA o salvamento terminar antes de trocar de aba - só nesse caso
-  // aparece o popup bloqueante avisando que é preciso aguardar, exatamente para que um refresh
-  // logo em seguida nunca aborte uma gravação que ainda estava em voo.
-  const handleTabChange = async (tab: AppTab) => {
-    if (pendingUserRef.current || isSavingRef.current) {
-      setBlockingSave(true);
-      await flushPendingSave();
-      setBlockingSave(false);
-    }
+  // Troca de aba dentro do app (Home/Coleção/Trocas/Opções) NÃO precisa esperar o salvamento
+  // terminar: o timer de debounce (handleUpdateUser) e os listeners de beforeunload/
+  // visibilitychange continuam ativos independente de qual aba está visível, já que é tudo
+  // estado do mesmo componente React - a troca de aba em si não arrisca perder nada. Bloquear
+  // aqui só deixava a navegação lenta toda vez que havia uma edição recente (ex: registrar o
+  // idioma de uma carta), sem nenhum ganho real de segurança.
+  const handleTabChange = (tab: AppTab) => {
     setActiveTab(tab);
   };
 
