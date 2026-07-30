@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TCG Colecionador</string>
+    <string name="title_activity_main">TCG Colecionador</string>
+    <string name="package_name">br.com.tcgcolecionador.app</string>
+    <string name="custom_url_scheme">br.com.tcgcolecionador.app</string>
+</resources>
