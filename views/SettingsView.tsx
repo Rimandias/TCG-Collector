@@ -168,6 +168,29 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
     }
   };
 
+  // Gera o arquivo inteiramente no navegador, a partir do `user` que já está em memória -
+  // não precisa de nenhuma chamada nova à API (o app já tem a coleção carregada), então essa
+  // funcionalidade não consome banda nenhuma do backend.
+  const handleExportData = () => {
+    const exportPayload = {
+      exportedAt: new Date().toISOString(),
+      username: user.username,
+      friendCode: user.friendCode,
+      ownedCards: user.ownedCards,
+      wishlist: user.wishlist || [],
+      folders: user.folders || [],
+    };
+    const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `tcg-colecionador-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // Salva direto no servidor (sem passar pelo debounce de 500ms do onUpdateUser normal) e
   // só fecha o modal depois que o servidor confirmar - um import grande é justamente o tipo
   // de ação em que o usuário tende a atualizar a página logo em seguida pra conferir, o que
@@ -374,6 +397,19 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
             {importing ? 'Processando arquivo...' : '+ Selecionar arquivo CSV'}
           </button>
           {importError && <p className="text-red-500 text-[10px] mt-2">{importError}</p>}
+        </section>
+
+        <section className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+          <h4 className="text-[10px] text-slate-300 uppercase tracking-widest mb-1">Baixar meus dados</h4>
+          <p className="text-[10px] text-slate-400 mb-4">
+            Exporta um arquivo com sua coleção, lista de desejos e pastas de troca em formato JSON - útil como backup pessoal.
+          </p>
+          <button
+            onClick={handleExportData}
+            className="w-full py-3 bg-white border border-slate-100 text-[#646B99] text-xs font-semibold rounded-xl hover:bg-slate-100 transition-colors shadow-sm"
+          >
+            Baixar arquivo (.json)
+          </button>
         </section>
 
         <button
