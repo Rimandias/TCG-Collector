@@ -1,15 +1,27 @@
 
-import React, { useState, useEffect, useRef, useDeferredValue } from 'react';
+import React, { useState, useEffect, useRef, useDeferredValue, Suspense, lazy } from 'react';
 import { User, AppTab, PokemonSet } from './types';
 import { fetchCurrentUser, persistUser, logout as clearSession } from './auth';
 import { supabase } from './supabaseClient';
 import HomeView from './views/HomeView';
-import CollectionView from './views/CollectionView';
-import TradesView from './views/TradesView';
-import SettingsView from './views/SettingsView';
 import LoginView from './views/LoginView';
 import ResetPasswordView from './views/ResetPasswordView';
 import BottomNav from './components/BottomNav';
+
+// Home é a tela inicial (precisa estar pronta já no primeiro carregamento); Coleção/Trocas/
+// Opções só são abertas quando o usuário troca de aba, então carregar seu código sob demanda
+// (em vez de tudo num bundle só) reduz o JS que precisa baixar/parsear pra abrir o app pela
+// primeira vez - TradesView sozinha tem ~2000 linhas (é a maior tela do app de longe, e fica
+// atrás do gate de premium, então boa parte dos usuários nem chega a precisar dela).
+const CollectionView = lazy(() => import('./views/CollectionView'));
+const TradesView = lazy(() => import('./views/TradesView'));
+const SettingsView = lazy(() => import('./views/SettingsView'));
+
+const ViewLoadingFallback: React.FC = () => (
+  <div className="flex items-center justify-center h-full py-20">
+    <div className="w-8 h-8 border-4 border-[#646B99] border-t-transparent rounded-full animate-spin" />
+  </div>
+);
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -202,11 +214,23 @@ const App: React.FC = () => {
           />
         );
       case AppTab.COLLECTION:
-        return <CollectionView user={user} />;
+        return (
+          <Suspense fallback={<ViewLoadingFallback />}>
+            <CollectionView user={user} />
+          </Suspense>
+        );
       case AppTab.TRADES:
-        return <TradesView user={user} onUpdateUser={handleUpdateUser} />;
+        return (
+          <Suspense fallback={<ViewLoadingFallback />}>
+            <TradesView user={user} onUpdateUser={handleUpdateUser} />
+          </Suspense>
+        );
       case AppTab.SETTINGS:
-        return <SettingsView user={user} onUpdateUser={handleUpdateUser} onLogout={handleLogout} />;
+        return (
+          <Suspense fallback={<ViewLoadingFallback />}>
+            <SettingsView user={user} onUpdateUser={handleUpdateUser} onLogout={handleLogout} />
+          </Suspense>
+        );
       default:
         return (
           <HomeView 
