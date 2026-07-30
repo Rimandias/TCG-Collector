@@ -80,6 +80,7 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
     const variation = getDefaultVariationType(cachedInfo?.flags);
     const normalized = getNormalizedVariations(cardData.variations);
     const nmDetails = normalized[variation][CardCondition.NM];
+    const previousQuantity = nmDetails.quantity;
     // Cartas com idioma detalhado (ver +Info) mantêm o total consistente somando/
     // subtraindo no idioma padrão (Português/BR), em vez de mexer direto no agregado.
     if (nmDetails.languages) {
@@ -88,9 +89,12 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
       const currentNM = nmDetails.quantity || 0;
       normalized[variation][CardCondition.NM].quantity = Math.max(0, currentNM + delta);
     }
+    const nextQuantity = normalized[variation][CardCondition.NM].quantity;
+    // Clicar em "-" já em 0 cai nesse clamp sem sair do lugar - evita salvar à toa.
+    if (nextQuantity === previousQuantity) return;
     const hasCards = getCardTotalQuantity(normalized) > 0;
     onUpdateUser(updateCardStatus(user, card.id, { variations: normalized, isOwned: hasCards }));
-    if (!cachedInfo) reconcileVariation(variation, normalized[variation][CardCondition.NM].quantity, false);
+    if (!cachedInfo) reconcileVariation(variation, nextQuantity, false);
   };
 
   const toggleTrade = (e: React.MouseEvent) => {
