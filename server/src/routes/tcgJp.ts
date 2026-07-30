@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { supabase } from '../supabase.js';
@@ -70,8 +70,14 @@ function mapSet(raw: any) {
   };
 }
 
+const catalogCacheControl = (_req: Request, res: Response, next: NextFunction) => {
+  res.set('Cache-Control', `public, max-age=${Math.floor(CACHE_TTL_MS / 1000)}`);
+  next();
+};
+
 tcgJpRouter.get(
   '/sets',
+  catalogCacheControl,
   asyncHandler(async (_req, res) => {
     const { data: cached } = await supabase.from('sets_cache').select('data, updated_at').eq('id', ALL_SETS_CACHE_ID).maybeSingle();
     const isFresh = cached && Date.now() - new Date(cached.updated_at).getTime() < CACHE_TTL_MS;
@@ -106,6 +112,7 @@ const setIdSchema = z.string().trim().regex(/^jp-[a-zA-Z0-9.-]+$/).min(4).max(60
 
 tcgJpRouter.get(
   '/cards/:setId',
+  catalogCacheControl,
   asyncHandler(async (req, res) => {
     const parsed = setIdSchema.safeParse(req.params.setId);
     if (!parsed.success) {

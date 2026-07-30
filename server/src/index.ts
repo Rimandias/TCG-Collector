@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import { env } from './env.js';
 import { tcgRouter } from './routes/tcg.js';
@@ -18,6 +19,10 @@ const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(helmet());
+// Respostas JSON comprimem muito bem (texto repetitivo) - reduz o tráfego de saída do
+// Render em ~70-85% sem nenhum custo de correção, o que importa tanto pro limite de banda
+// do plano quanto pro tempo de resposta em conexões mais lentas.
+app.use(compression());
 app.use(
   cors({
     origin: (origin, callback) => {

@@ -85,9 +85,13 @@ export const updatePassword = async (newPassword: string): Promise<void> => {
   if (error) throw new AuthError(mapAuthErrorMessage(error.message));
 };
 
-export const persistUser = async (user: User): Promise<User | null> => {
+// O PUT devolve só um ack mínimo ({ ok: true }), não a coleção inteira de volta - nenhum
+// caller usava esse retorno pra nada além de checar sucesso/falha (o próprio `user` que
+// disparou o salvamento já é a fonte da verdade no estado do React), então reenviar tudo de
+// volta a cada salvamento era banda jogada fora.
+export const persistUser = async (user: User): Promise<boolean> => {
   const token = await getAccessToken();
-  if (!token) return null;
+  if (!token) return false;
 
   const payload = {
     username: user.username,
@@ -108,11 +112,10 @@ export const persistUser = async (user: User): Promise<User | null> => {
 
   if (!response.ok) {
     console.warn('Falha ao salvar dados no servidor:', await parseErrorMessage(response, response.statusText));
-    return null;
+    return false;
   }
 
-  const body = await response.json();
-  return body.user;
+  return true;
 };
 
 export const addFriendByCode = async (code: string): Promise<{ user?: User; error?: string }> => {

@@ -1,5 +1,32 @@
 import { supabase } from './supabase.js';
 
+// `variations` é conceitualmente um mapa esparso (só as combinações de variação/condição
+// que o usuário realmente preencheu), mas o cliente sempre manda a matriz cheia expandida
+// (6 tipos de variação x 5 condições = 30 entradas por carta, a maioria quantity:0/price:'').
+// Guardar e reenviar isso denso desperdiça banda e espaço em disco proporcionalmente ao
+// tamanho do catálogo, não da coleção real do usuário - medido em produção, uma carta comum
+// com só 1 variação preenchida ocupava 1645 bytes armazenando as 30 entradas por extenso,
+// contra ~150 bytes só com a que importa. getNormalizedVariations (frontend) já sabe expandir
+// de volta um subconjunto esparso pros valores padrão, então remover as entradas vazias aqui
+// não perde nenhuma informação.
+function sparsifyVariations(variations: Record<string, any> | null | undefined): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [variationType, conditions] of Object.entries(variations || {})) {
+    const keptConditions: Record<string, any> = {};
+    for (const [condition, details] of Object.entries(conditions as Record<string, any>)) {
+      const d = (details || {}) as { quantity?: number; price?: string; languages?: Record<string, unknown> };
+      const hasLanguages = !!d.languages && Object.keys(d.languages).length > 0;
+      if ((d.quantity || 0) !== 0 || (d.price && d.price !== '') || hasLanguages) {
+        keptConditions[condition] = d;
+      }
+    }
+    if (Object.keys(keptConditions).length > 0) {
+      result[variationType] = keptConditions;
+    }
+  }
+  return result;
+}
+
 export interface FriendEntry {
   userId: string;
   username: string;
@@ -53,7 +80,10 @@ export async function assembleFullUser(userId: string, email: string): Promise<F
       cardId: row.card_id,
       isOwned: row.is_owned,
       isForTrade: row.is_for_trade,
-      variations: row.variations || {},
+      // Linhas antigas (de antes desta otimização) ainda podem estar densas no banco -
+      // sparsifica na leitura também, assim o ganho de banda vale imediatamente pra
+      // qualquer linha, sem depender do usuário reeditar a carta pra "curar" o registro.
+      variations: sparsifyVariations(row.variations),
     };
   }
 
@@ -196,7 +226,7 @@ export async function replaceUserData(userId: string, data: UserDataInput): Prom
       card_id: cardId,
       is_owned: !!card.isOwned,
       is_for_trade: !!card.isForTrade,
-      variations: card.variations || {},
+      variations: sparsifyVariations(card.variations),
     })),
     onConflict: 'user_id,card_id',
   });
@@ -250,57 +280,4 @@ export async function replaceUserData(userId: string, data: UserDataInput): Prom
   const [profileResult] = await Promise.all([profileUpdatePromise, cardsSyncPromise, wishlistSyncPromise, foldersSyncPromise]);
   if (profileResult.error) throw profileResult.error;
   return { friendCode: profileResult.data.friend_code, isPremium: profileResult.data.is_premium };
-}
-
-// Monta a resposta de PUT /api/users/me a partir do que o cliente acabou de mandar (já
-// validado e gravado por replaceUserData) em vez de reler tudo do banco de novo - cartas/
-// pastas/wishlist já SÃO exatamente o que foi salvo, então reconsultar user_cards/
-// trade_folders/trade_folder_cards (potencialmente centenas de linhas) seria trabalho
-// redundante. Só busca de fato o que esse endpoint não gerencia (amigos), que é sempre uma
-// lista pequena.
-export async function buildUserResponseFromInput(
-  userId: string,
-  email: string,
-  friendCode: string,
-  isPremium: boolean,
-  data: UserDataInput
-): Promise<FullUser> {
-  const { data: friendRows, error: friendsErr } = await supabase
-    .from('friends')
-    .select('friend_user_id, added_at')
-    .eq('user_id', userId)
-    .order('added_at', { ascending: true });
-  if (friendsErr) throw friendsErr;
-  const friends = await resolveFriends(userId, friendRows || []);
-
-  const ownedCards: FullUser['ownedCards'] = {};
-  for (const [cardId, card] of Object.entries(data.ownedCards || {})) {
-    ownedCards[cardId] = {
-      cardId,
-      isOwned: !!card.isOwned,
-      isForTrade: !!card.isForTrade,
-      variations: card.variations || {},
-    };
-  }
-
-  const folders = (data.folders || []).map((f) => ({
-    id: f.id,
-    name: f.name,
-    cardIds: f.cardIds || [],
-    visibleToFriends: !!f.visibleToFriends,
-    variationSelections: f.variationSelections || {},
-  }));
-
-  return {
-    id: userId,
-    username: data.username ?? '',
-    email,
-    avatarUrl: data.avatarUrl ?? '',
-    friendCode,
-    isPremium,
-    ownedCards,
-    friends,
-    folders,
-    wishlist: data.wishlist || [],
-  };
 }
