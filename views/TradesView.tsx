@@ -7,11 +7,11 @@ import { redeemAccessCode } from '../premium';
 import { fetchCurrentUser } from '../auth';
 import CardModal from '../components/CardModal';
 import FriendFolderBrowser from '../components/FriendFolderBrowser';
+import CardImage from '../components/CardImage';
 import TradeActionModal from '../components/TradeActionModal';
 import TradeItemsList from '../components/TradeItemsList';
 import Pagination, { PAGE_SIZE } from '../components/Pagination';
 import CardViewModeSelector from '../components/CardViewModeSelector';
-import CardImage from '../components/CardImage';
 import { CardViewMode } from '../components/CardItem';
 import { getCardGridClassName } from '../viewMode';
 
@@ -1450,7 +1450,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                     className="flex flex-col items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-[#646B99]/30 transition-all group min-h-[140px]"
                                   >
                                     <div className="h-12 w-full flex items-center justify-center mb-2">
-                                      <img src={set.logoUrl} className="max-h-full max-w-full object-contain filter group-hover:scale-110 transition-transform" />
+                                      <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain filter group-hover:scale-110 transition-transform" />
                                     </div>
                                     <div className="w-full space-y-1 mt-auto text-center">
                                       <p className="text-[10px] font-medium text-slate-600 line-clamp-1 group-hover:text-[#646B99] transition-colors">
@@ -2011,7 +2011,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                   className="flex flex-col items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:border-[#646B99]/30 transition-all min-h-[110px]"
                                 >
                                   <div className="h-9 w-full flex items-center justify-center mb-1">
-                                    <img src={set.logoUrl} className="max-h-full max-w-full object-contain" />
+                                    <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain" />
                                   </div>
                                   <p className="text-[9px] font-medium text-slate-600 line-clamp-1 text-center">{set.name}</p>
                                   <p className="text-[8px] font-semibold text-[#646B99] bg-[#646B99]/5 px-1.5 py-0.5 rounded-full mt-1">
