@@ -282,6 +282,21 @@ tcgRouter.get(
         if (!setDetail?.cards || setDetail.cards.length === 0) {
           setDetail = await fetchTcgdex('en', `/sets/${setId}`);
           source = 'live-en-fallback';
+        } else {
+          // Promos em andamento (ex: SVP) recebem cartas novas com frequência e a tradução
+          // pt às vezes fica pra trás por algumas cartas específicas (não o set inteiro vazio,
+          // caso já tratado acima) - detectado comparando com `en`, que serve de teto: qualquer
+          // localId presente lá mas ausente em pt é preenchido a partir do en (mantém pt pro
+          // resto, já que o nome traduzido é preferível quando existe).
+          const enDetail = await fetchTcgdex('en', `/sets/${setId}`).catch(() => null);
+          if (enDetail?.cards?.length > setDetail.cards.length) {
+            const ptIds = new Set(setDetail.cards.map((c: any) => c.localId));
+            const missingFromPt = enDetail.cards.filter((c: any) => !ptIds.has(c.localId));
+            if (missingFromPt.length > 0) {
+              setDetail = { ...setDetail, cards: [...setDetail.cards, ...missingFromPt] };
+              source = 'live-pt-en-merged';
+            }
+          }
         }
       } catch {
         // Dezenas de coleções (Base Set 2, Team Rocket, Neo Genesis...) nem existem em
