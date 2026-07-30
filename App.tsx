@@ -91,20 +91,35 @@ const App: React.FC = () => {
   // normal (500ms depois do último onUpdateUser) quanto forçadamente antes de qualquer ponto
   // em que o usuário possa sair da página (troca de aba, aba/janela perdendo foco) - assim o
   // debounce só serve pra agrupar cliques rápidos, nunca pra arriscar perder uma alteração.
+  //
+  // Se uma edição nova chega ENQUANTO um salvamento anterior ainda está em voo (comum quando
+  // o usuário mexe em várias cartas em sequência mais rápido que o round-trip de rede, hoje
+  // ~1-3s > os 500ms do debounce), essa chamada aqui sai na hora (guarda contra 2 PUTs ao
+  // mesmo tempo) - mas sem o `if (pendingUserRef.current) flushPendingSave()` abaixo, essa
+  // edição mais nova ficava esquecida, sem nenhum timer apontando pra ela, até QUALQUER outro
+  // gatilho (trocar de app, fazer mais uma edição) disparar um novo flush por acaso - podia
+  // levar dezenas de segundos "parada" mesmo a rede estando rápida.
   const flushPendingSave = async () => {
     if (persistTimer.current) {
       clearTimeout(persistTimer.current);
       persistTimer.current = null;
     }
+    if (isSavingRef.current) return;
     const toSave = pendingUserRef.current;
-    if (!toSave || isSavingRef.current) return;
+    if (!toSave) return;
     pendingUserRef.current = null;
     isSavingRef.current = true;
     setSaveState('saving');
     const saved = await persistUser(toSave);
     isSavingRef.current = false;
     if (saved) {
-      setSaveState((current) => (pendingUserRef.current ? current : 'idle'));
+      if (pendingUserRef.current) {
+        // Já tem outra edição mais nova esperando - salva ela em seguida, sem esperar um
+        // novo debounce (já sabemos que está desatualizada, esperar só atrasaria à toa).
+        flushPendingSave();
+      } else {
+        setSaveState('idle');
+      }
     } else {
       // Falhou - mantém marcado como pendente pra tentar de novo na próxima oportunidade
       // (troca de aba, perda de foco, ou o usuário tentando sair, que aciona o aviso nativo).
