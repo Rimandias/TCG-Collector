@@ -70,6 +70,8 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
   const updateVariationValue = (variation: string, condition: CardCondition, updates: { quantity?: number; price?: string }) => {
     const updated = { ...normalizedVariations };
     const details = updated[variation][condition];
+    const previousQuantity = details.quantity;
+    const previousPrice = details.price;
 
     if (updates.quantity !== undefined) {
       // Cartas já detalhadas por idioma mantêm o total consistente somando/subtraindo
@@ -84,6 +86,11 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
       updated[variation][condition].price = updates.price;
     }
 
+    const next = updated[variation][condition];
+    // Clicar em "-" já em 0 cai nesse clamp sem sair do lugar - não há nada de fato
+    // pra salvar, então evita disparar o pipeline de salvamento à toa.
+    if (next.quantity === previousQuantity && next.price === previousPrice) return;
+
     // Auto-owned is updated in updateCardStatus helper
     onUpdateUser(updateCardStatus(user, card.id, { variations: updated }));
   };
@@ -95,12 +102,15 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
   // padrão - o código dessa linha pode ser editado depois, como qualquer outra.
   const startLanguageBreakdown = (variation: string, condition: CardCondition) => {
     const details = normalizedVariations[variation][condition];
-    if (!details.languages) {
+    // Só há o que migrar pra idioma quando já existe quantidade sem idioma definido -
+    // com 0 cartas o resultado seria idêntico ao atual (languages continua undefined),
+    // então nem entra aqui: evita disparar um salvamento a cada clique no ícone.
+    if (!details.languages && details.quantity > 0) {
       const updated = { ...normalizedVariations };
       updated[variation][condition] = {
         ...details,
-        price: details.quantity > 0 ? '' : details.price,
-        languages: details.quantity > 0 ? { [DEFAULT_LANGUAGE]: { quantity: details.quantity, price: details.price || '' } } : undefined,
+        price: '',
+        languages: { [DEFAULT_LANGUAGE]: { quantity: details.quantity, price: details.price || '' } },
       };
       onUpdateUser(updateCardStatus(user, card.id, { variations: updated }));
     }
