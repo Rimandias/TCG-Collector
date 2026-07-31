@@ -1,5 +1,33 @@
 import { supabase } from './supabase.js';
 
+// Serializa as escritas de um mesmo usuário: sem isso, duas chamadas de replaceUserData
+// sobrepostas no tempo podem se intercalar dentro de syncKeyedTable de um jeito totalmente
+// não-determinístico - a checagem "o que existe no banco que não veio nesse payload" de uma
+// delas pode rodar bem no meio da outra ainda em andamento, dependendo só de timing de rede.
+// Com a fila (processo roda com WEB_CONCURRENCY=1, uma única instância Node, então uma fila
+// em memória por usuário já garante isso sem lock distribuído), a segunda escrita só começa
+// depois que a primeira terminou de vez - o resultado passa a depender só da ORDEM de chegada,
+// nunca de acidente de timing dentro do banco.
+//
+// Isso NÃO elimina sozinho o cenário de duas sessões genuinamente divergentes (ex: app aberto
+// no celular e no navegador ao mesmo tempo, cada uma sem saber da edição feita na outra) - se
+// a sessão B salva sem conhecer uma carta que A acabou de adicionar, B ainda vai apagar essa
+// carta ao rodar depois de A, porque o payload de B nunca a incluiu. O que a fila garante é
+// que uma edição sequencial da MESMA sessão (que sempre parte do estado local mais recente,
+// logo um superconjunto do que já foi salvo) nunca perde dado - é o caso comum do app.
+const userWriteLocks = new Map<string, Promise<void>>();
+
+function withUserLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+  const previous = userWriteLocks.get(userId) || Promise.resolve();
+  const run = previous.then(fn, fn);
+  const queuePosition = run.then(() => undefined, () => undefined);
+  userWriteLocks.set(userId, queuePosition);
+  queuePosition.finally(() => {
+    if (userWriteLocks.get(userId) === queuePosition) userWriteLocks.delete(userId);
+  });
+  return run;
+}
+
 // `variations` é conceitualmente um mapa esparso (só as combinações de variação/condição
 // que o usuário realmente preencheu), mas o cliente sempre manda a matriz cheia expandida
 // (6 tipos de variação x 5 condições = 30 entradas por carta, a maioria quantity:0/price:'').
@@ -205,7 +233,11 @@ async function syncKeyedTable(params: {
   }
 }
 
-export async function replaceUserData(userId: string, data: UserDataInput): Promise<{ friendCode: string; isPremium: boolean }> {
+export function replaceUserData(userId: string, data: UserDataInput): Promise<{ friendCode: string; isPremium: boolean }> {
+  return withUserLock(userId, () => replaceUserDataUnlocked(userId, data));
+}
+
+async function replaceUserDataUnlocked(userId: string, data: UserDataInput): Promise<{ friendCode: string; isPremium: boolean }> {
   const folders = data.folders || [];
 
   const profileUpdatePromise = supabase
