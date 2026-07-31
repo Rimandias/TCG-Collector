@@ -1,5 +1,27 @@
 import { supabase } from './supabase.js';
 
+// O PostgREST (API do Supabase) devolve no máximo 1000 linhas por requisição por padrão -
+// sem paginação explícita, uma tabela com mais de 1000 linhas (ex: coleção grande de cartas,
+// uma conta real chegou a ter 1001) tem o resto silenciosamente cortado (a resposta vem como
+// 206 Partial Content, mas nada aqui checava isso). Isso já causou perda de dados real: a
+// carta que ficava de fora da primeira página nunca entrava no estado local do app, então
+// QUALQUER salvamento seguinte - mesmo de uma carta totalmente diferente - apagava ela do
+// banco, por "não estar na lista enviada". Pagina explicitamente até esgotar as linhas.
+const SUPABASE_PAGE_SIZE = 1000;
+
+async function fetchAllRows<T>(fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>): Promise<T[]> {
+  const rows: T[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await fetchPage(from, from + SUPABASE_PAGE_SIZE - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < SUPABASE_PAGE_SIZE) break;
+    from += SUPABASE_PAGE_SIZE;
+  }
+  return rows;
+}
+
 // Serializa as escritas de um mesmo usuário: sem isso, duas chamadas de replaceUserData
 // sobrepostas no tempo podem se intercalar dentro de syncKeyedTable de um jeito totalmente
 // não-determinístico - a checagem "o que existe no banco que não veio nesse payload" de uma
@@ -91,19 +113,20 @@ export async function assembleFullUser(userId: string, email: string): Promise<F
   if (profileErr) throw profileErr;
   if (!profile) return null;
 
-  const [cardsRes, friendsRes, foldersRes, wishlistRes] = await Promise.all([
-    supabase.from('user_cards').select('card_id, is_owned, is_for_trade, variations').eq('user_id', userId),
+  const [cardsRows, friendsRes, foldersRes, wishlistRes] = await Promise.all([
+    fetchAllRows<{ card_id: string; is_owned: boolean; is_for_trade: boolean; variations: any }>((from, to) =>
+      supabase.from('user_cards').select('card_id, is_owned, is_for_trade, variations').eq('user_id', userId).range(from, to)
+    ),
     supabase.from('friends').select('friend_user_id, added_at').eq('user_id', userId).order('added_at', { ascending: true }),
     supabase.from('trade_folders').select('id, name, visible_to_friends, variation_selections').eq('user_id', userId),
     supabase.from('wishlist').select('card_id').eq('user_id', userId),
   ]);
-  if (cardsRes.error) throw cardsRes.error;
   if (friendsRes.error) throw friendsRes.error;
   if (foldersRes.error) throw foldersRes.error;
   if (wishlistRes.error) throw wishlistRes.error;
 
   const ownedCards: FullUser['ownedCards'] = {};
-  for (const row of cardsRes.data || []) {
+  for (const row of cardsRows) {
     ownedCards[row.card_id] = {
       cardId: row.card_id,
       isOwned: row.is_owned,
@@ -216,14 +239,9 @@ async function syncKeyedTable(params: {
           if (r.error) throw r.error;
         })
       : Promise.resolve(),
-    supabase
-      .from(table)
-      .select(keyColumn)
-      .eq(ownerColumn, ownerValue)
-      .then((r) => {
-        if (r.error) throw r.error;
-        return (r.data || []) as Record<string, any>[];
-      }),
+    fetchAllRows<Record<string, any>>((from, to) =>
+      supabase.from(table).select(keyColumn).eq(ownerColumn, ownerValue).range(from, to)
+    ),
   ]);
 
   const staleKeys = (existing || []).map((r) => r[keyColumn]).filter((k) => !keepKeys.has(k));
