@@ -1,6 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
 import { supabase } from '../supabase.js';
-import { isPremiumUser } from '../premiumStore.js';
 
 export interface AuthedRequest extends Request {
   userId?: string;
@@ -28,12 +27,8 @@ export async function requireAuth(req: AuthedRequest, res: Response, next: NextF
   }
 }
 
-// A função de trocas ainda está em fase de testes fechados - só é liberada para
-// contas que resgataram um código de acesso (ver routes/premium.ts).
-export async function requirePremium(req: AuthedRequest, res: Response, next: NextFunction) {
-  const premium = await isPremiumUser(req.userId!);
-  if (!premium) {
-    return res.status(403).json({ error: 'Funcionalidade disponível apenas para contas liberadas.', code: 'premium_required' });
-  }
+// Teste fechado liberado pra todo mundo por enquanto - trocas e pastas de amigos não
+// exigem mais código de acesso resgatado.
+export async function requirePremium(_req: AuthedRequest, _res: Response, next: NextFunction) {
   next();
 }
