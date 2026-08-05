@@ -314,6 +314,8 @@ export interface CardVariantInfo {
   flags: Record<string, boolean>;
   rarity: string;
   artist: string;
+  category: string;
+  legal: { standard: boolean; expanded: boolean };
 }
 
 const cardVariantsCache = new Map<string, Promise<CardVariantInfo>>();
@@ -355,6 +357,28 @@ export function peekCachedCardVariants(cardId: string): CardVariantInfo | null {
   return readCachedCardVariants(cardId);
 }
 
+// Resolve linhas de decklist colada (código do set + número, ex: "TEF"/"113") pro id de
+// carta interno, em lote - usado pela importação de Decks. Nunca "chuta": linha sem match
+// exato volta em `unresolved` pro usuário escolher a carta manualmente.
+export const resolveDecklistLines = async (
+  lines: { index: number; code: string; number: string }[]
+): Promise<{ resolved: { index: number; cardId: string }[]; unresolved: number[] }> => {
+  const token = await getAccessToken();
+  if (!token) return { resolved: [], unresolved: lines.map((l) => l.index) };
+  try {
+    const response = await fetch(`${API_BASE}/tcg/resolve-decklist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ lines }),
+    });
+    if (!response.ok) return { resolved: [], unresolved: lines.map((l) => l.index) };
+    const body = await response.json();
+    return { resolved: body?.resolved || [], unresolved: body?.unresolved || [] };
+  } catch {
+    return { resolved: [], unresolved: lines.map((l) => l.index) };
+  }
+};
+
 export const fetchCardVariants = (cardId: string): Promise<CardVariantInfo> => {
   const existing = cardVariantsCache.get(cardId);
   if (existing) return existing;
@@ -374,16 +398,22 @@ export const fetchCardVariants = (cardId: string): Promise<CardVariantInfo> => {
         signal: controller.signal,
         headers: { Accept: 'application/json' },
       });
-      if (!response.ok) return { flags: {}, rarity: '', artist: '' };
+      if (!response.ok) return { flags: {}, rarity: '', artist: '', category: '', legal: { standard: false, expanded: false } };
       const body = await response.json();
-      const result = { flags: body?.flags || {}, rarity: body?.rarity || '', artist: body?.artist || '' };
+      const result = {
+        flags: body?.flags || {},
+        rarity: body?.rarity || '',
+        artist: body?.artist || '',
+        category: body?.category || '',
+        legal: { standard: !!body?.legal?.standard, expanded: !!body?.legal?.expanded },
+      };
       writeCachedCardVariants(cardId, result);
       return result;
     } catch (err) {
       if ((err as Error)?.name !== 'AbortError') {
         console.warn(`Could not load variant info for ${cardId}:`, (err as Error).message);
       }
-      return { flags: {}, rarity: '', artist: '' };
+      return { flags: {}, rarity: '', artist: '', category: '', legal: { standard: false, expanded: false } };
     } finally {
       clearTimeout(timer);
     }
