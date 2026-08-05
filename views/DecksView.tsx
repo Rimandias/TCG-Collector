@@ -14,7 +14,7 @@ import {
   DeckExportCardInfo,
   categorizeCard,
   DECK_CATEGORY_ORDER,
-  DECK_CATEGORY_LABELS,
+  UI_CATEGORY_LABELS,
 } from '../decks';
 import CardImage from '../components/CardImage';
 import CardViewModeSelector from '../components/CardViewModeSelector';
@@ -110,10 +110,13 @@ const DecksView: React.FC<DecksViewProps> = ({ user, onUpdateUser }) => {
   const emptySlots = Math.max(0, MAX_DECKS - (decks?.length || 0));
 
   return (
-    <div className="p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-bold text-slate-700">Meus Decks</h2>
-        <span className="text-[10px] text-slate-400">{decks?.length || 0}/{MAX_DECKS}</span>
+    <div className="animate-in fade-in duration-500 px-6 pb-8 pt-4">
+      <div className="mb-6 flex items-end justify-between">
+        <div>
+          <h2 className="text-2xl text-slate-800">Meus Decks</h2>
+          <p className="text-slate-400 text-xs">Gerencie seus decks favoritos aqui.</p>
+        </div>
+        <span className="text-[10px] text-slate-400 flex-shrink-0 mb-1">{decks?.length || 0}/{MAX_DECKS}</span>
       </div>
 
       {decks === null && <p className="text-xs text-slate-400">Carregando...</p>}
@@ -127,20 +130,20 @@ const DecksView: React.FC<DecksViewProps> = ({ user, onUpdateUser }) => {
             <button
               key={deck.id}
               onClick={() => setActiveDeckId(deck.id)}
-              className="relative aspect-[3/4] bg-white border border-slate-100 rounded-2xl p-3 shadow-sm flex flex-col justify-between text-left animate-in zoom-in-95 duration-200"
+              className="relative flex items-center gap-2.5 h-[72px] bg-white border border-slate-100 rounded-2xl p-2.5 shadow-sm text-left animate-in zoom-in-95 duration-200"
             >
               <button
                 onClick={(e) => { e.stopPropagation(); handleDelete(deck.id); }}
-                className="absolute top-2 right-2 p-1 text-slate-300 hover:text-red-500"
+                className="absolute top-1.5 right-1.5 p-1 text-slate-300 hover:text-red-500"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               </button>
-              <div className="w-9 h-9 rounded-xl bg-[#646B99]/10 flex items-center justify-center text-[#646B99]">
+              <div className="w-9 h-9 rounded-xl bg-[#646B99]/10 flex items-center justify-center text-[#646B99] flex-shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="18" x="5" y="3" rx="2"/><path d="M9 3v18"/></svg>
               </div>
-              <div className="space-y-1.5">
+              <div className="min-w-0 flex-1 pr-3">
                 <h3 className="text-xs font-bold text-slate-700 truncate">{deck.name}</h3>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1 mt-1">
                   <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${complete ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
                     {total}/{MAX_DECK_CARDS}
                   </span>
@@ -150,7 +153,6 @@ const DecksView: React.FC<DecksViewProps> = ({ user, onUpdateUser }) => {
                     </span>
                   )}
                 </div>
-                {!complete && <p className="text-[8px] text-amber-500">Faltam {MAX_DECK_CARDS - total} carta(s)</p>}
               </div>
             </button>
           );
@@ -161,9 +163,10 @@ const DecksView: React.FC<DecksViewProps> = ({ user, onUpdateUser }) => {
             key={`empty-${i}`}
             onClick={handleCreate}
             disabled={busy}
-            className="aspect-[3/4] border-2 border-dashed border-slate-200 rounded-2xl flex items-center justify-center text-slate-300 hover:text-[#646B99] hover:border-[#646B99] transition-colors disabled:opacity-40"
+            className="flex items-center justify-center gap-2 h-[72px] border-2 border-dashed border-slate-200 rounded-2xl text-slate-300 hover:text-[#646B99] hover:border-[#646B99] transition-colors disabled:opacity-40"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Criar Deck</span>
           </button>
         ))}
       </div>
@@ -340,13 +343,13 @@ const DeckEditor: React.FC<DeckEditorProps> = ({ deck, sets, user, onUpdateUser,
     }
     return [...DECK_CATEGORY_ORDER, 'Outras']
       .filter((k) => buckets.has(k))
-      .map((k) => ({ key: k, label: DECK_CATEGORY_LABELS[k], items: buckets.get(k)! }));
+      .map((k) => ({ key: k, label: UI_CATEGORY_LABELS[k], items: buckets.get(k)! }));
   }, [cards, meta]);
 
   const gridClassName = getCardGridClassName(viewMode);
 
   return (
-    <div className="p-4 space-y-4 pb-8">
+    <div className="animate-in fade-in duration-500 px-6 pb-8 pt-4 space-y-4">
       <div className="flex items-center gap-2">
         <button onClick={onBack} className="p-2 text-slate-500 bg-slate-50 rounded-lg border border-slate-100 flex-shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
