@@ -177,6 +177,11 @@ function mapSet(raw: any) {
     symbolUrl: raw.symbol ? `${raw.symbol}.webp` : '',
     releaseDate: raw.releaseDate || '',
     updatedAt: raw.releaseDate || '',
+    // Código curto (ex: "TEF") usado em listas de deck copiadas de outros lugares (Limitless,
+    // PTCGO/PTCGL) - vem de `abbreviation.official` na TCGdex quando existe. Ausente em sets
+    // sem código "oficial" (promos, etc) - `null` nesse caso, tratado como "sem match" em
+    // /resolve-decklist.
+    code: raw.abbreviation?.official || null,
   };
 }
 
@@ -264,24 +269,18 @@ tcgRouter.get(
 
 const setIdSchema = z.string().trim().regex(/^[a-zA-Z0-9.-]+$/).min(1).max(40);
 
-tcgRouter.get(
-  '/cards/:setId',
-  catalogCacheControl,
-  asyncHandler(async (req, res) => {
-    const parsed = setIdSchema.safeParse(req.params.setId);
-    if (!parsed.success) {
-      return res.status(400).json({ error: 'ID de coleção inválido.' });
-    }
-    const setId = parsed.data;
+// Extraído do handler de /cards/:setId (mesma lógica de cache/fallback) para ser
+// reutilizado por /resolve-decklist, que precisa das cartas de vários sets sem
+// depender de uma resposta HTTP - evita duplicar a lógica de cache/locale/fallback.
+async function fetchAndCacheSetCards(setId: string): Promise<{ data: any[]; source: string }> {
+  const { data: cached } = await supabase.from('cards_cache').select('data, updated_at').eq('set_id', setId).maybeSingle();
+  const isFresh = cached && Date.now() - new Date(cached.updated_at).getTime() < CACHE_TTL_MS;
 
-    const { data: cached } = await supabase.from('cards_cache').select('data, updated_at').eq('set_id', setId).maybeSingle();
-    const isFresh = cached && Date.now() - new Date(cached.updated_at).getTime() < CACHE_TTL_MS;
+  if (cached && isFresh) {
+    return { data: cached.data, source: 'cache' };
+  }
 
-    if (cached && isFresh) {
-      return res.json({ data: cached.data, source: 'cache' });
-    }
-
-    try {
+  try {
       let setDetail: any;
       let source = 'live';
       try {
@@ -333,29 +332,41 @@ tcgRouter.get(
         isSecret: parseInt(c.localId, 10) > printedTotal,
         set: { id: setId, name: setDetail.name, printedTotal },
       }));
-      await supabase.from('cards_cache').upsert({ set_id: setId, data: mapped, updated_at: new Date().toISOString() });
-      return res.json({ data: mapped, source });
-    } catch (err) {
-      console.warn(`[tcg] Falha ao buscar /cards para o set ${setId}, usando contingência:`, (err as Error).message);
-      if (cached) {
-        return res.json({ data: cached.data, source: 'stale-cache' });
-      }
-      if (FALLBACK_CARDS[setId]) {
-        return res.json({ data: FALLBACK_CARDS[setId], source: 'fallback' });
-      }
-
-      let setName = 'Set';
-      let setTotal: number | undefined;
-      const { data: setsCached } = await supabase.from('sets_cache').select('data').eq('id', 'all').maybeSingle();
-      const sets = setsCached ? setsCached.data : FALLBACK_SETS;
-      const matching = (sets as any[]).find((s) => s.id === setId);
-      if (matching) {
-        setName = matching.name;
-        setTotal = matching.total;
-      }
-
-      return res.json({ data: generateMockCards(setId, setName, setTotal), source: 'mock' });
+    await supabase.from('cards_cache').upsert({ set_id: setId, data: mapped, updated_at: new Date().toISOString() });
+    return { data: mapped, source };
+  } catch (err) {
+    console.warn(`[tcg] Falha ao buscar /cards para o set ${setId}, usando contingência:`, (err as Error).message);
+    if (cached) {
+      return { data: cached.data, source: 'stale-cache' };
     }
+    if (FALLBACK_CARDS[setId]) {
+      return { data: FALLBACK_CARDS[setId], source: 'fallback' };
+    }
+
+    let setName = 'Set';
+    let setTotal: number | undefined;
+    const { data: setsCached } = await supabase.from('sets_cache').select('data').eq('id', 'all').maybeSingle();
+    const sets = setsCached ? setsCached.data : FALLBACK_SETS;
+    const matching = (sets as any[]).find((s) => s.id === setId);
+    if (matching) {
+      setName = matching.name;
+      setTotal = matching.total;
+    }
+
+    return { data: generateMockCards(setId, setName, setTotal), source: 'mock' };
+  }
+}
+
+tcgRouter.get(
+  '/cards/:setId',
+  catalogCacheControl,
+  asyncHandler(async (req, res) => {
+    const parsed = setIdSchema.safeParse(req.params.setId);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'ID de coleção inválido.' });
+    }
+    const result = await fetchAndCacheSetCards(parsed.data);
+    return res.json(result);
   })
 );
 
@@ -458,7 +469,12 @@ tcgRouter.get(
 // tenha quantidade/preço registrados pelo usuário (isso é decidido no frontend).
 const CACHE_VARIANTS_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias - dado histórico, não muda
 
-function extractVariantFlags(detail: any): { flags: Record<string, boolean>; rarity: string; artist: string } {
+interface CardLegal {
+  standard: boolean;
+  expanded: boolean;
+}
+
+function extractVariantFlags(detail: any): { flags: Record<string, boolean>; rarity: string; artist: string; category: string; legal: CardLegal } {
   const v = detail?.variants || {};
   const flags: Record<string, boolean> = {
     Standard: !!v.normal,
@@ -479,7 +495,15 @@ function extractVariantFlags(detail: any): { flags: Record<string, boolean>; rar
   flags['Pokeball'] = pokeball;
   flags['Master Ball'] = masterBall;
 
-  return { flags, rarity: detail?.rarity || '', artist: detail?.illustrator || '' };
+  return {
+    flags,
+    rarity: detail?.rarity || '',
+    artist: detail?.illustrator || '',
+    category: detail?.category || '',
+    // Legalidade de torneio (usada pra tag Standard/Expanded dos Decks) - vem por carta (não
+    // por set), já que a mesma coleção pode ter reimpressões com legalidades diferentes.
+    legal: { standard: !!detail?.legal?.standard, expanded: !!detail?.legal?.expanded },
+  };
 }
 
 tcgRouter.get(
@@ -517,7 +541,77 @@ tcgRouter.get(
         return res.json(cached.data);
       }
       // Sem dado nenhum: devolve flags vazias - o frontend trata "sem dado" como "mostra tudo".
-      return res.json({ flags: {}, rarity: '', artist: '' });
+      return res.json({ flags: {}, rarity: '', artist: '', category: '', legal: { standard: false, expanded: false } });
     }
+  })
+);
+
+const decklistLineSchema = z.object({
+  index: z.number().int().min(0),
+  code: z.string().trim().min(1).max(10),
+  number: z.string().trim().min(1).max(10),
+});
+const resolveDecklistSchema = z.object({
+  lines: z.array(decklistLineSchema).min(1).max(60),
+});
+
+const resolveDecklistLimiter = rateLimit({ windowMs: 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false });
+
+// Resolve linhas de decklist coladas (ex: "TEF 113") pro id de carta interno - usado pela
+// importação de Decks. `code` é o código curto (Limitless/PTCGO) do set, casado contra
+// `code` em /sets (vindo de `abbreviation.official` na TCGdex, ver mapSet acima); ausente/
+// sem match vira "unresolved" pro usuário resolver manualmente, nunca um chute silencioso.
+const normalizeCardNumber = (n: string) => n.trim().replace(/^0+(?=.)/, '').toLowerCase();
+
+tcgRouter.post(
+  '/resolve-decklist',
+  resolveDecklistLimiter,
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const parsed = resolveDecklistSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Lista inválida.' });
+    }
+
+    const { data: setsCached } = await supabase.from('sets_cache').select('data').eq('id', 'all').maybeSingle();
+    const sets: any[] = setsCached?.data || FALLBACK_SETS;
+    const setsByCode = new Map<string, any[]>();
+    for (const s of sets) {
+      if (!s.code) continue;
+      const key = String(s.code).toUpperCase();
+      if (!setsByCode.has(key)) setsByCode.set(key, []);
+      setsByCode.get(key)!.push(s);
+    }
+
+    const resolved: { index: number; cardId: string }[] = [];
+    const unresolved: number[] = [];
+    const cardsBySetCache = new Map<string, any[]>();
+
+    for (const line of parsed.data.lines) {
+      const candidateSets = setsByCode.get(line.code.toUpperCase()) || [];
+      let match: string | null = null;
+      for (const set of candidateSets) {
+        let cards = cardsBySetCache.get(set.id);
+        if (!cards) {
+          const result = await fetchAndCacheSetCards(set.id);
+          cards = result.data;
+          cardsBySetCache.set(set.id, cards);
+        }
+        // Números do catálogo vêm com zero à esquerda (ex: "008"), decklists coladas normalmente
+        // não ("8") - compara normalizado dos dois lados pra não perder o match por causa disso.
+        const card = cards.find((c: any) => normalizeCardNumber(String(c.number)) === normalizeCardNumber(line.number));
+        if (card) {
+          match = card.id;
+          break;
+        }
+      }
+      if (match) {
+        resolved.push({ index: line.index, cardId: match });
+      } else {
+        unresolved.push(line.index);
+      }
+    }
+
+    return res.json({ resolved, unresolved });
   })
 );

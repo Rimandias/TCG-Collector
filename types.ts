@@ -64,6 +64,9 @@ export interface Card {
     name: string;
     printedTotal?: number;
   }
+  // Pokémon/Trainer/Energy - só vem preenchido depois de consultar /card-variants (não vem
+  // na listagem em lote da TCGdex). Usado pra agrupar decks na exportação/exibição.
+  category?: string;
 }
 
 export interface PokemonSet {
@@ -181,5 +184,18 @@ export enum AppTab {
   HOME = 'home',
   COLLECTION = 'collection',
   TRADES = 'trades',
+  DECKS = 'decks',
   SETTINGS = 'settings'
+}
+
+export interface DeckCard {
+  cardId: string;
+  quantity: number;
+}
+
+export interface Deck {
+  id: string;
+  name: string;
+  createdAt: string;
+  cards: DeckCard[];
 }

@@ -15,6 +15,7 @@ import BottomNav from './components/BottomNav';
 // atrás do gate de premium, então boa parte dos usuários nem chega a precisar dela).
 const CollectionView = lazy(() => import('./views/CollectionView'));
 const TradesView = lazy(() => import('./views/TradesView'));
+const DecksView = lazy(() => import('./views/DecksView'));
 const SettingsView = lazy(() => import('./views/SettingsView'));
 
 const ViewLoadingFallback: React.FC = () => (
@@ -238,6 +239,12 @@ const App: React.FC = () => {
         return (
           <Suspense fallback={<ViewLoadingFallback />}>
             <TradesView user={user} onUpdateUser={handleUpdateUser} />
+          </Suspense>
+        );
+      case AppTab.DECKS:
+        return (
+          <Suspense fallback={<ViewLoadingFallback />}>
+            <DecksView user={user} onUpdateUser={handleUpdateUser} />
           </Suspense>
         );
       case AppTab.SETTINGS:
