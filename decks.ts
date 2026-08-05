@@ -102,10 +102,17 @@ export interface DeckExportCardInfo {
   category: string;
 }
 
-// Ordem/rótulos fixos no padrão de decklist (Limitless/PTCGO) - são os cabeçalhos de
-// seção convencionais dessa comunidade, sempre nesses termos independente do idioma.
+// Ordem fixa de categoria, reaproveitada tanto na exportação quanto na tela.
 export const DECK_CATEGORY_ORDER = ['Pokemon', 'Trainer', 'Energy'] as const;
+
+// Rótulos fixos no padrão de decklist (Limitless/PTCGO) - são os cabeçalhos de seção
+// convencionais dessa comunidade, sempre nesses termos independente do idioma (usado só
+// na exportação/importação de texto, pra continuar compatível com listas de fora do app).
 export const DECK_CATEGORY_LABELS: Record<string, string> = { Pokemon: 'Pokémon', Trainer: 'Trainer', Energy: 'Energy', Outras: 'Outras' };
+
+// Rótulos em português usados na tela (agrupamento visual do deck) - diferente dos de
+// exportação, aqui não há convenção externa a seguir.
+export const UI_CATEGORY_LABELS: Record<string, string> = { Pokemon: 'Pokémon', Trainer: 'Treinadores', Energy: 'Energias', Outras: 'Outras' };
 
 // A TCGdex devolve a categoria da carta traduzida (locale `pt`: "Pokémon"/"Treinador"/
 // "Energia"; fallback `en`: "Pokemon"/"Trainer"/"Energy" quando a carta não tem pt) - mapeia
