@@ -180,6 +180,14 @@ export interface VisibleFolder {
 export enum AppTab {
   HOME = 'home',
   COLLECTION = 'collection',
+  DECKS = 'decks',
   TRADES = 'trades',
   SETTINGS = 'settings'
+}
+
+export interface Deck {
+  id: string;
+  name: string;
+  cardIds: string[];
+  createdAt: string;
 }

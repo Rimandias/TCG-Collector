@@ -14,6 +14,7 @@ import BottomNav from './components/BottomNav';
 // primeira vez - TradesView sozinha tem ~2000 linhas (é a maior tela do app de longe, e fica
 // atrás do gate de premium, então boa parte dos usuários nem chega a precisar dela).
 const CollectionView = lazy(() => import('./views/CollectionView'));
+const DecksView = lazy(() => import('./views/DecksView'));
 const TradesView = lazy(() => import('./views/TradesView'));
 const SettingsView = lazy(() => import('./views/SettingsView'));
 
@@ -232,6 +233,12 @@ const App: React.FC = () => {
         return (
           <Suspense fallback={<ViewLoadingFallback />}>
             <CollectionView user={user} />
+          </Suspense>
+        );
+      case AppTab.DECKS:
+        return (
+          <Suspense fallback={<ViewLoadingFallback />}>
+            <DecksView user={user} />
           </Suspense>
         );
       case AppTab.TRADES:
