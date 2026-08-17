@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef } from 'react';
-import { Card, User, CardCondition } from '../types';
+import { Card, User, CardCondition, VARIATION_TYPES } from '../types';
 import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, adjustLanguageQuantity, getDefaultVariationType } from '../db';
 import { fetchCardVariants, peekCachedCardVariants } from '../api';
 import CardImage from './CardImage';
@@ -76,25 +76,52 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
   };
 
   const adjustQuantity = (delta: number) => {
-    const cachedInfo = peekCachedCardVariants(card.id);
-    const variation = getDefaultVariationType(cachedInfo?.flags);
     const normalized = getNormalizedVariations(cardData.variations);
-    const nmDetails = normalized[variation][CardCondition.NM];
-    const previousQuantity = nmDetails.quantity;
-    // Cartas com idioma detalhado (ver +Info) mantêm o total consistente somando/
-    // subtraindo no idioma padrão (Português/BR), em vez de mexer direto no agregado.
-    if (nmDetails.languages) {
-      normalized[variation][CardCondition.NM] = adjustLanguageQuantity(nmDetails, 'BR', delta);
-    } else {
-      const currentNM = nmDetails.quantity || 0;
-      normalized[variation][CardCondition.NM].quantity = Math.max(0, currentNM + delta);
+
+    if (delta > 0) {
+      // Adicionar sempre vai pra variação que a carta realmente tem (getDefaultVariationType) -
+      // nem toda carta tem Standard (promos, exclusivas de Pokebola/Master Ball etc.), então
+      // cravar sempre nela criaria uma cópia numa variação que a API nunca confirma pra essa
+      // carta específica.
+      const cachedInfo = peekCachedCardVariants(card.id);
+      const variation = getDefaultVariationType(cachedInfo?.flags);
+      const nmDetails = normalized[variation][CardCondition.NM];
+      // Cartas com idioma detalhado (ver +Info) mantêm o total consistente somando/
+      // subtraindo no idioma padrão (Português/BR), em vez de mexer direto no agregado.
+      if (nmDetails.languages) {
+        normalized[variation][CardCondition.NM] = adjustLanguageQuantity(nmDetails, 'BR', delta);
+      } else {
+        normalized[variation][CardCondition.NM].quantity = (nmDetails.quantity || 0) + delta;
+      }
+      const hasCards = getCardTotalQuantity(normalized) > 0;
+      onUpdateUser(updateCardStatus(user, card.id, { variations: normalized, isOwned: hasCards }));
+      if (!cachedInfo) reconcileVariation(variation, normalized[variation][CardCondition.NM].quantity, false);
+      return;
     }
-    const nextQuantity = normalized[variation][CardCondition.NM].quantity;
-    // Clicar em "-" já em 0 cai nesse clamp sem sair do lugar - evita salvar à toa.
-    if (nextQuantity === previousQuantity) return;
-    const hasCards = getCardTotalQuantity(normalized) > 0;
-    onUpdateUser(updateCardStatus(user, card.id, { variations: normalized, isOwned: hasCards }));
-    if (!cachedInfo) reconcileVariation(variation, nextQuantity, false);
+
+    // Remover sempre tira de onde a cópia REALMENTE está, não de onde uma cópia nova entraria
+    // (getDefaultVariationType/NM) - a carta pode ter sido registrada numa variação/condição
+    // diferente dessa (ex: editada manualmente no +Info numa condição que não NM, ou cartas
+    // adicionadas antes de VARIATION_TYPES bater com a variação real da carta). Sem isso, "-"
+    // numa carta assim não fazia nada: decrementava um slot vazio (Math.max(0, 0-1) = 0, sem
+    // mudança) mesmo com o total mostrando cópias de verdade em outro lugar. Varre variação
+    // por variação (ordem de VARIATION_TYPES) e, dentro de cada uma, condição por condição
+    // (NM, SP, MP, HP, D - ordem de CardCondition) até achar a primeira com alguma unidade.
+    for (const variation of VARIATION_TYPES) {
+      for (const condition of Object.values(CardCondition)) {
+        const details = normalized[variation][condition];
+        if ((details.quantity || 0) <= 0) continue;
+        if (details.languages) {
+          normalized[variation][condition] = adjustLanguageQuantity(details, 'BR', delta);
+        } else {
+          normalized[variation][condition].quantity = Math.max(0, details.quantity + delta);
+        }
+        const hasCards = getCardTotalQuantity(normalized) > 0;
+        onUpdateUser(updateCardStatus(user, card.id, { variations: normalized, isOwned: hasCards }));
+        return;
+      }
+    }
+    // Nada pra remover (já em 0 em toda variação/condição) - não salva à toa.
   };
 
   const toggleTrade = (e: React.MouseEvent) => {
