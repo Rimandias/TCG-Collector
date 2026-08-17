@@ -145,8 +145,8 @@ export const getSetTierStatsFromCounts = (
   return buildStats(regularOwned, setSummary.printedTotal, secretOwned, secretTotal, variationOwned, variationTotal);
 };
 
-export const TIER_COLOR_CLASSES: Record<SetTierColor, { bar: string; text: string }> = {
-  green: { bar: 'bg-emerald-400', text: 'text-emerald-500' },
-  blue: { bar: 'bg-[#4A90D9]', text: 'text-[#4A90D9]' },
-  purple: { bar: 'bg-[#9B6BD9]', text: 'text-[#9B6BD9]' },
+export const TIER_COLOR_CLASSES: Record<SetTierColor, { text: string }> = {
+  green: { text: 'text-emerald-500' },
+  blue: { text: 'text-[#4A90D9]' },
+  purple: { text: 'text-[#9B6BD9]' },
 };
