@@ -5,6 +5,46 @@ import { User, UserCardData, Card, CardCondition, VARIATION_TYPES, ConditionDeta
 // (ver auth.ts: fetchCurrentUser / persistUser). Este arquivo só contém helpers puros
 // de leitura/transformação do estado do usuário em memória.
 
+// Serializa deterministicamente pra comparação (ordena chaves de objeto recursivamente) -
+// mesma lógica usada no servidor (userStore.ts) pra decidir o que escrever de fato; aqui
+// decide o que sequer PRECISA ser enviado. Sem isso, a mesma `variations` com as chaves
+// montadas em ordem diferente (mas conteúdo igual) seria vista como "mudou" por engano -
+// nunca o oposto (conteúdo genuinamente diferente sempre serializa diferente), então o pior
+// caso de um bug aqui é mandar uma carta que não precisava, nunca deixar de mandar uma que
+// mudou de verdade.
+const stableStringify = (value: any): string => {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+};
+
+export interface CardsDiff {
+  changed: Record<string, UserCardData>;
+  removed: string[];
+}
+
+// Calcula o que mudou em `current.ownedCards` desde `baseline` (o último estado confirmado
+// como salvo no servidor - ver lastSyncedCardsRef em App.tsx) - só isso precisa ser enviado
+// no próximo salvamento, em vez da coleção inteira. `changed` sempre traz o valor final de
+// cada carta (nunca um delta tipo "+1"), então reenviar o mesmo diff duas vezes (retry depois
+// de uma resposta perdida) é seguro - nunca duplica quantidade.
+export const computeCardsDiff = (
+  baseline: Record<string, UserCardData>,
+  current: Record<string, UserCardData>
+): CardsDiff => {
+  const changed: Record<string, UserCardData> = {};
+  for (const cardId of Object.keys(current)) {
+    const before = baseline[cardId];
+    if (!before || stableStringify(before) !== stableStringify(current[cardId])) {
+      changed[cardId] = current[cardId];
+    }
+  }
+  const removed = Object.keys(baseline).filter(cardId => !(cardId in current));
+  return { changed, removed };
+};
+
 export const getCardTotalQuantity = (variations: Record<string, any>): number => {
   if (!variations) return 0;
   let total = 0;
