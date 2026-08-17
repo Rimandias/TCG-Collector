@@ -15,6 +15,17 @@ const userCardSchema = z.object({
   variations: z.record(z.string(), z.any()).default({}),
 });
 
+// Diff de cartas (ver auth.ts persistUser/computeCardsDiff no frontend): em vez de mandar a
+// coleção inteira a cada salvamento, o cliente manda só o que mudou desde o último
+// salvamento confirmado - `changed` sempre é o valor final (não incremental), então reenviar
+// o mesmo diff duas vezes (retry) é seguro. `ownedCards` continua aceito como alternativa
+// (a importação de CSV em SettingsView.tsx ainda manda a coleção inteira, e serve de
+// fallback pra sessões com frontend antigo em cache durante um deploy).
+const cardsDiffSchema = z.object({
+  changed: z.record(z.string().regex(cardIdPattern), userCardSchema).default({}),
+  removed: z.array(z.string().regex(cardIdPattern)).max(20000).default([]),
+});
+
 const variationSelectionSchema = z.object({
   variation: z.string().min(1).max(80),
   condition: z.string().min(1).max(20),
@@ -33,12 +44,12 @@ const folderSchema = z.object({
 const userDataSchema = z.object({
   username: z.string().trim().min(1).max(40),
   avatarUrl: z.string().trim().max(2000),
-  // SEM `.default({})`: uma sessão com o frontend antigo em cache (de antes de reverter o
-  // formato cardsDiff, ver commit de revert) manda um payload sem `ownedCards` nenhum - se
-  // isso virasse `{}` por padrão, replaceUserData leria como "usuário não tem carta nenhuma"
-  // e apagaria a coleção inteira. Ausente precisa continuar significando "não mexa nas
-  // cartas", nunca "a coleção está vazia" (ver userStore.ts).
+  // Nenhum dos dois tem `.default()`: ausente precisa continuar significando "não mande
+  // ownedCards/cardsDiff nesse payload", nunca virar um objeto vazio por acidente - um
+  // `ownedCards: {}` sintético seria lido como "o usuário não tem carta nenhuma" e apagaria
+  // a coleção inteira (ver replaceUserDataUnlocked).
   ownedCards: z.record(z.string().regex(cardIdPattern), userCardSchema).optional(),
+  cardsDiff: cardsDiffSchema.optional(),
   folders: z.array(folderSchema).max(200).default([]),
   wishlist: z.array(z.string().regex(cardIdPattern)).max(5000).default([]),
 });

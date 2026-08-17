@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useDeferredValue, Suspense, lazy } from 'react';
-import { User, AppTab, PokemonSet } from './types';
+import { User, UserCardData, AppTab, PokemonSet } from './types';
 import { fetchCurrentUser, persistUser, logout as clearSession, warmBackend } from './auth';
 import { supabase } from './supabaseClient';
 import HomeView from './views/HomeView';
@@ -43,6 +43,14 @@ const App: React.FC = () => {
   // protege contra perda de dado num refresh/fechamento de aba no meio do caminho.
   const pendingUserRef = useRef<User | null>(null);
   const isSavingRef = useRef(false);
+  // Último `ownedCards` confirmado como salvo no servidor (ou recém-carregado do GET /me) -
+  // é contra isso que persistUser calcula o diff a enviar no próximo salvamento, em vez de
+  // mandar a coleção inteira de novo. Só avança depois de um salvamento bem-sucedido (ver
+  // flushPendingSave) - numa falha, fica parado no valor antigo, então o próximo diff
+  // recalculado a partir dele já inclui tudo que ficou pendente (mesma garantia de nunca
+  // perder edição que o app sempre teve, só que operando sobre o diff em vez do estado
+  // inteiro).
+  const lastSyncedCardsRef = useRef<Record<string, UserCardData>>({});
   const [saveState, setSaveState] = useState<'idle' | 'pending' | 'saving' | 'error'>('idle');
   // Só fica true durante uma navegação que precisou esperar um salvamento em andamento -
   // é o que dispara o popup bloqueante, sem incomodar o usuário nos outros 99% do tempo em
@@ -57,7 +65,10 @@ const App: React.FC = () => {
   useEffect(() => {
     const restoreSession = async () => {
       const savedUser = await fetchCurrentUser();
-      if (savedUser) setUser(savedUser);
+      if (savedUser) {
+        setUser(savedUser);
+        lastSyncedCardsRef.current = savedUser.ownedCards;
+      }
       setCheckingSession(false);
     };
     restoreSession();
@@ -87,6 +98,7 @@ const App: React.FC = () => {
 
   const handleLogin = (userData: User) => {
     setUser(userData);
+    lastSyncedCardsRef.current = userData.ownedCards;
   };
 
   const handleLogout = async () => {
@@ -122,9 +134,12 @@ const App: React.FC = () => {
     pendingUserRef.current = null;
     isSavingRef.current = true;
     setSaveState('saving');
-    const saved = await persistUser(toSave);
+    const saved = await persistUser(toSave, lastSyncedCardsRef.current);
     isSavingRef.current = false;
     if (saved) {
+      // Só avança o baseline depois de confirmado - numa falha ele fica parado no valor
+      // antigo (ver comentário do lastSyncedCardsRef acima).
+      lastSyncedCardsRef.current = toSave.ownedCards;
       if (pendingUserRef.current) {
         // Já tem outra edição mais nova esperando - salva ela em seguida, sem esperar um
         // novo debounce (já sabemos que está desatualizada, esperar só atrasaria à toa).
