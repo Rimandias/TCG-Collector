@@ -300,7 +300,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   // 1x Standard NM (mesmo padrão do toque individual), sem sobrescrever cartas já possuídas.
   const handleSelectAllInSet = () => {
     const updatedOwnedCards = { ...user.ownedCards };
-    setCards.forEach(card => {
+    filteredCards.forEach(card => {
       const current = updatedOwnedCards[card.id];
       const alreadyOwned = current && getCardTotalQuantity(current.variations) > 0;
       if (alreadyOwned) return;
@@ -320,7 +320,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   // para troca, sem alterar quantidade/variação - só a flag isForTrade.
   const handleMarkAllForTradeInSet = () => {
     const updatedOwnedCards = { ...user.ownedCards };
-    setCards.forEach(card => {
+    filteredCards.forEach(card => {
       const current = updatedOwnedCards[card.id];
       if (!current || getCardTotalQuantity(current.variations) <= 0) return;
       updatedOwnedCards[card.id] = { ...current, isForTrade: true };
