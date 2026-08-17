@@ -12,11 +12,6 @@ interface SetProgressBarProps {
   hideLabel?: boolean;
 }
 
-// Barra única (não 3 segmentos separados) porque o total pode passar de 100% (até 300%,
-// Base+Complete+Master) - a largura preenchida representa a % do teto de 300%, e a cor
-// (verde/azul/roxo) é quem comunica em qual fase a coleção está agora (ver getSetTierStats).
-const MAX_TOTAL_PERCENT = 300;
-
 const SetProgressBar: React.FC<SetProgressBarProps> = ({ stats, size = 'md', hideLabel = false }) => {
   const height = size === 'sm' ? 'h-1.5' : 'h-2';
 
@@ -29,19 +24,32 @@ const SetProgressBar: React.FC<SetProgressBarProps> = ({ stats, size = 'md', hid
   }
 
   const colors = TIER_COLOR_CLASSES[stats.tierColor];
-  const fillWidth = Math.min(100, (stats.totalPercent / MAX_TOTAL_PERCENT) * 100);
 
   return (
     <div className="w-full space-y-1">
-      <div className={`w-full ${height} bg-slate-100 rounded-full overflow-hidden`}>
+      {/* 3 camadas sobrepostas na mesma trilha (não lado a lado) - cada uma vai de 0 a 100%
+          da sua própria fase. Como a fase só avança depois da anterior completar, a de cima
+          sempre "cobre" a de baixo por igual ou menos, deixando a cor anterior aparecer por
+          trás na parte que a de cima ainda não preencheu (ex: na fase azul, o verde por baixo
+          sempre está com 100% de largura). Ordem no DOM = ordem de empilhamento (a última
+          pintada por cima). */}
+      <div className={`relative w-full ${height} bg-slate-100 rounded-full overflow-hidden`}>
         <div
-          className={`h-full rounded-full transition-all duration-700 ${colors.bar}`}
-          style={{ width: `${fillWidth}%` }}
+          className="absolute inset-y-0 left-0 rounded-full bg-emerald-400 transition-all duration-700"
+          style={{ width: `${stats.regularPercent}%` }}
+        />
+        <div
+          className="absolute inset-y-0 left-0 rounded-full bg-[#4A90D9] transition-all duration-700"
+          style={{ width: `${stats.secretPercent}%` }}
+        />
+        <div
+          className="absolute inset-y-0 left-0 rounded-full bg-[#9B6BD9] transition-all duration-700"
+          style={{ width: `${stats.variationPercent}%` }}
         />
       </div>
       {!hideLabel && (
         <p className={`text-[10px] uppercase tracking-widest font-semibold ${colors.text}`}>
-          {Math.round(stats.totalPercent)}% da coleção
+          {Math.round(stats.totalPercent)}%
         </p>
       )}
     </div>
