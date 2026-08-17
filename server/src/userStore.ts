@@ -265,21 +265,28 @@ async function replaceUserDataUnlocked(userId: string, data: UserDataInput): Pro
     .select('friend_code, is_premium')
     .single();
 
-  const cardsSyncPromise = syncKeyedTable({
-    table: 'user_cards',
-    ownerColumn: 'user_id',
-    ownerValue: userId,
-    keyColumn: 'card_id',
-    keepKeys: new Set(Object.keys(data.ownedCards || {})),
-    upsertRows: Object.entries(data.ownedCards || {}).map(([cardId, card]) => ({
-      user_id: userId,
-      card_id: cardId,
-      is_owned: !!card.isOwned,
-      is_for_trade: !!card.isForTrade,
-      variations: sparsifyVariations(card.variations),
-    })),
-    onConflict: 'user_id,card_id',
-  });
+  // `ownedCards` ausente (undefined) precisa NUNCA ser tratado como "coleção vazia" - uma
+  // sessão com o frontend antigo em cache (de antes de reverter o formato cardsDiff) manda
+  // um payload sem esse campo, e um `|| {}` aqui apagaria a coleção inteira do usuário via
+  // syncKeyedTable (tudo que existe no banco viraria "sobrando"). Só sincroniza cartas
+  // quando o campo realmente veio no payload.
+  const cardsSyncPromise = data.ownedCards === undefined
+    ? Promise.resolve()
+    : syncKeyedTable({
+        table: 'user_cards',
+        ownerColumn: 'user_id',
+        ownerValue: userId,
+        keyColumn: 'card_id',
+        keepKeys: new Set(Object.keys(data.ownedCards)),
+        upsertRows: Object.entries(data.ownedCards).map(([cardId, card]) => ({
+          user_id: userId,
+          card_id: cardId,
+          is_owned: !!card.isOwned,
+          is_for_trade: !!card.isForTrade,
+          variations: sparsifyVariations(card.variations),
+        })),
+        onConflict: 'user_id,card_id',
+      });
 
   const wishlistSyncPromise = syncKeyedTable({
     table: 'wishlist',

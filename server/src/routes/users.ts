@@ -33,7 +33,12 @@ const folderSchema = z.object({
 const userDataSchema = z.object({
   username: z.string().trim().min(1).max(40),
   avatarUrl: z.string().trim().max(2000),
-  ownedCards: z.record(z.string().regex(cardIdPattern), userCardSchema).default({}),
+  // SEM `.default({})`: uma sessão com o frontend antigo em cache (de antes de reverter o
+  // formato cardsDiff, ver commit de revert) manda um payload sem `ownedCards` nenhum - se
+  // isso virasse `{}` por padrão, replaceUserData leria como "usuário não tem carta nenhuma"
+  // e apagaria a coleção inteira. Ausente precisa continuar significando "não mexa nas
+  // cartas", nunca "a coleção está vazia" (ver userStore.ts).
+  ownedCards: z.record(z.string().regex(cardIdPattern), userCardSchema).optional(),
   folders: z.array(folderSchema).max(200).default([]),
   wishlist: z.array(z.string().regex(cardIdPattern)).max(5000).default([]),
 });
