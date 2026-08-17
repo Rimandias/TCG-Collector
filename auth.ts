@@ -1,6 +1,5 @@
-import { User, UserCardData } from './types';
+import { User } from './types';
 import { supabase } from './supabaseClient';
-import { computeCardsDiff } from './db';
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || '/api';
 
@@ -118,29 +117,17 @@ export const updatePassword = async (newPassword: string): Promise<void> => {
 // (a rota faz várias queries/upserts em paralelo no servidor) e pro cold-start do Render
 // (ver warmBackend, que tenta evitar cair nesse caso) sem deixar o usuário esperando
 // indefinidamente por uma conexão que já morreu.
-//
-// `baseline` é o último estado de `ownedCards` confirmado como salvo (ver lastSyncedCardsRef
-// em App.tsx) - quando informado, manda só o diff calculado contra ele (cardsDiff), em vez da
-// coleção inteira; App.tsx só avança esse baseline depois de um salvamento bem-sucedido, então
-// uma falha nunca "esquece" uma mudança - o próximo diff recalculado contra o baseline antigo
-// já inclui tudo que ficou pendente. Sem `baseline` (ex: importação de CSV em
-// SettingsView.tsx, que salva direto sem passar pelo pipeline de debounce), continua mandando
-// `ownedCards` inteiro como sempre - o servidor aceita os dois formatos.
-export const persistUser = async (user: User, baseline?: Record<string, UserCardData>): Promise<boolean> => {
+export const persistUser = async (user: User): Promise<boolean> => {
   const token = await getAccessToken();
   if (!token) return false;
 
-  const payload: Record<string, any> = {
+  const payload = {
     username: user.username,
     avatarUrl: user.avatarUrl,
+    ownedCards: user.ownedCards,
     folders: user.folders || [],
     wishlist: user.wishlist || [],
   };
-  if (baseline) {
-    payload.cardsDiff = computeCardsDiff(baseline, user.ownedCards);
-  } else {
-    payload.ownedCards = user.ownedCards;
-  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 45000);
