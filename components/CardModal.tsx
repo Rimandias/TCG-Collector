@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, User, CardCondition, VARIATION_TYPES, LANGUAGE_OPTIONS, ConditionDetails } from '../types';
-import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, getCardEstimatedValue, adjustLanguageQuantity, setLanguagePrice, renameLanguageEntry } from '../db';
+import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, getCardEstimatedValue, adjustLanguageQuantity, setLanguagePrice, renameLanguageEntry, getVariationSubtotal, reconcileVariationsWithApiFlags } from '../db';
 import { fetchCardStats, CardPriceStats, fetchCardVariants, CardVariantInfo } from '../api';
 import CardImage from './CardImage';
 
@@ -24,6 +24,14 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
   const [pendingLanguageCode, setPendingLanguageCode] = useState<string>(LANGUAGE_OPTIONS[0].code);
   const [variantInfo, setVariantInfo] = useState<CardVariantInfo | null>(null);
 
+  // Pro efeito abaixo poder migrar dado órfão de variação usando sempre o `user`/
+  // `onUpdateUser` mais atuais, sem precisar listar `user` nas deps (o que reexecutaria a
+  // busca de variantes - uma chamada de rede - a cada edição de quantidade/preço nesse modal).
+  const latestRef = useRef({ user, onUpdateUser });
+  useEffect(() => {
+    latestRef.current = { user, onUpdateUser };
+  }, [user, onUpdateUser]);
+
   useEffect(() => {
     let cancelled = false;
     fetchCardStats(card.id).then((stats) => {
@@ -38,7 +46,20 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
     let cancelled = false;
     setVariantInfo(null);
     fetchCardVariants(card.id).then((info) => {
-      if (!cancelled) setVariantInfo(info);
+      if (cancelled) return;
+      setVariantInfo(info);
+
+      // Assim que sabemos de verdade quais variações essa carta tem, migra qualquer
+      // quantidade/preço gravado numa variação que a API diz que ela nunca teve (dado órfão,
+      // tipicamente de antes da detecção via API existir) pra uma variação válida - sem
+      // perder nenhuma unidade contada, só reclassificando.
+      const { user: latestUser, onUpdateUser: latestOnUpdateUser } = latestRef.current;
+      const latestCardData = latestUser.ownedCards[card.id];
+      if (!latestCardData) return;
+      const { variations: reconciled, migrated } = reconcileVariationsWithApiFlags(latestCardData.variations, info.flags);
+      if (migrated) {
+        latestOnUpdateUser(updateCardStatus(latestUser, card.id, { variations: reconciled }));
+      }
     });
     return () => {
       cancelled = true;
@@ -144,10 +165,6 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
   const totalQty = getCardTotalQuantity(cardData.variations);
   const estimatedValue = getCardEstimatedValue(cardData.variations);
   const averageUnitPrice = totalQty > 0 ? estimatedValue / totalQty : 0;
-
-  const getVariationSubtotal = (variationData: Record<CardCondition, ConditionDetails>) => {
-    return Object.values(variationData).reduce((sum, cond) => sum + (cond.quantity || 0), 0);
-  };
 
   // Esconde variações que a TCGdex confirma não existir pra essa carta (ex: nem toda
   // carta tem Pokeball/Master Ball) - mas nunca esconde uma que já tem dado real do

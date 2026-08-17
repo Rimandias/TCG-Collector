@@ -422,3 +422,44 @@ export const fetchCardVariants = (cardId: string): Promise<CardVariantInfo> => {
   cardVariantsCache.set(cardId, request);
   return request;
 };
+
+// Flags de variação de todas as cartas de um set de uma vez (usado pra calcular a %
+// "Variações" do progresso em camadas e montar a visão Master Set) - uma chamada só, em vez
+// de uma por carta. Timeout mais generoso que fetchCardVariants porque o servidor pode
+// precisar consultar a TCGdex pra várias cartas ainda não cacheadas na primeira vez que
+// alguém abre um set (chamadas subsequentes vêm do cache, rápidas). Também alimenta o mesmo
+// cache usado por fetchCardVariants/peekCachedCardVariants - abrir o +Info de uma carta logo
+// depois de abrir o set não dispara uma nova requisição.
+export const fetchSetVariantFlags = async (setId: string): Promise<Record<string, CardVariantInfo>> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 25000);
+  try {
+    const response = await fetch(`${API_BASE}/tcg/sets/${encodeURIComponent(setId)}/variant-flags`, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) return {};
+    const body = await response.json();
+    const result: Record<string, CardVariantInfo> = {};
+    for (const [cardId, data] of Object.entries<any>(body || {})) {
+      const info: CardVariantInfo = {
+        flags: data?.flags || {},
+        rarity: data?.rarity || '',
+        artist: data?.artist || '',
+        category: data?.category || '',
+        legal: { standard: !!data?.legal?.standard, expanded: !!data?.legal?.expanded },
+      };
+      result[cardId] = info;
+      writeCachedCardVariants(cardId, info);
+      cardVariantsCache.set(cardId, Promise.resolve(info));
+    }
+    return result;
+  } catch (err) {
+    if ((err as Error)?.name !== 'AbortError') {
+      console.warn(`Could not load variant flags for set ${setId}:`, (err as Error).message);
+    }
+    return {};
+  } finally {
+    clearTimeout(timer);
+  }
+};

@@ -105,6 +105,59 @@ export const getNormalizedVariations = (variations: Record<string, any>): Record
   return normalized;
 };
 
+export const getVariationSubtotal = (variationData: Record<CardCondition, ConditionDetails>): number => {
+  return Object.values(variationData).reduce((sum, cond) => sum + (cond.quantity || 0), 0);
+};
+
+// Combina duas ConditionDetails (mesma condição, variações diferentes) sem perder nenhuma
+// unidade: se qualquer um dos dois lados já tem detalhamento por idioma, tudo vira idioma
+// (o lado sem detalhamento entra como idioma "" / "não especificado", mesma convenção usada
+// em languageLabel), somando quantidades por código de idioma. Sem idiomas dos dois lados,
+// só soma quantity e mantém o primeiro preço não-vazio.
+const mergeConditionDetails = (target: ConditionDetails, source: ConditionDetails): ConditionDetails => {
+  if (!source || (source.quantity || 0) === 0) return target;
+  if (!source.languages && !target.languages) {
+    return { quantity: (target.quantity || 0) + source.quantity, price: target.price || source.price };
+  }
+  const languages: Record<string, LanguageDetails> = { ...(target.languages || (target.quantity > 0 ? { '': { quantity: target.quantity, price: target.price || '' } } : {})) };
+  const sourceLanguages = source.languages || { '': { quantity: source.quantity, price: source.price || '' } };
+  for (const [code, lang] of Object.entries(sourceLanguages)) {
+    const existing = languages[code];
+    languages[code] = existing ? { quantity: existing.quantity + lang.quantity, price: existing.price || lang.price } : lang;
+  }
+  return { quantity: Object.values(languages).reduce((sum, l) => sum + (l.quantity || 0), 0), price: '', languages };
+};
+
+// Migra quantidade/preço de variações que a TCGdex confirma que a carta NÃO tem
+// (flags[tipo] === false, ex: "Pokeball" registrada manualmente numa carta que nunca teve
+// essa variação, de antes da detecção via API existir) para uma variação que a carta
+// realmente tem - nenhuma unidade contada pelo usuário é perdida, só reclassificada. Só
+// migra o que a API confirma explicitamente que não existe (chave ausente em `flags`
+// continua tratada como "sem informação", nunca migrada).
+export const reconcileVariationsWithApiFlags = (
+  variations: Record<string, any>,
+  flags: Record<string, boolean> | undefined | null
+): { variations: Record<string, Record<CardCondition, ConditionDetails>>; migrated: boolean } => {
+  const normalized = getNormalizedVariations(variations);
+  if (!flags || Object.keys(flags).length === 0) return { variations: normalized, migrated: false };
+
+  const invalidTypes = VARIATION_TYPES.filter(v => flags[v] === false && getVariationSubtotal(normalized[v]) > 0);
+  if (invalidTypes.length === 0) return { variations: normalized, migrated: false };
+
+  const validTarget = VARIATION_TYPES.find(v => flags[v] !== false) || 'Standard';
+  const result: Record<string, Record<CardCondition, ConditionDetails>> = { ...normalized, [validTarget]: { ...normalized[validTarget] } };
+
+  for (const invalidType of invalidTypes) {
+    const source = normalized[invalidType];
+    for (const condition of Object.values(CardCondition)) {
+      result[validTarget][condition] = mergeConditionDetails(result[validTarget][condition], source[condition]);
+    }
+    result[invalidType] = emptyConditionRecord();
+  }
+
+  return { variations: result, migrated: true };
+};
+
 // Qual variação usar quando o app precisa escolher uma sozinho (toque rápido pra marcar
 // como possuída, +/- na grade) - nunca deve ser sempre "Standard": várias cartas (promos,
 // Pokeball/Master Ball exclusivas, etc.) não têm Standard de verdade. Prioriza Standard se

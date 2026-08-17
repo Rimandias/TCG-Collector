@@ -506,6 +506,35 @@ function extractVariantFlags(detail: any): { flags: Record<string, boolean>; rar
   };
 }
 
+// Busca as flags de variação de uma carta na TCGdex e atualiza o cache - extraído do handler
+// de /card-variants/:cardId (mesma lógica de locale/fallback/cache) pra ser reutilizado por
+// /sets/:setId/variant-flags, que precisa disso pra várias cartas de uma vez sem depender de
+// uma resposta HTTP por carta.
+async function fetchAndCacheCardVariantInfo(cardId: string, cached: { data: any; updated_at: string } | null): Promise<any> {
+  try {
+    let detail: any;
+    try {
+      detail = await fetchTcgdex('pt', `/cards/${cardId}`);
+      if (!detail || Object.keys(detail).length === 0) {
+        detail = await fetchTcgdex('en', `/cards/${cardId}`);
+      }
+    } catch {
+      // Cartas de coleções sem `pt` (ver /sets acima) 404 direto no detalhe também.
+      detail = await fetchTcgdex('en', `/cards/${cardId}`);
+    }
+    const result = extractVariantFlags(detail);
+    await supabase.from('card_variants_cache').upsert({ card_id: cardId, data: result, updated_at: new Date().toISOString() });
+    return result;
+  } catch (err) {
+    console.warn(`[tcg] Falha ao buscar variantes da carta ${cardId}:`, (err as Error).message);
+    if (cached) {
+      return cached.data;
+    }
+    // Sem dado nenhum: devolve flags vazias - o frontend trata "sem dado" como "mostra tudo".
+    return { flags: {}, rarity: '', artist: '', category: '', legal: { standard: false, expanded: false } };
+  }
+}
+
 tcgRouter.get(
   '/card-variants/:cardId',
   asyncHandler(async (req, res) => {
@@ -521,28 +550,53 @@ tcgRouter.get(
       return res.json(cached.data);
     }
 
-    try {
-      let detail: any;
-      try {
-        detail = await fetchTcgdex('pt', `/cards/${cardId}`);
-        if (!detail || Object.keys(detail).length === 0) {
-          detail = await fetchTcgdex('en', `/cards/${cardId}`);
-        }
-      } catch {
-        // Cartas de coleções sem `pt` (ver /sets acima) 404 direto no detalhe também.
-        detail = await fetchTcgdex('en', `/cards/${cardId}`);
-      }
-      const result = extractVariantFlags(detail);
-      await supabase.from('card_variants_cache').upsert({ card_id: cardId, data: result, updated_at: new Date().toISOString() });
-      return res.json(result);
-    } catch (err) {
-      console.warn(`[tcg] Falha ao buscar variantes da carta ${cardId}:`, (err as Error).message);
-      if (cached) {
-        return res.json(cached.data);
-      }
-      // Sem dado nenhum: devolve flags vazias - o frontend trata "sem dado" como "mostra tudo".
-      return res.json({ flags: {}, rarity: '', artist: '', category: '', legal: { standard: false, expanded: false } });
+    return res.json(await fetchAndCacheCardVariantInfo(cardId, cached));
+  })
+);
+
+// Flags de variação de TODAS as cartas de um set de uma vez (mesmo dado de /card-variants/
+// :cardId, em lote) - usado pra calcular a % de "Variações" do progresso em camadas e pra
+// montar a visão Master Set, que precisam saber, pra cada carta do set, quais variações ela
+// realmente tem. Buscar isso uma carta de cada vez do frontend faria até ~250 requisições
+// (tamanho de um set grande) só pra abrir a tela.
+tcgRouter.get(
+  '/sets/:setId/variant-flags',
+  asyncHandler(async (req, res) => {
+    const parsed = setIdSchema.safeParse(req.params.setId);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'ID de coleção inválido.' });
     }
+    const setId = parsed.data;
+
+    const { data: setCards } = await fetchAndCacheSetCards(setId);
+    const cardIds = (setCards || []).map((c: any) => c.id);
+    if (cardIds.length === 0) {
+      return res.json({});
+    }
+
+    const { data: cachedRows } = await supabase.from('card_variants_cache').select('card_id, data, updated_at').in('card_id', cardIds);
+    const cachedByCardId = new Map((cachedRows || []).map((r: any) => [r.card_id, r]));
+
+    const result: Record<string, any> = {};
+    const toFetch: string[] = [];
+    for (const cardId of cardIds) {
+      const cached = cachedByCardId.get(cardId);
+      const isFresh = cached && Date.now() - new Date(cached.updated_at).getTime() < CACHE_VARIANTS_TTL_MS;
+      if (cached && isFresh) {
+        result[cardId] = cached.data;
+      } else {
+        toFetch.push(cardId);
+      }
+    }
+
+    // Mesmo limite de concorrência usado pra montar o catálogo (ver mapConcurrent acima) -
+    // um set com cache totalmente frio não deve disparar centenas de chamadas simultâneas
+    // pra TCGdex de uma vez só.
+    await mapConcurrent(toFetch, 10, async (cardId) => {
+      result[cardId] = await fetchAndCacheCardVariantInfo(cardId, cachedByCardId.get(cardId) || null);
+    });
+
+    return res.json(result);
   })
 );
 

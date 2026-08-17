@@ -89,6 +89,14 @@ export const updatePassword = async (newPassword: string): Promise<void> => {
 // caller usava esse retorno pra nada além de checar sucesso/falha (o próprio `user` que
 // disparou o salvamento já é a fonte da verdade no estado do React), então reenviar tudo de
 // volta a cada salvamento era banda jogada fora.
+//
+// Sem timeout aqui, uma conexão que trava no meio do caminho (rede instável, aba suspensa
+// pelo SO, proxy derrubando conexão ociosa) deixava o fetch pendurado pra sempre: a promise
+// nunca resolve nem rejeita, então em App.tsx isSavingRef/saveState ficavam presos em
+// "saving" para sempre (overlay "Salvando..." travado) e o retry automático - que só dispara
+// quando saveState vira "error" - nunca chegava a acionar. 30s dá folga pra coleções grandes
+// (a rota faz várias queries/upserts em paralelo no servidor) sem deixar o usuário esperando
+// indefinidamente por uma conexão que já morreu.
 export const persistUser = async (user: User): Promise<boolean> => {
   const token = await getAccessToken();
   if (!token) return false;
@@ -101,21 +109,31 @@ export const persistUser = async (user: User): Promise<boolean> => {
     wishlist: user.wishlist || [],
   };
 
-  const response = await fetch(`${API_BASE}/users/me`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const response = await fetch(`${API_BASE}/users/me`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
 
-  if (!response.ok) {
-    console.warn('Falha ao salvar dados no servidor:', await parseErrorMessage(response, response.statusText));
+    if (!response.ok) {
+      console.warn('Falha ao salvar dados no servidor:', await parseErrorMessage(response, response.statusText));
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('Falha ao salvar dados no servidor:', err);
     return false;
+  } finally {
+    clearTimeout(timer);
   }
-
-  return true;
 };
 
 export const addFriendByCode = async (code: string): Promise<{ user?: User; error?: string }> => {

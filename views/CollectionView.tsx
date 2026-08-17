@@ -1,17 +1,26 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, PokemonSet, UserCardData } from '../types';
-import { fetchSets } from '../api';
+import { fetchSets, fetchSetVariantFlags, CardVariantInfo } from '../api';
 import CardImage from '../components/CardImage';
+import SetProgressBar from '../components/SetProgressBar';
 import { getCardTotalQuantity, getCardEstimatedValue } from '../db';
+import { getSetTierStatsFromCounts } from '../setProgress';
 
 interface CollectionViewProps {
   user: User;
 }
 
+const hasAnyOwnedCard = (ownedCards: User['ownedCards'], setId: string): boolean => {
+  const prefix = `${setId}-`;
+  return Object.keys(ownedCards).some(id => id.startsWith(prefix) && getCardTotalQuantity(ownedCards[id]?.variations) > 0);
+};
+
 const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
   const [sets, setSets] = useState<PokemonSet[]>([]);
   const [loading, setLoading] = useState(true);
+  const [variantFlagsBySet, setVariantFlagsBySet] = useState<Record<string, Record<string, CardVariantInfo>>>({});
+  const requestedSetIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const loadData = async () => {
@@ -22,19 +31,32 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
     };
     loadData();
   }, []);
-  
-  const calculateStats = (set: PokemonSet) => {
-    const ownedIds = Object.keys(user.ownedCards).filter(id => 
-      id.startsWith(set.id) && user.ownedCards[id]?.isOwned
-    );
-    
-    const ownedCount = ownedIds.length;
-    
-    return {
-      count: ownedCount,
-      total: set.total,
-      percentage: set.total > 0 ? (ownedCount / set.total) * 100 : 0
+
+  // Busca as flags de variação (pra % de "Variações" do progresso em camadas) só dos sets
+  // que o usuário realmente possui pelo menos uma carta - sets sem nenhuma carta possuída
+  // sempre mostram 0%, sem precisar de nenhuma chamada de rede.
+  useEffect(() => {
+    if (sets.length === 0) return;
+    const toFetch = sets
+      .filter(set => hasAnyOwnedCard(user.ownedCards, set.id))
+      .map(set => set.id)
+      .filter(id => !requestedSetIdsRef.current.has(id));
+    if (toFetch.length === 0) return;
+    toFetch.forEach(id => requestedSetIdsRef.current.add(id));
+
+    let cancelled = false;
+    toFetch.forEach(async (setId) => {
+      const flags = await fetchSetVariantFlags(setId);
+      if (!cancelled) setVariantFlagsBySet(prev => ({ ...prev, [setId]: flags }));
+    });
+    return () => {
+      cancelled = true;
     };
+  }, [sets, user.ownedCards]);
+
+  const calculateStats = (set: PokemonSet) => {
+    const stats = getSetTierStatsFromCounts(set, user.ownedCards, variantFlagsBySet[set.id]);
+    return { count: stats.regularOwned + stats.secretOwned, tierStats: stats };
   };
 
   const globalStats = useMemo(() => {
@@ -118,25 +140,15 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
                 </div>
                 <div className="text-right">
                   <span className="text-lg text-[#646B99]">{stats.count}</span>
-                  <span className="text-slate-300 text-[10px]"> / {stats.total}</span>
+                  <span className="text-slate-300 text-[10px]"> / {set.total}</span>
                 </div>
               </div>
-              
+
               <div className="space-y-2">
-                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full rounded-full bg-[#646B99] transition-all duration-1000"
-                    style={{ width: `${stats.percentage}%` }}
-                  />
-                </div>
-                <div className="flex justify-between items-center">
-                    <p className="text-[8px] text-slate-400 uppercase tracking-widest">
-                        {set.series}
-                    </p>
-                    <p className="text-[10px] text-[#646B99] uppercase tracking-widest">
-                        {Math.round(stats.percentage)}% Completo
-                    </p>
-                </div>
+                <SetProgressBar stats={stats.tierStats} />
+                <p className="text-[8px] text-slate-400 uppercase tracking-widest">
+                  {set.series}
+                </p>
               </div>
             </div>
           );

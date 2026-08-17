@@ -1,13 +1,18 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { User, PokemonSet, Card, UserCardData, CardCondition } from '../types';
-import { fetchSets, fetchCardsBySet, searchCards } from '../api';
+import { User, PokemonSet, Card, UserCardData, CardCondition, VARIATION_TYPES } from '../types';
+import { fetchSets, fetchCardsBySet, searchCards, fetchSetVariantFlags, CardVariantInfo } from '../api';
 import CardItem, { CardViewMode } from '../components/CardItem';
 import CardImage from '../components/CardImage';
 import CardViewModeSelector from '../components/CardViewModeSelector';
 import CardModal from '../components/CardModal';
-import { getCardTotalQuantity, getCompleteCardNumber, getCardEstimatedValue, getNormalizedVariations } from '../db';
+import SetProgressBar from '../components/SetProgressBar';
+import MasterSetTile from '../components/MasterSetTile';
+import { getCardTotalQuantity, getCompleteCardNumber, getCardEstimatedValue, getNormalizedVariations, getVariationSubtotal } from '../db';
 import { getInitialCardViewMode, saveCardViewMode, getCardGridClassName } from '../viewMode';
+import { getSetTierStats, getSetTierStatsFromCounts } from '../setProgress';
+
+type SetTierFilter = 'base' | 'complete' | 'master';
 
 interface HomeViewProps {
   user: User;
@@ -53,11 +58,16 @@ const HomeView: React.FC<HomeViewProps> = ({
 }) => {
   const [sets, setSets] = useState<PokemonSet[]>([]);
   const [setCards, setSetCards] = useState<Card[]>([]);
+  const [setVariantFlags, setSetVariantFlags] = useState<Record<string, CardVariantInfo>>({});
   const [loading, setLoading] = useState(true);
   const [loadingCards, setLoadingCards] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [infoCard, setInfoCard] = useState<Card | null>(null);
   const [filterTab, setFilterTab] = useState<'tudo' | 'restantes'>('tudo');
+  // 'complete' é o padrão: todas as cartas do set (regulares + secretas), igual à visão de
+  // sempre. 'base' esconde as secretas. 'master' explode cada carta em uma cópia por
+  // variação que a TCGdex confirma que ela tem (ver masterEntries) e não é editável.
+  const [setTierFilter, setSetTierFilter] = useState<SetTierFilter>('complete');
   const [globalSearchResults, setGlobalSearchResults] = useState<Card[]>([]);
   const [searchingGlobal, setSearchingGlobal] = useState(false);
   const [viewMode, setViewMode] = useState<CardViewMode>(getInitialCardViewMode);
@@ -65,13 +75,6 @@ const HomeView: React.FC<HomeViewProps> = ({
   useEffect(() => {
     saveCardViewMode(viewMode);
   }, [viewMode]);
-
-  const calculateProgress = useCallback((setId: string, total: number) => {
-    const ownedInSet = Object.keys(user.ownedCards).filter(id => 
-      id.startsWith(setId) && user.ownedCards[id]?.isOwned
-    ).length;
-    return total > 0 ? (ownedInSet / total) * 100 : 0;
-  }, [user.ownedCards]);
 
   const getSetLogoForSeries = useCallback((seriesName: string) => {
     const seriesSets = sets.filter(s => s.series === seriesName);
@@ -176,6 +179,24 @@ const HomeView: React.FC<HomeViewProps> = ({
     }
   }, [selectedSet]);
 
+  // Flags de variação de todas as cartas do set (pra % de "Variações" do progresso em
+  // camadas e pro filtro Master Set) - busca em lote, separada da carga das cartas em si,
+  // pra não atrasar a exibição da grade enquanto isso ainda está chegando.
+  useEffect(() => {
+    if (!selectedSet) {
+      setSetVariantFlags({});
+      return;
+    }
+    let cancelled = false;
+    setSetVariantFlags({});
+    fetchSetVariantFlags(selectedSet.id).then((flags) => {
+      if (!cancelled) setSetVariantFlags(flags);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSet]);
+
   const eras = useMemo(() => {
     const uniqueSeries: string[] = Array.from(new Set(sets.map(s => s.series)));
 
@@ -217,7 +238,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   }, [sets, selectedSeries]);
 
   const filteredCards = useMemo(() => {
-    let base = setCards;
+    let base = setTierFilter === 'base' ? setCards.filter(c => !c.isSecret) : setCards;
     if (filterTab === 'restantes') {
       base = setCards.filter(card => {
         const cardData = user.ownedCards[card.id];
@@ -240,7 +261,40 @@ const HomeView: React.FC<HomeViewProps> = ({
     }
 
     return base;
-  }, [setCards, filterTab, searchQuery, user.ownedCards]);
+  }, [setCards, setTierFilter, filterTab, searchQuery, user.ownedCards]);
+
+  // Master Set: cada carta vira uma entrada por variação que a TCGdex confirma que ela tem
+  // (setVariantFlags, ver GET /tcg/sets/:id/variant-flags) - cartas sem esse dado ainda
+  // carregado ficam de fora até a resposta chegar, em vez de "piscar" sem nenhuma tag. Segue
+  // os mesmos filtros de Restantes/busca que a visão normal, só que por variação: "Restantes"
+  // aqui é a variação específica ainda não possuída, não a carta como um todo.
+  interface MasterEntry {
+    card: Card;
+    variation: string;
+    owned: boolean;
+  }
+  const masterEntries = useMemo((): MasterEntry[] => {
+    if (setTierFilter !== 'master') return [];
+    const q = searchQuery.toLowerCase().trim();
+    const entries: MasterEntry[] = [];
+    for (const card of setCards) {
+      if (q) {
+        const fullNum = getCompleteCardNumber(card).toLowerCase();
+        const matches = card.name.toLowerCase().includes(q) || card.number.toLowerCase().includes(q) || fullNum.includes(q) || (card.artist || '').toLowerCase().includes(q);
+        if (!matches) continue;
+      }
+      const flags = setVariantFlags[card.id]?.flags;
+      if (!flags) continue;
+      const normalized = getNormalizedVariations(user.ownedCards[card.id]?.variations || {});
+      for (const variation of VARIATION_TYPES) {
+        if (flags[variation] !== true) continue;
+        const owned = getVariationSubtotal(normalized[variation]) > 0;
+        if (filterTab === 'restantes' && owned) continue;
+        entries.push({ card, variation, owned });
+      }
+    }
+    return entries;
+  }, [setTierFilter, setCards, setVariantFlags, user.ownedCards, filterTab, searchQuery]);
 
   // Marca de uma vez todas as cartas da coleção atual que ainda não são possuídas como
   // 1x Standard NM (mesmo padrão do toque individual), sem sobrescrever cartas já possuídas.
@@ -311,6 +365,11 @@ const HomeView: React.FC<HomeViewProps> = ({
       progress: (ownedCardsInSet.length / setCards.length) * 100
     };
   }, [selectedSet, setCards, user.ownedCards]);
+
+  const tierStats = useMemo(() => {
+    if (!selectedSet || setCards.length === 0) return null;
+    return getSetTierStats(setCards, user.ownedCards, setVariantFlags);
+  }, [selectedSet, setCards, user.ownedCards, setVariantFlags]);
 
   if (loading) {
     return (
@@ -424,14 +483,8 @@ const HomeView: React.FC<HomeViewProps> = ({
              </div>
           </div>
 
-          <div className="mt-2 flex items-center gap-3">
-            <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-               <div 
-                 className="h-full bg-[#34D399] transition-all duration-700" 
-                 style={{ width: `${setStats?.progress ?? 0}%` }}
-               />
-            </div>
-            <span className="text-[11px] text-slate-400">{Math.round(setStats?.progress ?? 0)}%</span>
+          <div className="mt-2">
+            <SetProgressBar stats={tierStats} />
           </div>
         </div>
 
@@ -454,23 +507,69 @@ const HomeView: React.FC<HomeViewProps> = ({
           <CardViewModeSelector viewMode={viewMode} onChange={setViewMode} />
         </div>
 
-        <div className="mb-4 flex gap-2">
-          <button
-            onClick={handleSelectAllInSet}
-            className="flex-1 py-2 bg-[#646B99]/5 border border-[#646B99]/20 text-[#646B99] text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-[#646B99]/10 transition-colors"
-          >
-            Selecionar Todos (1x Standard NM)
-          </button>
-          <button
-            onClick={handleMarkAllForTradeInSet}
-            className="flex-1 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-emerald-100 transition-colors"
-          >
-            Colocar Todas Para Troca
-          </button>
+        {/* Base Set / Complete Set / Master Set - Master Set explode cada carta por variação
+            e não é editável (ver masterEntries), então os botões em lote abaixo somem lá. */}
+        <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100 mb-3">
+          {([
+            ['base', 'Base Set'],
+            ['complete', 'Complete Set'],
+            ['master', 'Master Set'],
+          ] as [SetTierFilter, string][]).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setSetTierFilter(value)}
+              className={`flex-1 py-2 rounded-lg text-[10px] uppercase tracking-widest transition-all ${setTierFilter === value ? 'bg-white text-[#9B6BD9] shadow-sm font-semibold' : 'text-slate-400'}`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
+        {setTierFilter === 'master' && (
+          <p className="text-[9px] text-slate-400 mb-3 px-1">
+            Somente leitura - mostra 1 carta por variação que ela realmente tem, colorida conforme você já registrou pelo menos 1 unidade daquela variação específica.
+          </p>
+        )}
+
+        {setTierFilter !== 'master' && (
+          <div className="mb-4 flex gap-2">
+            <button
+              onClick={handleSelectAllInSet}
+              className="flex-1 py-2 bg-[#646B99]/5 border border-[#646B99]/20 text-[#646B99] text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-[#646B99]/10 transition-colors"
+            >
+              Selecionar Todos (1x Standard NM)
+            </button>
+            <button
+              onClick={handleMarkAllForTradeInSet}
+              className="flex-1 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-emerald-100 transition-colors"
+            >
+              Colocar Todas Para Troca
+            </button>
+          </div>
+        )}
+
         <div className={getCardGridClassName(viewMode)}>
-          {loadingCards ? (
+          {setTierFilter === 'master' ? (
+            loadingCards ? (
+              [...Array(6)].map((_, i) => <div key={i} className="aspect-[2/2.8] bg-slate-100 animate-pulse rounded-xl" />)
+            ) : masterEntries.length === 0 ? (
+              <div className="col-span-full py-20 text-center">
+                <p className="text-slate-400 text-xs uppercase tracking-widest">
+                  {Object.keys(setVariantFlags).length === 0 ? 'Carregando variações...' : 'Nenhuma carta encontrada'}
+                </p>
+              </div>
+            ) : (
+              masterEntries.map(entry => (
+                <MasterSetTile
+                  key={`${entry.card.id}::${entry.variation}`}
+                  card={entry.card}
+                  variation={entry.variation}
+                  owned={entry.owned}
+                  viewMode={viewMode}
+                />
+              ))
+            )
+          ) : loadingCards ? (
             [...Array(6)].map((_, i) => <div key={i} className="aspect-[2/2.8] bg-slate-100 animate-pulse rounded-xl" />)
           ) : filteredCards.length === 0 ? (
             <div className="col-span-full py-20 text-center">
@@ -556,7 +655,7 @@ const HomeView: React.FC<HomeViewProps> = ({
              // md:grid-cols-3 é só no desktop - no mobile continua o grid-cols-2 de sempre
              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 px-2">
              {setsInSeries.map(set => {
-                const progress = calculateProgress(set.id, set.total);
+                const tierStats = getSetTierStatsFromCounts(set, user.ownedCards);
                 return (
                   <button
                     key={set.id}
@@ -571,13 +670,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                             {set.symbolUrl && <CardImage src={set.symbolUrl} alt="" className="w-3 h-3 object-contain flex-shrink-0" />}
                             {set.name}
                         </p>
-                        <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                           <div 
-                             className={`h-full transition-all duration-500 ${progress > 80 ? 'bg-emerald-400' : progress > 30 ? 'bg-[#646B99]' : 'bg-red-500'}`}
-                             style={{ width: `${progress}%` }} 
-                           />
-                        </div>
-                        <p className="text-[9px] text-slate-400 uppercase text-center">{Math.round(progress)}%</p>
+                        <SetProgressBar stats={tierStats} size="sm" />
                     </div>
                   </button>
                 );
