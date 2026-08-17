@@ -565,11 +565,9 @@ const HomeView: React.FC<HomeViewProps> = ({
           <div className="mb-4 flex gap-2">
             <button
               onClick={handleSelectAllInSet}
-              disabled={Object.keys(setVariantFlags).length === 0}
-              title={Object.keys(setVariantFlags).length === 0 ? 'Aguardando carregar as variações reais de cada carta...' : undefined}
-              className="flex-1 py-2 bg-[#646B99]/5 border border-[#646B99]/20 text-[#646B99] text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-[#646B99]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#646B99]/5"
+              className="flex-1 py-2 bg-[#646B99]/5 border border-[#646B99]/20 text-[#646B99] text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-[#646B99]/10 transition-colors"
             >
-              {Object.keys(setVariantFlags).length === 0 ? 'Carregando variações...' : 'Selecionar Todos (1x NM)'}
+              Selecionar Todas
             </button>
             <button
               onClick={handleMarkAllForTradeInSet}
