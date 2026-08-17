@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, Card, UserCardData, TradeFolder, TradeFolderVariationSelection, Friend, Trade, CardCondition, VARIATION_TYPES, LANGUAGE_OPTIONS } from '../types';
-import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getCardEstimatedValue } from '../db';
-import { fetchCardsBySet, fetchSets } from '../api';
+import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getCardEstimatedValue, getVariationSubtotal } from '../db';
+import { fetchCardsBySet, fetchSets, fetchSetVariantFlags, CardVariantInfo } from '../api';
 import { createTradeRequest, getMyTrades, TradeItemSelection } from '../trades';
 import { fetchCurrentUser } from '../auth';
 import CardModal from '../components/CardModal';
@@ -12,7 +12,12 @@ import TradeItemsList from '../components/TradeItemsList';
 import Pagination, { PAGE_SIZE } from '../components/Pagination';
 import CardViewModeSelector from '../components/CardViewModeSelector';
 import { CardViewMode } from '../components/CardItem';
+import SetProgressBar from '../components/SetProgressBar';
+import MasterSetTile from '../components/MasterSetTile';
 import { getCardGridClassName } from '../viewMode';
+import { getSetTierStatsFromCounts } from '../setProgress';
+
+type SetTierFilter = 'base' | 'complete' | 'master';
 
 const TRADE_POLL_INTERVAL_MS = 15000;
 
@@ -215,6 +220,12 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   const [folderViewMode, setFolderViewMode] = useState<'cards' | 'collections'>('cards');
   const [selectedFolderSeries, setSelectedFolderSeries] = useState<string | null>(null);
   const [selectedFolderSetId, setSelectedFolderSetId] = useState<string | null>(null);
+  // Base Set/Complete Set/Master Set dentro da tela de detalhe do set de uma pasta - aqui
+  // escopado às cartas que JÁ ESTÃO na pasta (não ao set inteiro como na Home), já que uma
+  // pasta é sempre uma seleção das cartas do usuário, não uma lista pra completar. Master Set
+  // é somente leitura, igual na Home.
+  const [folderSetTierFilter, setFolderSetTierFilter] = useState<SetTierFilter>('complete');
+  const [folderSetVariantFlags, setFolderSetVariantFlags] = useState<Record<string, CardVariantInfo>>({});
   // Lista (padrão, mantido) vs grade de 3/6 - mesmo seletor usado em Home/Coleção
   // (CardViewModeSelector), só afeta como as cartas dentro de uma pasta são exibidas, não a
   // lógica de quais cartas aparecem.
@@ -227,6 +238,23 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterQuality, setFilterQuality] = useState('all');
   const [showFolderFilters, setShowFolderFilters] = useState(false);
+
+  // Flags de variação do set aberto dentro de uma pasta - só usadas pelo filtro Master Set
+  // (ver folderSetTierFilter), buscadas de novo a cada troca de set.
+  useEffect(() => {
+    if (!selectedFolderSetId) {
+      setFolderSetVariantFlags({});
+      return;
+    }
+    let cancelled = false;
+    setFolderSetVariantFlags({});
+    fetchSetVariantFlags(selectedFolderSetId).then((flags) => {
+      if (!cancelled) setFolderSetVariantFlags(flags);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedFolderSetId]);
 
   // Memoized user folders
   const folders = useMemo<TradeFolder[]>(() => user.folders || [], [user.folders]);
@@ -1230,11 +1258,30 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                   (() => {
                     if (selectedFolderSetId !== null) {
                       // --- SHOW SET DETAILS CARD LIST ---
-                      const setCardsInFolder = filteredFolderCards.filter(tc => tc.card.set.id === selectedFolderSetId);
+                      // Base/Complete/Master são escopados às cartas que já estão na pasta (não
+                      // ao set inteiro, como na Home) - uma pasta é sempre uma seleção, não uma
+                      // lista pra completar. Master explode cada carta em uma entrada por
+                      // variação que a TCGdex confirma que ela tem, somente leitura.
+                      const setCardsInFolderAll = filteredFolderCards.filter(tc => tc.card.set.id === selectedFolderSetId);
+                      const setCardsInFolder = folderSetTierFilter === 'base'
+                        ? setCardsInFolderAll.filter(tc => !tc.card.isSecret)
+                        : setCardsInFolderAll;
+                      const masterEntries = folderSetTierFilter === 'master'
+                        ? setCardsInFolderAll.flatMap(({ card, data }) => {
+                            const flags = folderSetVariantFlags[card.id]?.flags;
+                            if (!flags) return [];
+                            const normalized = getNormalizedVariations(data.variations);
+                            return VARIATION_TYPES.filter(v => flags[v] === true).map(variation => ({
+                              card,
+                              variation,
+                              owned: getVariationSubtotal(normalized[variation]) > 0,
+                            }));
+                          })
+                        : [];
                       return (
                         <div className="space-y-4">
                           <div className="flex items-center gap-2 mb-4 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                            <button 
+                            <button
                               onClick={() => setSelectedFolderSetId(null)}
                               className="text-xs font-semibold text-slate-500 hover:text-slate-700 flex items-center gap-1"
                             >
@@ -1247,7 +1294,43 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                             </span>
                           </div>
 
-                          {setCardsInFolder.length === 0 ? (
+                          <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100 mb-1">
+                            {([
+                              ['base', 'Base Set'],
+                              ['complete', 'Complete Set'],
+                              ['master', 'Master Set'],
+                            ] as [SetTierFilter, string][]).map(([value, label]) => (
+                              <button
+                                key={value}
+                                onClick={() => setFolderSetTierFilter(value)}
+                                className={`flex-1 py-1.5 rounded-lg text-[10px] uppercase tracking-widest transition-all ${folderSetTierFilter === value ? 'bg-white text-[#9B6BD9] shadow-sm font-semibold' : 'text-slate-400'}`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+
+                          {folderSetTierFilter === 'master' ? (
+                            masterEntries.length === 0 ? (
+                              <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-100">
+                                <p className="text-slate-400 font-medium text-xs uppercase tracking-widest">
+                                  {Object.keys(folderSetVariantFlags).length === 0 ? 'Carregando variações...' : 'Nenhuma variação encontrada'}
+                                </p>
+                              </div>
+                            ) : (
+                              <div className={getCardGridClassName(folderCardsLayout)}>
+                                {masterEntries.map(entry => (
+                                  <MasterSetTile
+                                    key={`${entry.card.id}::${entry.variation}`}
+                                    card={entry.card}
+                                    variation={entry.variation}
+                                    owned={entry.owned}
+                                    viewMode={folderCardsLayout}
+                                  />
+                                ))}
+                              </div>
+                            )
+                          ) : setCardsInFolder.length === 0 ? (
                             <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-100">
                               <p className="text-slate-400 font-medium text-xs uppercase tracking-widest">Nenhuma carta nesta coleção</p>
                               <p className="text-[10px] text-slate-300 mt-1 uppercase tracking-wider">corresponde aos filtros ativos</p>
@@ -1405,6 +1488,9 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                       <p className="text-[9px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2 py-0.5 rounded-full inline-block">
                                         {count} {count === 1 ? 'carta' : 'cartas'}
                                       </p>
+                                      {/* Progresso da coleção inteira do usuário nesse set (não só o que está
+                                          nesta pasta) - mesmo dado mostrado na Home/Minha Pasta. */}
+                                      <SetProgressBar stats={getSetTierStatsFromCounts(set, user.ownedCards)} size="sm" hideLabel />
                                     </div>
                                   </button>
                                 );

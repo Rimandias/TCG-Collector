@@ -1,13 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, LANGUAGE_OPTIONS, PokemonSet, VisibleFolder, VARIATION_TYPES, CardCondition } from '../types';
+import { Card, LANGUAGE_OPTIONS, PokemonSet, UserCardData, VisibleFolder, VARIATION_TYPES, CardCondition } from '../types';
 import { getCompleteCardNumber } from '../db';
-import { fetchCardsBySet, fetchSets } from '../api';
+import { fetchCardsBySet, fetchSets, fetchSetVariantFlags, CardVariantInfo } from '../api';
 import { getFriendVisibleFolders, TradeItemSelection } from '../trades';
 import Pagination, { PAGE_SIZE } from './Pagination';
 import CardViewModeSelector from './CardViewModeSelector';
 import { CardViewMode } from './CardItem';
 import { getCardGridClassName } from '../viewMode';
 import CardImage from './CardImage';
+import SetProgressBar from './SetProgressBar';
+import MasterSetTile from './MasterSetTile';
+import { getSetTierStatsFromCounts } from '../setProgress';
+
+type SetTierFilter = 'base' | 'complete' | 'master';
 
 interface FriendFolderBrowserProps {
   friendUserId: string;
@@ -75,6 +80,11 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
   const [filterSet, setFilterSet] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterQuality, setFilterQuality] = useState('all');
+  // Base Set/Complete Set/Master Set - escopado ao que está visível nesta pasta do amigo (não
+  // temos acesso à coleção inteira dele, só ao que ele compartilhou), igual ao mesmo filtro
+  // dentro das próprias pastas em TradesView. Master Set é somente leitura.
+  const [setTierFilter, setSetTierFilter] = useState<SetTierFilter>('complete');
+  const [selectedSetVariantFlags, setSelectedSetVariantFlags] = useState<Record<string, CardVariantInfo>>({});
 
   useEffect(() => {
     const load = async () => {
@@ -136,6 +146,63 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
     }
     return result;
   }, [selectedFolder, cardsById]);
+
+  // Reconstrói um mapa no formato UserCardData a partir das linhas visíveis nesta pasta -
+  // não temos a coleção inteira do amigo (só o que ele compartilhou), então a barra de
+  // progresso aqui reflete "quanto do set está visível nesta pasta", não a coleção completa
+  // dele. Reusa getSetTierStatsFromCounts (só precisa de um mapa id -> variations).
+  const folderOwnedCards = useMemo(() => {
+    const map: Record<string, UserCardData> = {};
+    for (const line of lines) {
+      const entry = (map[line.cardId] ||= { cardId: line.cardId, isOwned: true, isForTrade: false, variations: {} });
+      const byVariation = (entry.variations[line.variation] ||= {});
+      const existing = byVariation[line.condition]?.quantity || 0;
+      byVariation[line.condition] = { quantity: existing + line.availableQuantity, price: String(line.price || '') };
+    }
+    return map;
+  }, [lines]);
+
+  // Flags de variação do set aberto (pro filtro Master Set) - buscadas de novo a cada troca.
+  useEffect(() => {
+    if (!selectedSetId) {
+      setSelectedSetVariantFlags({});
+      return;
+    }
+    let cancelled = false;
+    setSelectedSetVariantFlags({});
+    fetchSetVariantFlags(selectedSetId).then((flags) => {
+      if (!cancelled) setSelectedSetVariantFlags(flags);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSetId]);
+
+  const ownedVariantKeys = useMemo(() => new Set(lines.map((l) => `${l.cardId}::${l.variation}`)), [lines]);
+
+  // Master Set: uma entrada por (carta, variação que a TCGdex confirma que ela tem), colorida
+  // conforme existe alguma linha visível nesta pasta pra essa combinação - inclui variações que
+  // o amigo não tem (não aparecem em `lines`), diferente da visão normal.
+  const masterEntries = useMemo(() => {
+    if (setTierFilter !== 'master' || !selectedSetId) return [];
+    const setCards = Object.values<Card>(cardsById).filter((c) => c.set.id === selectedSetId);
+    const q = searchQuery.toLowerCase().trim();
+    const entries: { card: Card; variation: string; owned: boolean }[] = [];
+    for (const card of setCards) {
+      if (q) {
+        const fullNum = getCompleteCardNumber(card).toLowerCase();
+        const matches = card.name.toLowerCase().includes(q) || card.number.toLowerCase().includes(q) || fullNum.includes(q);
+        if (!matches) continue;
+      }
+      const flags = selectedSetVariantFlags[card.id]?.flags;
+      if (!flags) continue;
+      for (const variation of VARIATION_TYPES) {
+        if (flags[variation] !== true) continue;
+        entries.push({ card, variation, owned: ownedVariantKeys.has(`${card.id}::${variation}`) });
+      }
+    }
+    return entries;
+  }, [setTierFilter, selectedSetId, cardsById, selectedSetVariantFlags, ownedVariantKeys, searchQuery]);
 
   const filteredLines = useMemo(() => {
     const base = lines.filter((line) => {
@@ -544,7 +611,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
             )
           ) : selectedSetId !== null ? (
             (() => {
-              const setLines = filteredLines.filter((line) => line.card?.set.id === selectedSetId);
+              const setLines = filteredLines.filter((line) => line.card?.set.id === selectedSetId && (setTierFilter !== 'base' || !line.card?.isSecret));
               return (
                 <div className="grid gap-3">
                   <div className="flex items-center gap-2 mb-1">
@@ -560,7 +627,44 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                       {sets.find((s) => s.id === selectedSetId)?.name}
                     </span>
                   </div>
-                  {setLines.length === 0 ? (
+
+                  <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+                    {([
+                      ['base', 'Base Set'],
+                      ['complete', 'Complete Set'],
+                      ['master', 'Master Set'],
+                    ] as [SetTierFilter, string][]).map(([value, label]) => (
+                      <button
+                        key={value}
+                        onClick={() => setSetTierFilter(value)}
+                        className={`flex-1 py-1.5 rounded-lg text-[10px] uppercase tracking-widest transition-all ${setTierFilter === value ? 'bg-white text-[#9B6BD9] shadow-sm font-semibold' : 'text-slate-400'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {setTierFilter === 'master' ? (
+                    masterEntries.length === 0 ? (
+                      <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-100">
+                        <p className="text-slate-400 text-sm">
+                          {Object.keys(selectedSetVariantFlags).length === 0 ? 'Carregando variações...' : 'Nenhuma variação encontrada.'}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className={getCardGridClassName(cardsLayout)}>
+                        {masterEntries.map((entry) => (
+                          <MasterSetTile
+                            key={`${entry.card.id}::${entry.variation}`}
+                            card={entry.card}
+                            variation={entry.variation}
+                            owned={entry.owned}
+                            viewMode={cardsLayout}
+                          />
+                        ))}
+                      </div>
+                    )
+                  ) : setLines.length === 0 ? (
                     <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-100">
                       <p className="text-slate-400 text-sm">Nenhuma carta encontrada.</p>
                     </div>
@@ -609,6 +713,11 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                         <p className="text-[9px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2 py-0.5 rounded-full mt-1">
                           {count} {count === 1 ? 'carta' : 'cartas'}
                         </p>
+                        {/* Progresso do que está visível nesta pasta pra esse set - não temos a
+                            coleção inteira do amigo, só o que ele compartilhou aqui. */}
+                        <div className="w-full mt-1.5">
+                          <SetProgressBar stats={getSetTierStatsFromCounts(set, folderOwnedCards)} size="sm" hideLabel />
+                        </div>
                       </button>
                     );
                   })}
