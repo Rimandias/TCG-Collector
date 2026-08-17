@@ -207,6 +207,7 @@ export interface UserDataInput {
   username?: string;
   avatarUrl?: string;
   ownedCards?: Record<string, { isOwned?: boolean; isForTrade?: boolean; variations?: Record<string, any> }>;
+  cardsDiff?: { changed: Record<string, { isOwned?: boolean; isForTrade?: boolean; variations?: Record<string, any> }>; removed: string[] };
   folders?: { id: string; name: string; cardIds: string[]; visibleToFriends?: boolean; variationSelections?: Record<string, TradeFolderVariationSelection[]> }[];
   wishlist?: string[];
 }
@@ -282,6 +283,38 @@ async function syncKeyedTable(params: {
   ]);
 }
 
+// Aplica um diff de cartas direto, sem precisar buscar nada primeiro (diferente de
+// syncKeyedTable, que precisa ler o estado atual pra decidir o que mudou): o próprio cliente
+// já calculou exatamente o que mudou desde o último salvamento confirmado (ver
+// computeCardsDiff/persistUser no frontend), então `changed`/`removed` já são a lista final -
+// só falta gravar. `changed` sempre traz o valor absoluto de cada carta (nunca um delta tipo
+// "+1"), então aplicar o mesmo diff duas vezes (retry depois de uma resposta perdida) é seguro.
+async function applyCardsDiff(
+  userId: string,
+  diff: { changed: Record<string, { isOwned?: boolean; isForTrade?: boolean; variations?: Record<string, any> }>; removed: string[] }
+): Promise<void> {
+  const upsertRows = Object.entries(diff.changed).map(([cardId, card]) => ({
+    user_id: userId,
+    card_id: cardId,
+    is_owned: !!card.isOwned,
+    is_for_trade: !!card.isForTrade,
+    variations: sparsifyVariations(card.variations),
+  }));
+
+  await Promise.all([
+    upsertRows.length > 0
+      ? supabase.from('user_cards').upsert(upsertRows, { onConflict: 'user_id,card_id' }).then((r) => {
+          if (r.error) throw r.error;
+        })
+      : Promise.resolve(),
+    diff.removed.length > 0
+      ? supabase.from('user_cards').delete().eq('user_id', userId).in('card_id', diff.removed).then((r) => {
+          if (r.error) throw r.error;
+        })
+      : Promise.resolve(),
+  ]);
+}
+
 export function replaceUserData(userId: string, data: UserDataInput): Promise<{ friendCode: string; isPremium: boolean }> {
   return withUserLock(userId, () => replaceUserDataUnlocked(userId, data));
 }
@@ -296,22 +329,32 @@ async function replaceUserDataUnlocked(userId: string, data: UserDataInput): Pro
     .select('friend_code, is_premium')
     .single();
 
-  const cardsSyncPromise = syncKeyedTable({
-    table: 'user_cards',
-    ownerColumn: 'user_id',
-    ownerValue: userId,
-    keyColumn: 'card_id',
-    keepKeys: new Set(Object.keys(data.ownedCards || {})),
-    upsertRows: Object.entries(data.ownedCards || {}).map(([cardId, card]) => ({
-      user_id: userId,
-      card_id: cardId,
-      is_owned: !!card.isOwned,
-      is_for_trade: !!card.isForTrade,
-      variations: sparsifyVariations(card.variations),
-    })),
-    onConflict: 'user_id,card_id',
-    compareColumns: ['is_owned', 'is_for_trade', 'variations'],
-  });
+  // Três casos, nessa ordem de prioridade: (1) `cardsDiff` presente - fluxo novo, aplica o
+  // diff calculado pelo cliente direto; (2) `ownedCards` presente (sem cardsDiff) - fluxo
+  // antigo, importação de CSV ou uma sessão com frontend em cache durante um deploy; (3)
+  // nenhum dos dois - esse salvamento não mexe em cartas (só wishlist/pasta/perfil, por
+  // exemplo), não faz nada com user_cards. NUNCA trata "ausente" como "vazio": um
+  // `ownedCards: {}` sintético aqui apagaria a coleção inteira do usuário.
+  const cardsSyncPromise = data.cardsDiff
+    ? applyCardsDiff(userId, data.cardsDiff)
+    : data.ownedCards !== undefined
+    ? syncKeyedTable({
+        table: 'user_cards',
+        ownerColumn: 'user_id',
+        ownerValue: userId,
+        keyColumn: 'card_id',
+        keepKeys: new Set(Object.keys(data.ownedCards)),
+        upsertRows: Object.entries(data.ownedCards).map(([cardId, card]) => ({
+          user_id: userId,
+          card_id: cardId,
+          is_owned: !!card.isOwned,
+          is_for_trade: !!card.isForTrade,
+          variations: sparsifyVariations(card.variations),
+        })),
+        onConflict: 'user_id,card_id',
+        compareColumns: ['is_owned', 'is_for_trade', 'variations'],
+      })
+    : Promise.resolve();
 
   const wishlistSyncPromise = syncKeyedTable({
     table: 'wishlist',
