@@ -211,20 +211,6 @@ export interface UserDataInput {
   wishlist?: string[];
 }
 
-// Serializa deterministicamente pra comparação (ordena chaves de objetos recursivamente) -
-// sem isso, duas versões da mesma `variations` com as chaves montadas em ordem diferente
-// (mas com o mesmo conteúdo) seriam vistas como "diferentes" por acidente, perdendo a
-// otimização (nunca causa o oposto: conteúdo genuinamente diferente sempre serializa
-// diferente, então o pior caso de um bug aqui é reescrever uma linha à toa, nunca deixar de
-// escrever uma que mudou de verdade).
-function stableStringify(value: any): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
-
 // Sincroniza upsert + apagar só as linhas removidas (calculado por diff, nunca "delete tudo
 // depois reinsere"): duas chamadas de PUT /api/users/me pro mesmo usuário podem se sobrepor
 // no tempo (ex: o efeito de sincronização da "Pasta de Repetidas" disparando junto de outra
@@ -232,13 +218,10 @@ function stableStringify(value: any): string {
 // primeira já reinseriu, violando a chave primária (23505). upsert é idempotente mesmo com
 // chamadas concorrentes.
 //
-// `compareColumns` evita reescrever no banco linhas que não mudaram de verdade - o cliente
-// sempre manda a coleção inteira a cada salvamento (garantia de nunca perder carta por
-// payload parcial, ver replaceUserData), mas isso não significa que o banco precise
-// REESCREVER toda ela: a maioria das linhas, na prática, é idêntica à já salva. Sem
-// `compareColumns` (tabelas só-chave-e-dono, como wishlist/trade_folder_cards, que não têm
-// nenhuma outra coluna que possa mudar), uma linha que já existe nunca precisa de update, só
-// as novas entram no upsert.
+// O upsert e a busca de ids atuais (pro diff) rodam em paralelo, não em sequência: o delete
+// só remove ids que NÃO estão no conjunto a manter, e o upsert só mexe nos ids que ESTÃO -
+// não há como os dois se atrapalharem não importa a ordem em que terminam. Isso elimina uma
+// viagem inteira de rede por recurso, que antes eram sempre sequenciais.
 async function syncKeyedTable(params: {
   table: string;
   ownerColumn: string;
@@ -247,39 +230,25 @@ async function syncKeyedTable(params: {
   keepKeys: Set<string>;
   upsertRows: Record<string, any>[];
   onConflict: string;
-  compareColumns?: string[];
 }): Promise<void> {
-  const { table, ownerColumn, ownerValue, keyColumn, keepKeys, upsertRows, onConflict, compareColumns = [] } = params;
+  const { table, ownerColumn, ownerValue, keyColumn, keepKeys, upsertRows, onConflict } = params;
 
-  const selectColumns = [keyColumn, ...compareColumns].join(',');
-  const existing = await fetchAllRows<Record<string, any>>((from, to) =>
-    supabase.from(table).select(selectColumns).eq(ownerColumn, ownerValue).range(from, to)
-  );
-  const existingByKey = new Map(existing.map((r) => [r[keyColumn], r]));
-
-  const rowsToUpsert = upsertRows.filter((row) => {
-    const current = existingByKey.get(row[keyColumn]);
-    if (!current) return true; // nova - nunca existiu, sempre entra
-    if (compareColumns.length === 0) return false; // só chave+dono - já existe, nada mais pra atualizar
-    return compareColumns.some((col) => stableStringify(row[col]) !== stableStringify(current[col]));
-  });
-
-  const staleKeys = existing.map((r) => r[keyColumn]).filter((k) => !keepKeys.has(k));
-
-  // upsert (só o que mudou/é novo) e delete (só o que saiu) não dependem um do outro - rodam
-  // em paralelo, os dois já sabendo o estado atual do banco (buscado uma vez só acima).
-  await Promise.all([
-    rowsToUpsert.length > 0
-      ? supabase.from(table).upsert(rowsToUpsert, { onConflict }).then((r) => {
+  const [, existing] = await Promise.all([
+    upsertRows.length > 0
+      ? supabase.from(table).upsert(upsertRows, { onConflict }).then((r) => {
           if (r.error) throw r.error;
         })
       : Promise.resolve(),
-    staleKeys.length > 0
-      ? supabase.from(table).delete().eq(ownerColumn, ownerValue).in(keyColumn, staleKeys).then((r) => {
-          if (r.error) throw r.error;
-        })
-      : Promise.resolve(),
+    fetchAllRows<Record<string, any>>((from, to) =>
+      supabase.from(table).select(keyColumn).eq(ownerColumn, ownerValue).range(from, to)
+    ),
   ]);
+
+  const staleKeys = (existing || []).map((r) => r[keyColumn]).filter((k) => !keepKeys.has(k));
+  if (staleKeys.length > 0) {
+    const { error } = await supabase.from(table).delete().eq(ownerColumn, ownerValue).in(keyColumn, staleKeys);
+    if (error) throw error;
+  }
 }
 
 export function replaceUserData(userId: string, data: UserDataInput): Promise<{ friendCode: string; isPremium: boolean }> {
@@ -310,7 +279,6 @@ async function replaceUserDataUnlocked(userId: string, data: UserDataInput): Pro
       variations: sparsifyVariations(card.variations),
     })),
     onConflict: 'user_id,card_id',
-    compareColumns: ['is_owned', 'is_for_trade', 'variations'],
   });
 
   const wishlistSyncPromise = syncKeyedTable({
@@ -341,7 +309,6 @@ async function replaceUserDataUnlocked(userId: string, data: UserDataInput): Pro
         variation_selections: f.variationSelections || {},
       })),
       onConflict: 'id',
-      compareColumns: ['name', 'visible_to_friends', 'variation_selections'],
     });
     // trade_folder_cards é removido em cascata quando a linha de trade_folders correspondente
     // é apagada, então só falta sincronizar as cartas das pastas que continuam existindo.
