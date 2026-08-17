@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { User, PokemonSet, Card, UserCardData, CardCondition, VARIATION_TYPES } from '../types';
 import { fetchSets, fetchCardsBySet, searchCards, fetchSetVariantFlags, CardVariantInfo } from '../api';
 import CardItem, { CardViewMode } from '../components/CardItem';
@@ -59,6 +59,13 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [sets, setSets] = useState<PokemonSet[]>([]);
   const [setCards, setSetCards] = useState<Card[]>([]);
   const [setVariantFlags, setSetVariantFlags] = useState<Record<string, CardVariantInfo>>({});
+  // Flags de variação (pra % de "Variações" do progresso em camadas) dos sets já possuídos
+  // mostrados na grade "sets de uma era" - sem isso, o card do set nessa grade nunca sabia a
+  // % de variações (sempre 0%) e podia mostrar cor/total diferentes da tela de detalhe do
+  // set/Minha Pasta pro mesmo set (ex: 200% verde ali, 300% roxo aqui). Só busca pra sets com
+  // pelo menos 1 carta possuída, igual ao mesmo padrão em CollectionView.tsx.
+  const [seriesVariantFlags, setSeriesVariantFlags] = useState<Record<string, Record<string, CardVariantInfo>>>({});
+  const requestedSeriesSetIdsRef = useRef<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [loadingCards, setLoadingCards] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -260,6 +267,28 @@ const HomeView: React.FC<HomeViewProps> = ({
       .filter(s => s.series === selectedSeries)
       .sort((a, b) => a.releaseDate.localeCompare(b.releaseDate));
   }, [sets, selectedSeries]);
+
+  useEffect(() => {
+    if (setsInSeries.length === 0) return;
+    const toFetch = setsInSeries
+      .filter(set => {
+        const prefix = `${set.id}-`;
+        return Object.keys(user.ownedCards).some(id => id.startsWith(prefix) && getCardTotalQuantity(user.ownedCards[id]?.variations) > 0);
+      })
+      .map(set => set.id)
+      .filter(id => !requestedSeriesSetIdsRef.current.has(id));
+    if (toFetch.length === 0) return;
+    toFetch.forEach(id => requestedSeriesSetIdsRef.current.add(id));
+
+    let cancelled = false;
+    toFetch.forEach(async (setId) => {
+      const flags = await fetchSetVariantFlags(setId);
+      if (!cancelled) setSeriesVariantFlags(prev => ({ ...prev, [setId]: flags }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [setsInSeries, user.ownedCards]);
 
   const filteredCards = useMemo(() => {
     let base = setTierFilter === 'base' ? setCards.filter(c => !c.isSecret) : setCards;
@@ -685,7 +714,7 @@ const HomeView: React.FC<HomeViewProps> = ({
              // md:grid-cols-3 é só no desktop - no mobile continua o grid-cols-2 de sempre
              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 px-2">
              {setsInSeries.map(set => {
-                const tierStats = getSetTierStatsFromCounts(set, user.ownedCards);
+                const tierStats = getSetTierStatsFromCounts(set, user.ownedCards, seriesVariantFlags[set.id]);
                 return (
                   <button
                     key={set.id}

@@ -5,7 +5,7 @@ import { fetchSets, fetchSetVariantFlags, CardVariantInfo } from '../api';
 import CardImage from '../components/CardImage';
 import SetProgressBar from '../components/SetProgressBar';
 import { getCardTotalQuantity, getCardEstimatedValue } from '../db';
-import { getSetTierStatsFromCounts } from '../setProgress';
+import { getSetTierStatsFromCounts, aggregateSetTierStats } from '../setProgress';
 
 interface CollectionViewProps {
   user: User;
@@ -21,6 +21,10 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
   const [loading, setLoading] = useState(true);
   const [variantFlagsBySet, setVariantFlagsBySet] = useState<Record<string, Record<string, CardVariantInfo>>>({});
   const requestedSetIdsRef = useRef<Set<string>>(new Set());
+  // Só a era clicada abre - por padrão tudo fechado, já que ter cartas de várias eras ao
+  // mesmo tempo deixava a tela cheia de cards de sets difícil de navegar (era só uma lista
+  // achatada de todo set possuído, sem nenhum agrupamento).
+  const [expandedEras, setExpandedEras] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const loadData = async () => {
@@ -77,14 +81,45 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
     };
   }, [user.ownedCards]);
 
-  const sortedSets = useMemo(() => {
-    // Ordem decrescente: coleção mais recente primeiro, igual à Home.
-    return [...sets].sort((a, b) => b.releaseDate.localeCompare(a.releaseDate));
-  }, [sets]);
-
   const totalCollectibleCards = useMemo(() => {
     return sets.reduce((acc, s) => acc + (s.total || 0), 0);
   }, [sets]);
+
+  // Agrupa só os sets já possuídos (mesmo filtro que a lista antiga usava, count === 0 nunca
+  // aparecia) por era, cada grupo já ordenado do set mais recente pro mais antigo. A ordem
+  // das eras segue a mesma convenção da Home: era mais recente primeiro, por data de
+  // lançamento mais antiga dentro dela.
+  const eraGroups = useMemo(() => {
+    const ownedSets = sets
+      .filter(set => calculateStats(set).count > 0)
+      .sort((a, b) => b.releaseDate.localeCompare(a.releaseDate));
+
+    const bySeries = new Map<string, PokemonSet[]>();
+    ownedSets.forEach(set => {
+      const list = bySeries.get(set.series) || [];
+      list.push(set);
+      bySeries.set(set.series, list);
+    });
+
+    return Array.from(bySeries.entries())
+      .map(([series, setsInEra]) => ({
+        series,
+        sets: setsInEra,
+        tierStats: aggregateSetTierStats(setsInEra.map(set => calculateStats(set).tierStats)),
+        oldestReleaseDate: setsInEra.reduce((oldest, s) => (s.releaseDate < oldest ? s.releaseDate : oldest), setsInEra[0].releaseDate),
+      }))
+      .sort((a, b) => b.oldestReleaseDate.localeCompare(a.oldestReleaseDate));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sets, user.ownedCards, variantFlagsBySet]);
+
+  const toggleEra = (series: string) => {
+    setExpandedEras(prev => {
+      const next = new Set(prev);
+      if (next.has(series)) next.delete(series);
+      else next.add(series);
+      return next;
+    });
+  };
 
   if (loading) {
     return (
@@ -118,38 +153,65 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
         <p className="text-[9px] text-white/50 mt-1">Soma de todas as coleções, baseada nos preços que você informou</p>
       </div>
 
-      <div className="grid gap-6">
-        {sortedSets.map(set => {
-          const stats = calculateStats(set);
-          if (stats.count === 0) return null;
-
+      <div className="grid gap-4">
+        {eraGroups.map(({ series, sets: setsInEra, tierStats }) => {
+          const isOpen = expandedEras.has(series);
           return (
-            <div key={set.id} className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm transition-all hover:shadow-md">
-              <div className="flex justify-between items-start mb-6">
-                <div className="flex items-center gap-4">
-                   <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center p-2 border border-slate-100">
-                      <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain" />
-                   </div>
-                   <div>
-                     <div className="flex items-center gap-1.5">
-                       {set.symbolUrl && <CardImage src={set.symbolUrl} alt="" className="w-3.5 h-3.5 object-contain flex-shrink-0" />}
-                       <h3 className="text-sm text-slate-800 uppercase tracking-tight leading-tight">{set.name}</h3>
-                     </div>
-                     <p className="text-[9px] text-slate-400 uppercase tracking-widest mt-0.5">{set.releaseDate}</p>
-                   </div>
+            <div key={series} className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+              <button
+                onClick={() => toggleEra(series)}
+                className="w-full flex items-center justify-between gap-4 p-5 text-left hover:bg-slate-50/60 transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm text-slate-800 uppercase tracking-tight">{series}</h3>
+                    <span className="text-[9px] text-slate-400 uppercase tracking-widest">
+                      {setsInEra.length} {setsInEra.length === 1 ? 'coleção' : 'coleções'}
+                    </span>
+                  </div>
+                  <div className="mt-2 max-w-xs">
+                    <SetProgressBar stats={tierStats} size="sm" />
+                  </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-lg text-[#646B99]">{stats.count}</span>
-                  <span className="text-slate-300 text-[10px]"> / {set.total}</span>
-                </div>
-              </div>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className={`w-4 h-4 text-slate-300 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                  viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
 
-              <div className="space-y-2">
-                <SetProgressBar stats={stats.tierStats} />
-                <p className="text-[8px] text-slate-400 uppercase tracking-widest">
-                  {set.series}
-                </p>
-              </div>
+              {isOpen && (
+                <div className="px-5 pb-5 space-y-4 border-t border-slate-50 pt-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                  {setsInEra.map(set => {
+                    const stats = calculateStats(set);
+                    return (
+                      <div key={set.id} className="bg-slate-50/60 rounded-2xl p-4 border border-slate-100/70">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center p-1.5 border border-slate-100">
+                              <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                {set.symbolUrl && <CardImage src={set.symbolUrl} alt="" className="w-3 h-3 object-contain flex-shrink-0" />}
+                                <h4 className="text-xs text-slate-800 uppercase tracking-tight leading-tight">{set.name}</h4>
+                              </div>
+                              <p className="text-[8px] text-slate-400 uppercase tracking-widest mt-0.5">{set.releaseDate}</p>
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <span className="text-sm text-[#646B99]">{stats.count}</span>
+                            <span className="text-slate-300 text-[10px]"> / {set.total}</span>
+                          </div>
+                        </div>
+                        <SetProgressBar stats={stats.tierStats} size="sm" />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}

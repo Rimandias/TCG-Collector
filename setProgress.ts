@@ -145,6 +145,25 @@ export const getSetTierStatsFromCounts = (
   return buildStats(regularOwned, setSummary.printedTotal, secretOwned, secretTotal, variationOwned, variationTotal);
 };
 
+// Agrega o SetTierStats de vários sets (ex: todos os sets possuídos de uma era) num só -
+// soma as contagens brutas de cada camada (não faz média de percentuais, senão um set
+// pequeno 100% completo pesaria igual a um set gigante 10% completo) e reaproveita a mesma
+// buildStats de cima, então a cor/regra de "sequencial" funciona idêntica a de um set só.
+export const aggregateSetTierStats = (statsList: SetTierStats[]): SetTierStats => {
+  const sum = statsList.reduce(
+    (acc, s) => ({
+      regularOwned: acc.regularOwned + s.regularOwned,
+      regularTotal: acc.regularTotal + s.regularTotal,
+      secretOwned: acc.secretOwned + s.secretOwned,
+      secretTotal: acc.secretTotal + s.secretTotal,
+      variationOwned: acc.variationOwned + s.variationOwned,
+      variationTotal: acc.variationTotal + s.variationTotal,
+    }),
+    { regularOwned: 0, regularTotal: 0, secretOwned: 0, secretTotal: 0, variationOwned: 0, variationTotal: 0 }
+  );
+  return buildStats(sum.regularOwned, sum.regularTotal, sum.secretOwned, sum.secretTotal, sum.variationOwned, sum.variationTotal);
+};
+
 export const TIER_COLOR_CLASSES: Record<SetTierColor, { text: string }> = {
   green: { text: 'text-emerald-500' },
   blue: { text: 'text-[#4A90D9]' },
