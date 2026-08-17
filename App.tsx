@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useDeferredValue, Suspense, lazy } from 'react';
 import { User, AppTab, PokemonSet } from './types';
-import { fetchCurrentUser, persistUser, logout as clearSession } from './auth';
+import { fetchCurrentUser, persistUser, logout as clearSession, warmBackend } from './auth';
 import { supabase } from './supabaseClient';
 import HomeView from './views/HomeView';
 import LoginView from './views/LoginView';
@@ -72,6 +72,17 @@ const App: React.FC = () => {
     });
 
     return () => listener.subscription.unsubscribe();
+  }, []);
+
+  // O backend (Render, plano hobby) hiberna depois de ~15min sem requisição. restoreSession
+  // acima já acorda ele na abertura do app, mas se o usuário ficar parado numa mesma tela por
+  // um tempo longo (só olhando, sem trocar de aba nem editar nada - nenhum dos dois dispara
+  // uma requisição nova), o servidor pode voltar a dormir enquanto o app continua aberto. Um
+  // ping periódico a cada 10min mantém ele acordado, pra não estourar o timeout de
+  // persistUser bem na hora que o usuário finalmente mexe em alguma carta.
+  useEffect(() => {
+    const interval = setInterval(warmBackend, 10 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleLogin = (userData: User) => {

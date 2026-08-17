@@ -27,6 +27,25 @@ export async function getAccessToken(): Promise<string | null> {
   return data.session?.access_token ?? null;
 }
 
+// O backend (Render, plano hobby) hiberna depois de um tempo sem requisição e leva dezenas
+// de segundos pra "acordar" na chamada seguinte - se essa chamada for justo o primeiro
+// PUT /users/me depois do usuário ficar parado um tempo só navegando (sem nenhuma edição
+// disparando request pro servidor), o cold-start podia sozinho estourar o timeout de
+// persistUser. Chamado no carregamento do app e sempre que a aba volta a ficar visível
+// depois de escondida (App.tsx) - fire-and-forget, sem bloquear nada e sem checar o
+// resultado: o objetivo é só garantir que o servidor já esteja acordado ANTES do usuário
+// mexer em alguma carta, não sincronizar dado nenhum.
+export function warmBackend(): void {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  fetch(`${API_BASE}/health`, { signal: controller.signal })
+    .catch(() => {
+      // Falha silenciosa - se o servidor realmente estiver fora do ar, o próximo
+      // salvamento vai reportar isso normalmente (fluxo de erro/retry já existente).
+    })
+    .finally(() => clearTimeout(timer));
+}
+
 async function fetchAppUser(): Promise<User> {
   const token = await getAccessToken();
   if (!token) throw new AuthError('Sessão não encontrada.');
@@ -94,8 +113,9 @@ export const updatePassword = async (newPassword: string): Promise<void> => {
 // pelo SO, proxy derrubando conexão ociosa) deixava o fetch pendurado pra sempre: a promise
 // nunca resolve nem rejeita, então em App.tsx isSavingRef/saveState ficavam presos em
 // "saving" para sempre (overlay "Salvando..." travado) e o retry automático - que só dispara
-// quando saveState vira "error" - nunca chegava a acionar. 30s dá folga pra coleções grandes
-// (a rota faz várias queries/upserts em paralelo no servidor) sem deixar o usuário esperando
+// quando saveState vira "error" - nunca chegava a acionar. 45s dá folga pra coleções grandes
+// (a rota faz várias queries/upserts em paralelo no servidor) e pro cold-start do Render
+// (ver warmBackend, que tenta evitar cair nesse caso) sem deixar o usuário esperando
 // indefinidamente por uma conexão que já morreu.
 export const persistUser = async (user: User): Promise<boolean> => {
   const token = await getAccessToken();
@@ -110,7 +130,7 @@ export const persistUser = async (user: User): Promise<boolean> => {
   };
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30000);
+  const timer = setTimeout(() => controller.abort(), 45000);
   try {
     const response = await fetch(`${API_BASE}/users/me`, {
       method: 'PUT',
