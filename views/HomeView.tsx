@@ -8,7 +8,7 @@ import CardViewModeSelector from '../components/CardViewModeSelector';
 import CardModal from '../components/CardModal';
 import SetProgressBar from '../components/SetProgressBar';
 import MasterSetTile from '../components/MasterSetTile';
-import { getCardTotalQuantity, getCompleteCardNumber, getCardEstimatedValue, getNormalizedVariations, getVariationSubtotal } from '../db';
+import { getCardTotalQuantity, getCompleteCardNumber, getCardEstimatedValue, getNormalizedVariations, getVariationSubtotal, getDefaultVariationType, reconcileVariationsWithApiFlags } from '../db';
 import { getInitialCardViewMode, saveCardViewMode, getCardGridClassName } from '../viewMode';
 import { getSetTierStats, getSetTierStatsFromCounts } from '../setProgress';
 
@@ -197,6 +197,30 @@ const HomeView: React.FC<HomeViewProps> = ({
     };
   }, [selectedSet]);
 
+  // Corrige em lote cartas do set aberto que ficaram com uma variação que a API não confirma
+  // (ex: "Selecionar Todos" antes da correção acima sempre cravava Standard, mesmo em cartas
+  // sem essa variação) - mesma migração que o CardModal já faz sozinho, uma carta de cada vez,
+  // ao abrir o +Info (ver reconcileVariationsWithApiFlags em db.ts), só que aplicada de uma vez
+  // pra todo o set assim que as flags reais chegam, sem precisar abrir cada carta manualmente.
+  useEffect(() => {
+    if (setCards.length === 0 || Object.keys(setVariantFlags).length === 0) return;
+    let updatedOwnedCards: typeof user.ownedCards | null = null;
+    for (const card of setCards) {
+      const cardData = user.ownedCards[card.id];
+      if (!cardData) continue;
+      const flags = setVariantFlags[card.id]?.flags;
+      const { variations, migrated } = reconcileVariationsWithApiFlags(cardData.variations, flags);
+      if (migrated) {
+        updatedOwnedCards = updatedOwnedCards || { ...user.ownedCards };
+        updatedOwnedCards[card.id] = { ...cardData, variations };
+      }
+    }
+    if (updatedOwnedCards) {
+      onUpdateUser({ ...user, ownedCards: updatedOwnedCards });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setCards, setVariantFlags]);
+
   const eras = useMemo(() => {
     const uniqueSeries: string[] = Array.from(new Set(sets.map(s => s.series)));
 
@@ -296,16 +320,22 @@ const HomeView: React.FC<HomeViewProps> = ({
     return entries;
   }, [setTierFilter, setCards, setVariantFlags, user.ownedCards, filterTab, searchQuery]);
 
-  // Marca de uma vez todas as cartas da coleção atual que ainda não são possuídas como
-  // 1x Standard NM (mesmo padrão do toque individual), sem sobrescrever cartas já possuídas.
+  // Marca de uma vez todas as cartas da coleção atual que ainda não são possuídas como 1x NM,
+  // sem sobrescrever cartas já possuídas. Nem toda carta tem a variação Standard (promos,
+  // exclusivas de Pokebola/Master Ball etc.) - usa a mesma regra do toque individual
+  // (getDefaultVariationType, CardItem.tsx): Standard se a carta realmente tem, senão a
+  // primeira variação real que ela tem. Antes disso sempre cravava Standard, criando cartas
+  // com uma variação que a API nunca confirmou (só corrigida depois, uma a uma, ao abrir o
+  // +Info de cada uma).
   const handleSelectAllInSet = () => {
     const updatedOwnedCards = { ...user.ownedCards };
     filteredCards.forEach(card => {
       const current = updatedOwnedCards[card.id];
       const alreadyOwned = current && getCardTotalQuantity(current.variations) > 0;
       if (alreadyOwned) return;
+      const variation = getDefaultVariationType(setVariantFlags[card.id]?.flags);
       const normalized = getNormalizedVariations(current?.variations || {});
-      normalized['Standard'][CardCondition.NM].quantity = 1;
+      normalized[variation][CardCondition.NM].quantity = 1;
       updatedOwnedCards[card.id] = {
         cardId: card.id,
         isOwned: true,
@@ -535,9 +565,11 @@ const HomeView: React.FC<HomeViewProps> = ({
           <div className="mb-4 flex gap-2">
             <button
               onClick={handleSelectAllInSet}
-              className="flex-1 py-2 bg-[#646B99]/5 border border-[#646B99]/20 text-[#646B99] text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-[#646B99]/10 transition-colors"
+              disabled={Object.keys(setVariantFlags).length === 0}
+              title={Object.keys(setVariantFlags).length === 0 ? 'Aguardando carregar as variações reais de cada carta...' : undefined}
+              className="flex-1 py-2 bg-[#646B99]/5 border border-[#646B99]/20 text-[#646B99] text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-[#646B99]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#646B99]/5"
             >
-              Selecionar Todos (1x Standard NM)
+              {Object.keys(setVariantFlags).length === 0 ? 'Carregando variações...' : 'Selecionar Todos (1x NM)'}
             </button>
             <button
               onClick={handleMarkAllForTradeInSet}
