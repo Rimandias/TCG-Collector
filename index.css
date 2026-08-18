@@ -1,1 +1,25 @@
 @import "tailwindcss";
+
+/* Brilho holográfico simulado para cartas Reverse Foil no filtro Master Set (ver
+   MasterSetTile.tsx) - um gradiente arco-íris diagonal em mix-blend-mode: color-dodge
+   varrendo o card em loop, parecido com o reflexo de uma reverse holo real sob luz. */
+@keyframes holo-shine-sweep {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 200% 200%; }
+}
+
+.holo-shine {
+  background-image: linear-gradient(
+    115deg,
+    transparent 5%,
+    rgba(255, 60, 172, 0.55) 15%,
+    rgba(255, 214, 51, 0.55) 25%,
+    rgba(93, 255, 133, 0.55) 35%,
+    rgba(56, 209, 255, 0.55) 45%,
+    rgba(174, 92, 255, 0.55) 55%,
+    transparent 65%
+  );
+  background-size: 250% 250%;
+  mix-blend-mode: color-dodge;
+  animation: holo-shine-sweep 3.5s linear infinite;
+}

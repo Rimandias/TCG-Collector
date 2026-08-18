@@ -36,6 +36,7 @@ const MasterSetTile: React.FC<MasterSetTileProps> = ({ card, variation, owned, v
   }
 
   const isCompact = viewMode === 'grid6';
+  const isReverseFoil = variation === 'Reverse Foil';
 
   return (
     <div className="flex flex-col gap-2 bg-white animate-in zoom-in-95 duration-200 mb-4">
@@ -45,6 +46,9 @@ const MasterSetTile: React.FC<MasterSetTileProps> = ({ card, variation, owned, v
           alt={card.name}
           className={`w-full h-full object-cover transition-all duration-500 ${owned ? 'grayscale-0' : 'grayscale brightness-[0.8] opacity-40'} ${!card.imageUrl ? 'bg-slate-100' : ''}`}
         />
+        {isReverseFoil && owned && (
+          <div className="holo-shine absolute inset-0 pointer-events-none" />
+        )}
         <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-[#9B6BD9] text-white text-[7px] font-bold uppercase tracking-wider rounded-full shadow-md">
           {variation}
         </div>
