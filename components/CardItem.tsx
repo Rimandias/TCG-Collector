@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef } from 'react';
-import { Card, User, CardCondition, VARIATION_TYPES } from '../types';
-import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, adjustLanguageQuantity, getDefaultVariationType } from '../db';
+import { Card, User, CardCondition } from '../types';
+import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, adjustLanguageQuantity, getDefaultVariationType, getCardVariationTypes, ensureVariationSlot } from '../db';
 import { fetchCardVariants, peekCachedCardVariants } from '../api';
 import CardImage from './CardImage';
 
@@ -43,8 +43,8 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
       const latestCardData = latestUser.ownedCards[card.id];
       if (!latestCardData) return;
       const latestNormalized = getNormalizedVariations(latestCardData.variations);
-      const guessedNow = latestNormalized[guessedVariation][CardCondition.NM].quantity;
-      const correctNow = latestNormalized[correctVariation][CardCondition.NM].quantity;
+      const guessedNow = ensureVariationSlot(latestNormalized, guessedVariation)[CardCondition.NM].quantity;
+      const correctNow = ensureVariationSlot(latestNormalized, correctVariation)[CardCondition.NM].quantity;
       // Só migra se a variação "chutada" ainda tem exatamente o que colocamos lá e a
       // variação certa ainda está zerada - sinal de que nada mais mexeu nessa carta nesse
       // meio-tempo (ex: usuário abriu o +Info e editou manualmente). Se mexeu, não arrisca
@@ -64,7 +64,7 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
       const cachedInfo = peekCachedCardVariants(card.id);
       const variation = getDefaultVariationType(cachedInfo?.flags);
       const normalized = getNormalizedVariations(cardData.variations);
-      normalized[variation][CardCondition.NM].quantity = 1;
+      ensureVariationSlot(normalized, variation)[CardCondition.NM].quantity = 1;
       onUpdateUser(updateCardStatus(user, card.id, { isOwned: true, variations: normalized }));
       if (!cachedInfo) reconcileVariation(variation, 1, true);
     } else {
@@ -85,7 +85,7 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
       // carta específica.
       const cachedInfo = peekCachedCardVariants(card.id);
       const variation = getDefaultVariationType(cachedInfo?.flags);
-      const nmDetails = normalized[variation][CardCondition.NM];
+      const nmDetails = ensureVariationSlot(normalized, variation)[CardCondition.NM];
       // Cartas com idioma detalhado (ver +Info) mantêm o total consistente somando/
       // subtraindo no idioma padrão (Português/BR), em vez de mexer direto no agregado.
       if (nmDetails.languages) {
@@ -101,20 +101,25 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
 
     // Remover sempre tira de onde a cópia REALMENTE está, não de onde uma cópia nova entraria
     // (getDefaultVariationType/NM) - a carta pode ter sido registrada numa variação/condição
-    // diferente dessa (ex: editada manualmente no +Info numa condição que não NM, ou cartas
-    // adicionadas antes de VARIATION_TYPES bater com a variação real da carta). Sem isso, "-"
-    // numa carta assim não fazia nada: decrementava um slot vazio (Math.max(0, 0-1) = 0, sem
-    // mudança) mesmo com o total mostrando cópias de verdade em outro lugar. Varre variação
-    // por variação (ordem de VARIATION_TYPES) e, dentro de cada uma, condição por condição
-    // (NM, SP, MP, HP, D - ordem de CardCondition) até achar a primeira com alguma unidade.
-    for (const variation of VARIATION_TYPES) {
+    // diferente dessa (ex: editada manualmente no +Info numa condição que não NM, cartas
+    // adicionadas antes de VARIATION_TYPES bater com a variação real da carta, ou uma variação
+    // dinâmica tipo "Friend Ball"/"Energy" que só existe pra essa carta específica). Sem isso,
+    // "-" numa carta assim não fazia nada: decrementava um slot vazio (Math.max(0, 0-1) = 0,
+    // sem mudança) mesmo com o total mostrando cópias de verdade em outro lugar. Varre
+    // variação por variação (tipos-base primeiro, depois qualquer dinâmica que a carta tem -
+    // ver getCardVariationTypes) e, dentro de cada uma, condição por condição (NM, SP, MP, HP,
+    // D - ordem de CardCondition) até achar a primeira com alguma unidade.
+    const cachedInfoForRemoval = peekCachedCardVariants(card.id);
+    for (const variation of getCardVariationTypes(cachedInfoForRemoval?.flags)) {
+      const slot = normalized[variation];
+      if (!slot) continue;
       for (const condition of Object.values(CardCondition)) {
-        const details = normalized[variation][condition];
+        const details = slot[condition];
         if ((details.quantity || 0) <= 0) continue;
         if (details.languages) {
-          normalized[variation][condition] = adjustLanguageQuantity(details, 'BR', delta);
+          slot[condition] = adjustLanguageQuantity(details, 'BR', delta);
         } else {
-          normalized[variation][condition].quantity = Math.max(0, details.quantity + delta);
+          slot[condition].quantity = Math.max(0, details.quantity + delta);
         }
         const hasCards = getCardTotalQuantity(normalized) > 0;
         onUpdateUser(updateCardStatus(user, card.id, { variations: normalized, isOwned: hasCards }));

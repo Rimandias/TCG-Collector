@@ -462,11 +462,19 @@ tcgRouter.get(
   })
 );
 
-// Bandeiras de variação (Standard/Foil/Reverse Foil/First Edition/Pokeball/Master Ball) que
-// realmente existem pra uma carta específica, vindas do endpoint de detalhe da TCGdex (só
-// esse traz `variants`/`variants_detailed`, a listagem em lote não traz). Usado pelo
-// CardModal pra esconder variações que a carta nunca teve, sem nunca esconder uma que já
-// tenha quantidade/preço registrados pelo usuário (isso é decidido no frontend).
+// Bandeiras de variação que realmente existem pra uma carta específica, vindas do endpoint de
+// detalhe da TCGdex (só esse traz `variants`/`variants_detailed`, a listagem em lote não traz).
+// Usado pelo CardModal pra esconder variações que a carta nunca teve, sem nunca esconder uma
+// que já tenha quantidade/preço registrados pelo usuário (isso é decidido no frontend), e pra
+// montar a visão Master Set / % de progresso.
+//
+// Não é mais uma lista fixa de 6 tipos: sets recentes (ex: "Ascended Heroes" me02.5) têm
+// cartas com vários padrões de foil NOMEADOS na mesma carta ao mesmo tempo (`variants_detailed
+// [].foil`: "friendball", "energy", "loveball", "league", além de "pokeball"/"masterball", já
+// tratados à parte antes) - cada um é uma impressão física distinta, com produto/preço
+// próprios, não uma sub-variação de "Reverse Foil" genérico. `flags` agora ganha uma chave
+// dinâmica por padrão nomeado encontrado, além dos 4 tipos genéricos (Standard/Foil/Reverse
+// Foil/First Edition).
 const CACHE_VARIANTS_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias - dado histórico, não muda
 
 interface CardLegal {
@@ -474,40 +482,79 @@ interface CardLegal {
   expanded: boolean;
 }
 
+// Nomes conhecidos de padrão de foil -> rótulo bonito exibido no app. Comparação é feita
+// depois de normalizar o texto cru (remover acentos/espaços/maiúsculas), porque o mesmo padrão
+// aparece formatado diferente dependendo do locale consultado (ex: "pokeball" no inglês/dado
+// bruto da TCGdex vs "Poké Bola" no `pt`). Um padrão NÃO listado aqui ainda funciona (a
+// variação aparece com o nome cru capitalizado) - só o rótulo fica menos bonito até eu
+// adicionar uma entrada específica pra ele.
+const FOIL_PATTERN_LABELS: [needle: string, label: string][] = [
+  ['poke', 'Pokeball'],
+  ['master', 'Master Ball'],
+  ['friend', 'Friend Ball'],
+  ['love', 'Love Ball'],
+  ['league', 'League'],
+  ['energy', 'Energy'],
+  ['cosmos', 'Cosmos'],
+];
+
+const normalizeFoilKey = (s: string): string =>
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+function prettifyFoilName(raw: string): string {
+  const normalized = normalizeFoilKey(raw);
+  const match = FOIL_PATTERN_LABELS.find(([needle]) => normalized.includes(needle));
+  if (match) return match[1];
+  const trimmed = raw.trim();
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
+// Deriva um flag de tipo genérico (Standard/Foil/Reverse Foil/First Edition) a partir de
+// variants_detailed quando disponível: só é true se existir pelo menos uma impressão desse
+// tipo SEM padrão de foil nomeado - uma carta pode ter reverse só em versões nomeadas (ex:
+// Charmander de "Ascended Heroes" só tem reverse "Friend Ball" e reverse "Energy", nenhuma
+// reverse genérica); marcar "Reverse Foil" true nesse caso criaria uma 3ª variação fantasma
+// que não existe fisicamente. Sem nenhuma entrada desse tipo em variants_detailed (dado
+// indisponível pra essa carta), cai pro booleano de `variants` como sempre foi.
+function genericTypeFlag(detailed: any[], type: string, fallback: boolean): boolean {
+  const entriesOfType = detailed.filter(entry => String(entry?.type || '').toLowerCase() === type);
+  if (entriesOfType.length === 0) return fallback;
+  return entriesOfType.some(entry => !entry?.foil);
+}
+
 function extractVariantFlags(detail: any): { flags: Record<string, boolean>; rarity: string; artist: string; category: string; legal: CardLegal } {
   const v = detail?.variants || {};
   const detailed: any[] = Array.isArray(detail?.variants_detailed) ? detail.variants_detailed : [];
 
-  // Sets recém-lançados (ex: "me04" Caos Ascendente) já têm o produto reverse holofoil
-  // precificado em `variants_detailed[].pricing.tcgplayer` mas o booleano `variants.reverse`
-  // da TCGdex ainda não foi recalculado - vimos isso acontecer com "me05" Escuridão Absoluta
-  // também, e lá se corrigiu sozinho alguns dias depois (a própria TCGdex atualizou o
-  // booleano). Em vez de confiar só no booleano (que fica desatualizado por tempo
-  // indeterminado pra cada set novo), qualquer chave de preço com "reverse" no nome já conta
-  // como evidência de que a variação existe - isso vale pra qualquer set, não só os dois
-  // que já vimos com esse problema.
-  const hasReversePricingHint = detailed.some(entry => {
-    const tcgplayerKeys = Object.keys(entry?.pricing?.tcgplayer || {});
-    return tcgplayerKeys.some(key => key.toLowerCase().includes('reverse'));
-  });
-
   const flags: Record<string, boolean> = {
-    Standard: !!v.normal,
-    Foil: !!v.holo,
-    'Reverse Foil': !!v.reverse || hasReversePricingHint,
-    'First Edition': !!v.firstEdition,
+    Standard: genericTypeFlag(detailed, 'normal', !!v.normal),
+    Foil: genericTypeFlag(detailed, 'holo', !!v.holo),
+    'Reverse Foil': genericTypeFlag(detailed, 'reverse', !!v.reverse),
+    'First Edition': genericTypeFlag(detailed, 'firstedition', !!v.firstEdition),
   };
 
-  let pokeball = false;
-  let masterBall = false;
-  for (const entry of detailed) {
-    const foilName = (entry?.foil || '').toLowerCase();
-    if (!foilName) continue;
-    if (foilName.includes('poke') || foilName.includes('poké')) pokeball = true;
-    if (foilName.includes('master')) masterBall = true;
+  // Sets recém-lançados (ex: "me04" Caos Ascendente) às vezes têm o produto reverse holofoil
+  // precificado em variants_detailed[].pricing.tcgplayer mas a TCGdex ainda nem separou uma
+  // entrada "reverse" pra ele em variants_detailed (nem falar do booleano `variants.reverse`,
+  // que também atrasa - ver "me05" Escuridão Absoluta, que se corrigiu sozinho depois). Só
+  // entra em ação quando não existe NENHUMA entrada "reverse" ainda (senão o cálculo acima já
+  // decidiu certo, nomeada ou não).
+  if (!detailed.some(entry => String(entry?.type || '').toLowerCase() === 'reverse')) {
+    const hasReversePricingHint = detailed.some(entry => {
+      const tcgplayerKeys = Object.keys(entry?.pricing?.tcgplayer || {});
+      return tcgplayerKeys.some(key => key.toLowerCase().includes('reverse'));
+    });
+    if (hasReversePricingHint) flags['Reverse Foil'] = true;
   }
-  flags['Pokeball'] = pokeball;
-  flags['Master Ball'] = masterBall;
+
+  // Cada entrada com um padrão de foil nomeado vira sua própria variação colecionável, além
+  // dos 4 tipos genéricos acima - substitui o antigo tratamento especial só de Pokeball/Master
+  // Ball por um mecanismo genérico que cobre qualquer nome que a TCGdex introduzir.
+  for (const entry of detailed) {
+    const foilName = entry?.foil;
+    if (!foilName) continue;
+    flags[prettifyFoilName(String(foilName))] = true;
+  }
 
   return {
     flags,

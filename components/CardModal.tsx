@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Card, User, CardCondition, VARIATION_TYPES, LANGUAGE_OPTIONS, ConditionDetails } from '../types';
-import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, getCardEstimatedValue, adjustLanguageQuantity, setLanguagePrice, renameLanguageEntry, getVariationSubtotal, reconcileVariationsWithApiFlags } from '../db';
+import { Card, User, CardCondition, LANGUAGE_OPTIONS, ConditionDetails } from '../types';
+import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, getCardEstimatedValue, adjustLanguageQuantity, setLanguagePrice, renameLanguageEntry, getVariationSubtotal, reconcileVariationsWithApiFlags, getCardVariationTypes, getVariationSlot } from '../db';
 import { fetchCardStats, CardPriceStats, fetchCardVariants, CardVariantInfo } from '../api';
 import CardImage from './CardImage';
 
@@ -86,7 +86,7 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
     variations: {}
   };
 
-  const normalizedVariations = getNormalizedVariations(cardData.variations);
+  const normalizedVariations = getNormalizedVariations(cardData.variations, variantInfo?.flags);
 
   const updateVariationValue = (variation: string, condition: CardCondition, updates: { quantity?: number; price?: string }) => {
     const updated = { ...normalizedVariations };
@@ -166,11 +166,13 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
   const estimatedValue = getCardEstimatedValue(cardData.variations);
   const averageUnitPrice = totalQty > 0 ? estimatedValue / totalQty : 0;
 
-  // Esconde variações que a TCGdex confirma não existir pra essa carta (ex: nem toda
-  // carta tem Pokeball/Master Ball) - mas nunca esconde uma que já tem dado real do
-  // usuário, nem quando o dado ainda não carregou ou a TCGdex não tem info sobre ela.
-  const visibleVariationTypes = VARIATION_TYPES.filter(variation => {
-    const subtotal = getVariationSubtotal(normalizedVariations[variation]);
+  // Esconde variações que a TCGdex confirma não existir pra essa carta (ex: nem toda carta
+  // tem Pokeball/Master Ball/Friend Ball) - mas nunca esconde uma que já tem dado real do
+  // usuário, nem quando o dado ainda não carregou ou a TCGdex não tem info sobre ela. A lista
+  // candidata (getCardVariationTypes) já inclui qualquer variação dinâmica que a API confirma
+  // pra essa carta específica, além dos 6 tipos-base.
+  const visibleVariationTypes = getCardVariationTypes(variantInfo?.flags).filter(variation => {
+    const subtotal = getVariationSubtotal(getVariationSlot(normalizedVariations, variation));
     if (subtotal > 0) return true;
     if (!variantInfo) return true;
     if (!(variation in variantInfo.flags)) return true;

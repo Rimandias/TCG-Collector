@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, LANGUAGE_OPTIONS, PokemonSet, UserCardData, VisibleFolder, VARIATION_TYPES, CardCondition } from '../types';
-import { getCompleteCardNumber } from '../db';
+import { getCompleteCardNumber, getConfirmedVariationTypes } from '../db';
 import { fetchCardsBySet, fetchSets, fetchSetVariantFlags, CardVariantInfo } from '../api';
 import { getFriendVisibleFolders, TradeItemSelection } from '../trades';
 import Pagination, { PAGE_SIZE } from './Pagination';
@@ -196,8 +196,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
       }
       const flags = selectedSetVariantFlags[card.id]?.flags;
       if (!flags) continue;
-      for (const variation of VARIATION_TYPES) {
-        if (flags[variation] !== true) continue;
+      for (const variation of getConfirmedVariationTypes(flags)) {
         entries.push({ card, variation, owned: ownedVariantKeys.has(`${card.id}::${variation}`) });
       }
     }
@@ -238,6 +237,16 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
     const unique = new Map<string, string>();
     lines.forEach((line) => { if (line.card) unique.set(line.card.set.id, line.card.set.name); });
     return Array.from(unique.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [lines]);
+
+  // Opções do filtro de variação - dinâmico a partir do que de fato existe nesta pasta, em
+  // vez de sempre os 6 tipos-base fixos, já que variações nomeadas (ex: "Friend Ball") também
+  // podem aparecer aqui. Tipos-base primeiro (ordem de VARIATION_TYPES), extras depois.
+  const folderVariationTypes = useMemo(() => {
+    const present = new Set(lines.map((line) => line.variation));
+    const base = VARIATION_TYPES.filter((v) => present.has(v));
+    const extra = Array.from(present).filter((v) => !VARIATION_TYPES.includes(v)).sort();
+    return [...base, ...extra];
   }, [lines]);
 
   // Reseta a página sempre que a lista filtrada ou a navegação de coleção mudam
@@ -553,7 +562,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                     className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
                   >
                     <option value="all">Todas as Categorias</option>
-                    {VARIATION_TYPES.map((v) => (
+                    {folderVariationTypes.map((v) => (
                       <option key={v} value={v}>{v}</option>
                     ))}
                   </select>

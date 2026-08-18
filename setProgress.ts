@@ -1,6 +1,6 @@
 
-import { Card, User, VARIATION_TYPES } from './types';
-import { getCardTotalQuantity, getNormalizedVariations, getVariationSubtotal } from './db';
+import { Card, User } from './types';
+import { getCardTotalQuantity, getNormalizedVariations, getVariationSubtotal, getConfirmedVariationTypes, getVariationSlot } from './db';
 import { CardVariantInfo } from './api';
 
 export type SetTierColor = 'green' | 'blue' | 'purple';
@@ -79,12 +79,12 @@ const countVariationSlots = (
   for (const cardId of cardIds) {
     const flags = variantFlagsByCardId[cardId]?.flags;
     if (!flags) continue;
-    const cardVariationTypes = VARIATION_TYPES.filter(v => flags[v] === true);
+    const cardVariationTypes = getConfirmedVariationTypes(flags);
     if (cardVariationTypes.length === 0) continue;
     const normalized = getNormalizedVariations(ownedCards[cardId]?.variations || {});
     for (const variation of cardVariationTypes) {
       total += 1;
-      if (getVariationSubtotal(normalized[variation]) > 0) owned += 1;
+      if (getVariationSubtotal(getVariationSlot(normalized, variation)) > 0) owned += 1;
     }
   }
   return { owned, total };
