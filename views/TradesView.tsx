@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, Card, UserCardData, TradeFolder, TradeFolderVariationSelection, Friend, Trade, CardCondition, VARIATION_TYPES, LANGUAGE_OPTIONS } from '../types';
-import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getCardEstimatedValue, getVariationSubtotal } from '../db';
+import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getCardEstimatedValue, getVariationSubtotal, getConfirmedVariationTypes, getVariationSlot } from '../db';
 import { fetchCardsBySet, fetchSets, fetchSetVariantFlags, CardVariantInfo } from '../api';
 import { createTradeRequest, getMyTrades, TradeItemSelection } from '../trades';
 import { fetchCurrentUser } from '../auth';
@@ -496,6 +496,23 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     const unique = new Map<string, string>();
     s.forEach(set => unique.set(set.id, set.name));
     return Array.from(unique.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [activeFolderCards]);
+
+  // Opções do filtro de categoria - dinâmico a partir das variações que de fato existem
+  // nas cartas da pasta (com quantidade > 0), em vez de sempre os 6 tipos-base fixos, já que
+  // variações nomeadas (ex: "Friend Ball") também podem aparecer aqui. Tipos-base primeiro
+  // (ordem de VARIATION_TYPES), extras depois.
+  const folderVariationTypes = useMemo(() => {
+    const present = new Set<string>();
+    activeFolderCards.forEach(({ data }) => {
+      const normalized = getNormalizedVariations(data.variations);
+      Object.entries(normalized).forEach(([v, conds]) => {
+        if (Object.values(conds).some(c => c.quantity > 0)) present.add(v);
+      });
+    });
+    const base = VARIATION_TYPES.filter(v => present.has(v));
+    const extra = Array.from(present).filter(v => !VARIATION_TYPES.includes(v)).sort();
+    return [...base, ...extra];
   }, [activeFolderCards]);
 
   // Paginação (20 por página) da lista "Todas as Cartas" da pasta ativa
@@ -1092,7 +1109,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                             className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
                           >
                             <option value="all">Todas as Categorias</option>
-                            {VARIATION_TYPES.map(v => (
+                            {folderVariationTypes.map(v => (
                               <option key={v} value={v}>{v}</option>
                             ))}
                           </select>
@@ -1271,10 +1288,10 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                             const flags = folderSetVariantFlags[card.id]?.flags;
                             if (!flags) return [];
                             const normalized = getNormalizedVariations(data.variations);
-                            return VARIATION_TYPES.filter(v => flags[v] === true).map(variation => ({
+                            return getConfirmedVariationTypes(flags).map(variation => ({
                               card,
                               variation,
-                              owned: getVariationSubtotal(normalized[variation]) > 0,
+                              owned: getVariationSubtotal(getVariationSlot(normalized, variation)) > 0,
                             }));
                           })
                         : [];

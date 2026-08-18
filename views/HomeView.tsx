@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { User, PokemonSet, Card, UserCardData, CardCondition, VARIATION_TYPES } from '../types';
+import { User, PokemonSet, Card, UserCardData, CardCondition } from '../types';
 import { fetchSets, fetchCardsBySet, searchCards, fetchSetVariantFlags, CardVariantInfo } from '../api';
 import CardItem, { CardViewMode } from '../components/CardItem';
 import CardImage from '../components/CardImage';
@@ -8,7 +8,7 @@ import CardViewModeSelector from '../components/CardViewModeSelector';
 import CardModal from '../components/CardModal';
 import SetProgressBar from '../components/SetProgressBar';
 import MasterSetTile from '../components/MasterSetTile';
-import { getCardTotalQuantity, getCompleteCardNumber, getCardEstimatedValue, getNormalizedVariations, getVariationSubtotal, getDefaultVariationType, reconcileVariationsWithApiFlags } from '../db';
+import { getCardTotalQuantity, getCompleteCardNumber, getCardEstimatedValue, getNormalizedVariations, getVariationSubtotal, getDefaultVariationType, reconcileVariationsWithApiFlags, getConfirmedVariationTypes, getVariationSlot, ensureVariationSlot } from '../db';
 import { getInitialCardViewMode, saveCardViewMode, getCardGridClassName } from '../viewMode';
 import { getSetTierStats, getSetTierStatsFromCounts } from '../setProgress';
 
@@ -339,9 +339,8 @@ const HomeView: React.FC<HomeViewProps> = ({
       const flags = setVariantFlags[card.id]?.flags;
       if (!flags) continue;
       const normalized = getNormalizedVariations(user.ownedCards[card.id]?.variations || {});
-      for (const variation of VARIATION_TYPES) {
-        if (flags[variation] !== true) continue;
-        const owned = getVariationSubtotal(normalized[variation]) > 0;
+      for (const variation of getConfirmedVariationTypes(flags)) {
+        const owned = getVariationSubtotal(getVariationSlot(normalized, variation)) > 0;
         if (filterTab === 'restantes' && owned) continue;
         entries.push({ card, variation, owned });
       }
@@ -364,7 +363,7 @@ const HomeView: React.FC<HomeViewProps> = ({
       if (alreadyOwned) return;
       const variation = getDefaultVariationType(setVariantFlags[card.id]?.flags);
       const normalized = getNormalizedVariations(current?.variations || {});
-      normalized[variation][CardCondition.NM].quantity = 1;
+      ensureVariationSlot(normalized, variation)[CardCondition.NM].quantity = 1;
       updatedOwnedCards[card.id] = {
         cardId: card.id,
         isOwned: true,

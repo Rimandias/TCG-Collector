@@ -68,7 +68,7 @@ export const getCardTotalQuantity = (variations: Record<string, any>): number =>
   return total;
 };
 
-const emptyConditionRecord = (): Record<CardCondition, ConditionDetails> => ({
+export const emptyConditionRecord = (): Record<CardCondition, ConditionDetails> => ({
   [CardCondition.NM]: { quantity: 0, price: '' },
   [CardCondition.SP]: { quantity: 0, price: '' },
   [CardCondition.MP]: { quantity: 0, price: '' },
@@ -90,11 +90,20 @@ const normalizeLanguages = (raw: any): Record<string, LanguageDetails> | undefin
   return Object.keys(languages).length > 0 ? languages : undefined;
 };
 
-export const getNormalizedVariations = (variations: Record<string, any>): Record<string, Record<CardCondition, ConditionDetails>> => {
+// `flags` é opcional: quando informado (a carta já foi consultada e a API confirma quais
+// variações ela tem), também semeia qualquer variação dinâmica extra além dos 6 tipos-base
+// (ex: "Friend Ball", "Energy") - sem isso, um componente que edita `normalized[variation]`
+// diretamente pra um nome dinâmico (vindo de getDefaultVariationType ou da lista de variações
+// visíveis) quebraria em runtime por indexar uma chave nunca semeada. Sem flags, comportamento
+// idêntico a antes (só os 6 tipos-base).
+export const getNormalizedVariations = (
+  variations: Record<string, any>,
+  flags?: Record<string, boolean> | null
+): Record<string, Record<CardCondition, ConditionDetails>> => {
   const normalized: Record<string, Record<CardCondition, ConditionDetails>> = {};
 
   // Initialize defaults
-  VARIATION_TYPES.forEach(v => {
+  getCardVariationTypes(flags).forEach(v => {
     normalized[v] = emptyConditionRecord();
   });
 
@@ -178,13 +187,16 @@ export const reconcileVariationsWithApiFlags = (
   variations: Record<string, any>,
   flags: Record<string, boolean> | undefined | null
 ): { variations: Record<string, Record<CardCondition, ConditionDetails>>; migrated: boolean } => {
-  const normalized = getNormalizedVariations(variations);
+  const normalized = getNormalizedVariations(variations, flags);
   if (!flags || Object.keys(flags).length === 0) return { variations: normalized, migrated: false };
 
   const invalidTypes = VARIATION_TYPES.filter(v => flags[v] === false && getVariationSubtotal(normalized[v]) > 0);
   if (invalidTypes.length === 0) return { variations: normalized, migrated: false };
 
-  const validTarget = VARIATION_TYPES.find(v => flags[v] !== false) || 'Standard';
+  // validTarget pode ser uma variação dinâmica (ex: uma carta só com reverse "Friend Ball",
+  // sem nenhum dos 6 tipos-base) - já semeada em `normalized` acima (flags passado pra
+  // getNormalizedVariations), então sempre existe aqui.
+  const validTarget = getDefaultVariationType(flags);
   const result: Record<string, Record<CardCondition, ConditionDetails>> = { ...normalized, [validTarget]: { ...normalized[validTarget] } };
 
   for (const invalidType of invalidTypes) {
@@ -198,15 +210,65 @@ export const reconcileVariationsWithApiFlags = (
   return { variations: result, migrated: true };
 };
 
+// A API não se limita mais aos 6 tipos fixos de VARIATION_TYPES: sets recentes têm cartas com
+// vários padrões de foil nomeados (Friend Ball, Love Ball, Energy, etc, além de Pokeball/
+// Master Ball) que a TCGdex reporta por carta (server: extractVariantFlags). `flags` já vem
+// com uma chave por variação que a carta realmente tem (dinâmico) - essas 3 funções são o
+// ponto único de leitura desse formato, usadas em vez de indexar VARIATION_TYPES direto
+// sempre que uma variação pode ser dinâmica.
+
+// Lista de variações "candidatas" pra uma carta específica - sempre inclui os 6 tipos-base
+// (mesmo os que a API confirma que não existem, pra não esconder dado antigo já gravado
+// numa dessas variações) + qualquer variação dinâmica extra que a API confirma que a carta
+// tem. Sem flags (API fora do ar / carta ainda não consultada), cai só pros 6 tipos-base,
+// igual sempre foi.
+export const getCardVariationTypes = (flags: Record<string, boolean> | undefined | null): string[] => {
+  if (!flags || Object.keys(flags).length === 0) return VARIATION_TYPES;
+  const extra = Object.keys(flags).filter(v => flags[v] === true && !VARIATION_TYPES.includes(v));
+  return [...VARIATION_TYPES, ...extra];
+};
+
+// Variações que a API confirma que a carta REALMENTE tem (flags[v] === true), base + dinâmicas
+// - diferente de getCardVariationTypes acima, aqui não entra nenhum tipo-base "por segurança",
+// só o que é de fato colecionável pra essa carta. Usado pra contar % de progresso e montar a
+// visão Master Set (nunca pra decidir se esconde dado já gravado - isso é getCardVariationTypes).
+export const getConfirmedVariationTypes = (flags: Record<string, boolean> | undefined | null): string[] =>
+  flags ? Object.keys(flags).filter(v => flags[v] === true) : [];
+
+// Lê o registro de uma variação específica de um resultado de getNormalizedVariations sem
+// nunca retornar undefined - protege contra crash quando o nome da variação vem de uma fonte
+// externa (flags da API) que pode apontar pra uma variação dinâmica ainda não semeada nesse
+// resultado (ex: carta com uma variação nomeada tipo "Energy" mas 0 unidades registradas).
+// Nunca escreve no objeto original - só serve pra leitura.
+export const getVariationSlot = (
+  normalized: Record<string, Record<CardCondition, ConditionDetails>>,
+  variation: string
+): Record<CardCondition, ConditionDetails> => normalized[variation] || emptyConditionRecord();
+
+// Garante que `normalized[variation]` existe antes de escrever nela - mesmo motivo do
+// getVariationSlot acima, mas pra quando o código vai MODIFICAR aquela variação (ex: registrar
+// a 1ª cópia de uma carta cuja única variação é "Friend Ball"). Diferente do getVariationSlot,
+// esse aqui semeia (muta) `normalized` de verdade, então escritas subsequentes na mesma
+// variação não precisam chamar de novo.
+export const ensureVariationSlot = (
+  normalized: Record<string, Record<CardCondition, ConditionDetails>>,
+  variation: string
+): Record<CardCondition, ConditionDetails> => {
+  if (!normalized[variation]) normalized[variation] = emptyConditionRecord();
+  return normalized[variation];
+};
+
 // Qual variação usar quando o app precisa escolher uma sozinho (toque rápido pra marcar
 // como possuída, +/- na grade) - nunca deve ser sempre "Standard": várias cartas (promos,
-// Pokeball/Master Ball exclusivas, etc.) não têm Standard de verdade. Prioriza Standard se
-// a carta realmente tem essa variação; senão, a primeira variação real seguindo a ordem de
-// VARIATION_TYPES; se não houver nenhum dado de variação (flags vazio - API fora do ar ou
-// carta ainda não consultada), mantém o comportamento antigo (Standard) por segurança.
+// Pokeball/Master Ball/Friend Ball exclusivas, etc.) não têm Standard de verdade. Prioriza
+// Standard se a carta realmente tem essa variação; senão, a primeira variação real seguindo a
+// ordem de VARIATION_TYPES; senão, a primeira variação dinâmica que a carta tem (ex: uma carta
+// só com reverse "Energy"/"Friend Ball", sem nenhum dos 6 tipos-base); se não houver nenhum
+// dado de variação (flags vazio - API fora do ar ou carta ainda não consultada), mantém o
+// comportamento antigo (Standard) por segurança.
 export const getDefaultVariationType = (flags: Record<string, boolean> | undefined | null): string => {
   if (!flags || Object.keys(flags).length === 0) return 'Standard';
-  const available = VARIATION_TYPES.find(v => flags[v] !== false);
+  const available = getCardVariationTypes(flags).find(v => flags[v] === true);
   return available || 'Standard';
 };
 
