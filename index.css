@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 /* Brilho holográfico simulado para cartas Reverse Foil no filtro Master Set (ver
-   MasterSetTile.tsx) - um degradê metálico diagonal (prata/aço, sem cores de arco-íris)
-   em mix-blend-mode: color-dodge, parecido com o reflexo de uma reverse holo real sob luz.
-   Só 2 keyframes com "alternate" (vai e volta suave) em vez de "infinite" simples - com só
-   0%/100% e sem alternate, a posição pulava de volta pro início a cada loop (o "dois
-   quadrados" reiniciando de repente); com alternate a transição de volta é só a mesma
-   animação invertida, sem esse salto. */
+   MasterSetTile.tsx) - um degradê arco-íris diagonal em mix-blend-mode: color-dodge,
+   parecido com o reflexo de uma reverse holo real sob luz. Só 2 keyframes com "alternate"
+   (vai e volta suave) em vez de "infinite" simples - com só 0%/100% e sem alternate, a
+   posição pulava de volta pro início a cada loop (o "dois quadrados" reiniciando de
+   repente); com alternate a transição de volta é só a mesma animação invertida, sem esse
+   salto. */
 @keyframes holo-shine-sweep {
   0% { background-position: 15% 15%; }
   100% { background-position: 85% 85%; }
@@ -16,11 +16,11 @@
   background-image: linear-gradient(
     115deg,
     transparent 5%,
-    rgba(255, 255, 255, 0.25) 15%,
-    rgba(203, 213, 225, 0.55) 25%,
-    rgba(255, 255, 255, 0.75) 35%,
-    rgba(148, 163, 184, 0.5) 45%,
-    rgba(255, 255, 255, 0.6) 55%,
+    rgba(255, 60, 172, 0.55) 15%,
+    rgba(255, 214, 51, 0.55) 25%,
+    rgba(93, 255, 133, 0.55) 35%,
+    rgba(56, 209, 255, 0.55) 45%,
+    rgba(174, 92, 255, 0.55) 55%,
     transparent 65%
   );
   background-size: 250% 250%;
