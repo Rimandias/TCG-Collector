@@ -3,8 +3,15 @@
 /* Brilho holográfico simulado para cartas Reverse Foil no filtro Master Set (ver
    MasterSetTile.tsx) - um degradê metálico diagonal (prata/aço, sem cores de arco-íris)
    em mix-blend-mode: color-dodge, parecido com o reflexo de uma reverse holo real sob luz.
-   Frame estático (sem animação) de propósito - background-position animado força repaint
-   a cada frame, e não vale o custo pra um efeito que é só decorativo. */
+   Só 2 keyframes com "alternate" (vai e volta suave) em vez de "infinite" simples - com só
+   0%/100% e sem alternate, a posição pulava de volta pro início a cada loop (o "dois
+   quadrados" reiniciando de repente); com alternate a transição de volta é só a mesma
+   animação invertida, sem esse salto. */
+@keyframes holo-shine-sweep {
+  0% { background-position: 15% 15%; }
+  100% { background-position: 85% 85%; }
+}
+
 .holo-shine {
   background-image: linear-gradient(
     115deg,
@@ -17,6 +24,7 @@
     transparent 65%
   );
   background-size: 250% 250%;
-  background-position: 50% 50%;
+  background-position: 15% 15%;
   mix-blend-mode: color-dodge;
+  animation: holo-shine-sweep 4s ease-in-out infinite alternate;
 }
