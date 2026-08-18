@@ -482,20 +482,18 @@ interface CardLegal {
   expanded: boolean;
 }
 
-// Nomes conhecidos de padrão de foil -> rótulo bonito exibido no app. Comparação é feita
-// depois de normalizar o texto cru (remover acentos/espaços/maiúsculas), porque o mesmo padrão
-// aparece formatado diferente dependendo do locale consultado (ex: "pokeball" no inglês/dado
-// bruto da TCGdex vs "Poké Bola" no `pt`). Um padrão NÃO listado aqui ainda funciona (a
-// variação aparece com o nome cru capitalizado) - só o rótulo fica menos bonito até eu
-// adicionar uma entrada específica pra ele.
-const FOIL_PATTERN_LABELS: [needle: string, label: string][] = [
+// Pokeball/Master Ball são um caso especial: já existiam como 2 dos 6 tipos-base ANTES da
+// leitura dinâmica de variações existir, com dados reais de usuários já salvos sob exatamente
+// esses nomes - continuam mapeados pro mesmo rótulo de sempre, não importa o texto bruto que a
+// API retorna pro padrão (varia por locale: "pokeball"/"masterball" no inglês, "Poké Bola"/
+// "Master Bola" no `pt`). Comparação feita depois de normalizar o texto cru (remove acentos/
+// espaços/maiúsculas) pra pegar as duas formas. QUALQUER outro padrão nomeado (Energy/Energia,
+// Friend Ball, Love Ball, League, Cosmos, etc.) usa o texto exatamente como a API entrega (só
+// capitaliza a 1ª letra) - nunca inventa um rótulo/tradução pra esses, pra não divergir da
+// terminologia real da TCGdex (ela já entrega em português quando consultada em `pt`).
+const GRANDFATHERED_FOIL_LABELS: [needle: string, label: string][] = [
   ['poke', 'Pokeball'],
   ['master', 'Master Ball'],
-  ['friend', 'Friend Ball'],
-  ['love', 'Love Ball'],
-  ['league', 'League'],
-  ['energy', 'Energy'],
-  ['cosmos', 'Cosmos'],
 ];
 
 const normalizeFoilKey = (s: string): string =>
@@ -503,19 +501,12 @@ const normalizeFoilKey = (s: string): string =>
 
 function prettifyFoilName(raw: string): string {
   const normalized = normalizeFoilKey(raw);
-  const match = FOIL_PATTERN_LABELS.find(([needle]) => normalized.includes(needle));
-  if (match) return match[1];
+  const override = GRANDFATHERED_FOIL_LABELS.find(([needle]) => normalized.includes(needle));
+  if (override) return override[1];
   const trimmed = raw.trim();
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
-// Deriva um flag de tipo genérico (Standard/Foil/Reverse Foil/First Edition) a partir de
-// variants_detailed quando disponível: só é true se existir pelo menos uma impressão desse
-// tipo SEM padrão de foil nomeado - uma carta pode ter reverse só em versões nomeadas (ex:
-// Charmander de "Ascended Heroes" só tem reverse "Friend Ball" e reverse "Energy", nenhuma
-// reverse genérica); marcar "Reverse Foil" true nesse caso criaria uma 3ª variação fantasma
-// que não existe fisicamente. Sem nenhuma entrada desse tipo em variants_detailed (dado
-// indisponível pra essa carta), cai pro booleano de `variants` como sempre foi.
 function genericTypeFlag(detailed: any[], type: string, fallback: boolean): boolean {
   const entriesOfType = detailed.filter(entry => String(entry?.type || '').toLowerCase() === type);
   if (entriesOfType.length === 0) return fallback;
@@ -526,11 +517,22 @@ function extractVariantFlags(detail: any): { flags: Record<string, boolean>; rar
   const v = detail?.variants || {};
   const detailed: any[] = Array.isArray(detail?.variants_detailed) ? detail.variants_detailed : [];
 
+  const hasNamedFoil = (needle: string) =>
+    detailed.some(entry => entry?.foil && normalizeFoilKey(String(entry.foil)).includes(needle));
+
+  // Pokeball/Master Ball entram aqui (explícitos, sempre true OU false) junto dos outros 4
+  // tipos-base, e não só "adicionados quando encontrados" como as variações dinâmicas abaixo -
+  // eles fazem parte de VARIATION_TYPES (candidatos sempre considerados, ver getCardVariationTypes
+  // no frontend), então uma chave AUSENTE em `flags` é tratada como "sem informação, mostra
+  // mesmo assim" em vez de "confirmado que não existe". Sem marcar explicitamente false quando
+  // a carta não tem o padrão, esses dois apareceriam como variação fantasma em toda carta.
   const flags: Record<string, boolean> = {
     Standard: genericTypeFlag(detailed, 'normal', !!v.normal),
     Foil: genericTypeFlag(detailed, 'holo', !!v.holo),
     'Reverse Foil': genericTypeFlag(detailed, 'reverse', !!v.reverse),
     'First Edition': genericTypeFlag(detailed, 'firstedition', !!v.firstEdition),
+    Pokeball: hasNamedFoil('poke'),
+    'Master Ball': hasNamedFoil('master'),
   };
 
   // Sets recém-lançados (ex: "me04" Caos Ascendente) às vezes têm o produto reverse holofoil
@@ -547,13 +549,16 @@ function extractVariantFlags(detail: any): { flags: Record<string, boolean>; rar
     if (hasReversePricingHint) flags['Reverse Foil'] = true;
   }
 
-  // Cada entrada com um padrão de foil nomeado vira sua própria variação colecionável, além
-  // dos 4 tipos genéricos acima - substitui o antigo tratamento especial só de Pokeball/Master
-  // Ball por um mecanismo genérico que cobre qualquer nome que a TCGdex introduzir.
+  // Cada entrada com um padrão de foil nomeado que NÃO é Pokeball/Master Ball (já tratados
+  // acima) vira sua própria variação colecionável dinâmica, além dos 4 tipos genéricos - o
+  // rótulo é o texto exatamente como a API entrega (prettifyFoilName só capitaliza a 1ª letra
+  // pra esses), nunca uma tradução inventada.
   for (const entry of detailed) {
     const foilName = entry?.foil;
     if (!foilName) continue;
-    flags[prettifyFoilName(String(foilName))] = true;
+    const label = prettifyFoilName(String(foilName));
+    if (label === 'Pokeball' || label === 'Master Ball') continue;
+    flags[label] = true;
   }
 
   return {
