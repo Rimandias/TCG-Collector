@@ -476,14 +476,28 @@ interface CardLegal {
 
 function extractVariantFlags(detail: any): { flags: Record<string, boolean>; rarity: string; artist: string; category: string; legal: CardLegal } {
   const v = detail?.variants || {};
+  const detailed: any[] = Array.isArray(detail?.variants_detailed) ? detail.variants_detailed : [];
+
+  // Sets recém-lançados (ex: "me04" Caos Ascendente) já têm o produto reverse holofoil
+  // precificado em `variants_detailed[].pricing.tcgplayer` mas o booleano `variants.reverse`
+  // da TCGdex ainda não foi recalculado - vimos isso acontecer com "me05" Escuridão Absoluta
+  // também, e lá se corrigiu sozinho alguns dias depois (a própria TCGdex atualizou o
+  // booleano). Em vez de confiar só no booleano (que fica desatualizado por tempo
+  // indeterminado pra cada set novo), qualquer chave de preço com "reverse" no nome já conta
+  // como evidência de que a variação existe - isso vale pra qualquer set, não só os dois
+  // que já vimos com esse problema.
+  const hasReversePricingHint = detailed.some(entry => {
+    const tcgplayerKeys = Object.keys(entry?.pricing?.tcgplayer || {});
+    return tcgplayerKeys.some(key => key.toLowerCase().includes('reverse'));
+  });
+
   const flags: Record<string, boolean> = {
     Standard: !!v.normal,
     Foil: !!v.holo,
-    'Reverse Foil': !!v.reverse,
+    'Reverse Foil': !!v.reverse || hasReversePricingHint,
     'First Edition': !!v.firstEdition,
   };
 
-  const detailed: any[] = Array.isArray(detail?.variants_detailed) ? detail.variants_detailed : [];
   let pokeball = false;
   let masterBall = false;
   for (const entry of detailed) {
