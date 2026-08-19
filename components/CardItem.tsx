@@ -1,5 +1,5 @@
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Card, User, CardCondition } from '../types';
 import { updateCardStatus, getCardTotalQuantity, getNormalizedVariations, getCompleteCardNumber, adjustLanguageQuantity, getDefaultVariationType, getCardVariationTypes, ensureVariationSlot } from '../db';
 import { fetchCardVariants, peekCachedCardVariants } from '../api';
@@ -129,6 +129,39 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
     // Nada pra remover (já em 0 em toda variação/condição) - não salva à toa.
   };
 
+  // Digitar um número direto no contador (em vez de clicar +/- várias vezes) - mesma regra do
+  // "+": sempre define a quantidade na variação que a carta realmente tem (getDefaultVariationType)
+  // e condição NM, nunca cria/mexe em outra variação/condição já registrada. Se a carta já tem
+  // cópias espalhadas em mais de um lugar, o total exibido passa a ser a soma de tudo (esse
+  // slot com o valor novo + o que já existia em outro lugar) - previsível, já que segue a mesma
+  // regra usada pelo toque rápido de sempre.
+  const [editingQuantity, setEditingQuantity] = useState(false);
+  const [draftQuantity, setDraftQuantity] = useState('');
+
+  const startEditingQuantity = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDraftQuantity(String(totalQuantity));
+    setEditingQuantity(true);
+  };
+
+  const commitQuantity = () => {
+    setEditingQuantity(false);
+    const parsed = Math.max(0, Math.floor(Number(draftQuantity)) || 0);
+    const cachedInfo = peekCachedCardVariants(card.id);
+    const variation = getDefaultVariationType(cachedInfo?.flags);
+    const normalized = getNormalizedVariations(cardData.variations);
+    const nmDetails = ensureVariationSlot(normalized, variation)[CardCondition.NM];
+    if (parsed === nmDetails.quantity) return;
+    if (nmDetails.languages) {
+      normalized[variation][CardCondition.NM] = adjustLanguageQuantity(nmDetails, 'BR', parsed - nmDetails.quantity);
+    } else {
+      normalized[variation][CardCondition.NM].quantity = parsed;
+    }
+    const hasCards = getCardTotalQuantity(normalized) > 0;
+    onUpdateUser(updateCardStatus(user, card.id, { variations: normalized, isOwned: hasCards }));
+    if (!cachedInfo) reconcileVariation(variation, normalized[variation][CardCondition.NM].quantity, false);
+  };
+
   const toggleTrade = (e: React.MouseEvent) => {
     e.stopPropagation();
     onUpdateUser(updateCardStatus(user, card.id, { isForTrade: !cardData.isForTrade }));
@@ -181,7 +214,27 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
           >
             -
           </button>
-          <span className="w-6 text-center text-[11px] text-[#646B99] tabular-nums">{totalQuantity}</span>
+          {editingQuantity ? (
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoFocus
+              value={draftQuantity}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setDraftQuantity(e.target.value.replace(/[^0-9]/g, ''))}
+              onBlur={commitQuantity}
+              onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+              className="w-6 text-center text-[11px] text-[#646B99] tabular-nums bg-white border border-[#646B99] rounded outline-none"
+            />
+          ) : (
+            <span
+              onClick={startEditingQuantity}
+              className="w-6 text-center text-[11px] text-[#646B99] tabular-nums cursor-pointer"
+            >
+              {totalQuantity}
+            </span>
+          )}
           <button
             onClick={() => adjustQuantity(1)}
             className="w-7 h-full flex items-center justify-center text-slate-400 hover:text-emerald-500 transition-colors"
@@ -251,7 +304,27 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
             >
               -
             </button>
-            <span className="text-[11px] text-[#646B99] tabular-nums">{totalQuantity}</span>
+            {editingQuantity ? (
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoFocus
+                value={draftQuantity}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => setDraftQuantity(e.target.value.replace(/[^0-9]/g, ''))}
+                onBlur={commitQuantity}
+                onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+                className="w-7 text-center text-[11px] text-[#646B99] tabular-nums bg-white border border-[#646B99] rounded outline-none"
+              />
+            ) : (
+              <span
+                onClick={startEditingQuantity}
+                className="text-[11px] text-[#646B99] tabular-nums cursor-pointer"
+              >
+                {totalQuantity}
+              </span>
+            )}
             <button
               onClick={(e) => { e.stopPropagation(); adjustQuantity(1); }}
               className="w-6 h-full flex items-center justify-center text-slate-400 hover:text-emerald-500 transition-colors"
