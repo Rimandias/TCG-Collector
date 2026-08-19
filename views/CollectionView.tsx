@@ -4,6 +4,7 @@ import { User, PokemonSet, UserCardData } from '../types';
 import { fetchSets, fetchSetVariantFlags, CardVariantInfo } from '../api';
 import CardImage from '../components/CardImage';
 import SetProgressBar from '../components/SetProgressBar';
+import TierDots from '../components/TierDots';
 import { getCardTotalQuantity, getCardEstimatedValue } from '../db';
 import { getSetTierStatsFromCounts, aggregateSetTierStats } from '../setProgress';
 
@@ -206,7 +207,12 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
                             <span className="text-slate-300 text-[10px]"> / {set.total}</span>
                           </div>
                         </div>
-                        <SetProgressBar stats={stats.tierStats} size="sm" />
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 min-w-0">
+                            <SetProgressBar stats={stats.tierStats} size="sm" />
+                          </div>
+                          <TierDots stats={stats.tierStats} />
+                        </div>
                       </div>
                     );
                   })}
