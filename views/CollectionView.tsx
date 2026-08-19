@@ -192,11 +192,11 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
                         <div className="flex justify-between items-start mb-4">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center p-1.5 border border-slate-100">
-                              <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain" />
+                              <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain" fallback="empty" />
                             </div>
                             <div>
                               <div className="flex items-center gap-1.5">
-                                {set.symbolUrl && <CardImage src={set.symbolUrl} alt="" className="w-3 h-3 object-contain flex-shrink-0" />}
+                                {set.symbolUrl && <CardImage src={set.symbolUrl} alt="" className="w-3 h-3 object-contain flex-shrink-0" fallback="empty" />}
                                 <h4 className="text-xs text-slate-800 uppercase tracking-tight leading-tight">{set.name}</h4>
                               </div>
                               <p className="text-[8px] text-slate-400 uppercase tracking-widest mt-0.5">{set.releaseDate}</p>

@@ -215,7 +215,7 @@ const HomeViewJp: React.FC<HomeViewJpProps> = ({ user, onUpdateUser, onBackToWes
       {selectedSet ? (
         <>
           <div className="flex items-center justify-center gap-1.5 mb-6">
-            {selectedSet.symbolUrl && <CardImage src={selectedSet.symbolUrl} alt="" className="w-3.5 h-3.5 object-contain flex-shrink-0" />}
+            {selectedSet.symbolUrl && <CardImage src={selectedSet.symbolUrl} alt="" className="w-3.5 h-3.5 object-contain flex-shrink-0" fallback="empty" />}
             <span className="text-sm text-slate-500 text-center font-medium uppercase tracking-wider">
               {selectedSet.releaseDate?.split('-')[0]} — {selectedSet.name}
             </span>
@@ -284,11 +284,11 @@ const HomeViewJp: React.FC<HomeViewJpProps> = ({ user, onUpdateUser, onBackToWes
                   className="flex flex-col items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group min-h-[160px]"
                 >
                   <div className="h-14 w-full flex items-center justify-center mb-2">
-                    <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain filter group-hover:scale-110 transition-transform" />
+                    <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain filter group-hover:scale-110 transition-transform" fallback="empty" />
                   </div>
                   <div className="w-full space-y-2 mt-auto">
                     <p className="text-[10px] font-medium text-slate-600 text-center line-clamp-1 group-hover:text-[#646B99] transition-colors flex items-center justify-center gap-1">
-                      {set.symbolUrl && <CardImage src={set.symbolUrl} alt="" className="w-3 h-3 object-contain flex-shrink-0" />}
+                      {set.symbolUrl && <CardImage src={set.symbolUrl} alt="" className="w-3 h-3 object-contain flex-shrink-0" fallback="empty" />}
                       {set.name}
                     </p>
                     <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
