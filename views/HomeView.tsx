@@ -729,8 +729,8 @@ const HomeView: React.FC<HomeViewProps> = ({
                             {set.symbolUrl && <CardImage src={set.symbolUrl} alt="" className="w-3 h-3 object-contain flex-shrink-0" />}
                             {set.name}
                         </p>
-                        <div className="flex items-center gap-1.5">
-                            <div className="flex-1 min-w-0">
+                        <div className="flex flex-col md:flex-row items-center gap-1.5">
+                            <div className="w-full md:flex-1 md:w-auto md:min-w-0">
                                 <SetProgressBar stats={tierStats} size="sm" />
                             </div>
                             <TierDots stats={tierStats} size="xs" />
