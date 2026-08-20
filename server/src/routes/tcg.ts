@@ -541,9 +541,17 @@ function extractVariantFlags(detail: any): { flags: Record<string, boolean>; rar
   // que também atrasa - ver "me05" Escuridão Absoluta, que se corrigiu sozinho depois). Só
   // entra em ação quando não existe NENHUMA entrada "reverse" ainda (senão o cálculo acima já
   // decidiu certo, nomeada ou não).
+  //
+  // Sets antigos (ex: "xy10" Fusão de Destinos, Cottonee #70/124) caem no mesmo buraco por um
+  // motivo diferente: a TCGdex nem aninha `pricing` dentro de cada entrada de
+  // variants_detailed pra eles (variants_detailed só tem `{type: "normal", ...}` sem chave
+  // `pricing` nenhuma) - o preço do produto reverse-holofoil só existe em `detail.pricing.
+  // tcgplayer`, um irmão de variants_detailed, não um filho de cada entrada. Por isso o hint
+  // também precisa olhar o pricing no nível raiz do detalhe, não só o aninhado por entrada.
   if (!detailed.some(entry => String(entry?.type || '').toLowerCase() === 'reverse')) {
-    const hasReversePricingHint = detailed.some(entry => {
-      const tcgplayerKeys = Object.keys(entry?.pricing?.tcgplayer || {});
+    const tcgplayerSources = [...detailed.map(entry => entry?.pricing?.tcgplayer), detail?.pricing?.tcgplayer];
+    const hasReversePricingHint = tcgplayerSources.some(tcgplayer => {
+      const tcgplayerKeys = Object.keys(tcgplayer || {});
       return tcgplayerKeys.some(key => key.toLowerCase().includes('reverse'));
     });
     if (hasReversePricingHint) flags['Reverse Foil'] = true;
