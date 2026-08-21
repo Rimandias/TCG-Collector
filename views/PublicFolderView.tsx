@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, PokemonSet, CardCondition, VARIATION_TYPES } from '../types';
-import { getCompleteCardNumber } from '../db';
+import { getCompleteCardNumber, compareCardsByCollectionThenNumber } from '../db';
 import { fetchCardsBySet, fetchSets } from '../api';
 import { getPublicFolder, PublicFolderData } from '../trades';
 import { getAccessToken, addFriendByCode } from '../auth';
@@ -87,7 +87,28 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
   const [filterQuality, setFilterQuality] = useState('all');
   const [page, setPage] = useState(1);
 
-  const eras = useMemo(() => Array.from(new Set(sets.map((s) => s.series))), [sets]);
+  const releaseDateBySetId = useMemo(() => {
+    const map: Record<string, string> = {};
+    sets.forEach((s) => { map[s.id] = s.releaseDate; });
+    return map;
+  }, [sets]);
+
+  // Mais nova pra mais antiga (mesma convenção de TradesView/CollectionView) - antes vinha
+  // na ordem arbitrária de `sets`, sem relação com data de lançamento.
+  const eras = useMemo(() => {
+    const uniqueSeries: string[] = Array.from(new Set(sets.map((s) => s.series)));
+    const oldestReleaseDate = (era: string): string => {
+      const eraSets = sets.filter((s) => s.series === era);
+      if (eraSets.length === 0) return '9999-99-99';
+      const dates = eraSets.map((s) => s.releaseDate).sort();
+      return dates[0];
+    };
+    return uniqueSeries.sort((a, b) => {
+      const dateA = oldestReleaseDate(a);
+      const dateB = oldestReleaseDate(b);
+      return dateB.localeCompare(dateA);
+    });
+  }, [sets]);
   const getCardEra = (card: Card): string | undefined => sets.find((s) => s.id === card.set.id)?.series;
 
   const filteredLines = useMemo(() => {
@@ -108,8 +129,8 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
       if (filterCategory !== 'all' && line.variation !== filterCategory) return false;
       if (filterQuality !== 'all' && line.condition !== filterQuality) return false;
       return true;
-    });
-  }, [lines, searchQuery, filterRarity, filterSet, filterCategory, filterQuality]);
+    }).sort((a, b) => compareCardsByCollectionThenNumber(a.card, b.card, releaseDateBySetId));
+  }, [lines, searchQuery, filterRarity, filterSet, filterCategory, filterQuality, releaseDateBySetId]);
 
   const rarities = useMemo(() => Array.from(new Set(lines.map((l) => l.card.rarity).filter(Boolean))).sort(), [lines]);
   const setOptions = useMemo(() => {
@@ -244,7 +265,7 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
               onClick={() => { setBrowseMode('cards'); setSelectedEra(null); setSelectedSetId(null); }}
               className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${browseMode === 'cards' ? 'bg-[#646B99] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
             >
-              Todas as Coleções
+              Todas as Cartas
             </button>
             <button
               onClick={() => { setBrowseMode('collections'); setSelectedEra(null); setSelectedSetId(null); }}
@@ -357,7 +378,7 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
                 Voltar para Eras
               </button>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {sets.filter((s) => s.series === selectedEra).sort((a, b) => a.releaseDate.localeCompare(b.releaseDate)).map((set) => {
+                {sets.filter((s) => s.series === selectedEra).sort((a, b) => b.releaseDate.localeCompare(a.releaseDate)).map((set) => {
                   const count = new Set(filteredLines.filter((line) => line.card.set.id === set.id).map((l) => l.card.id)).size;
                   if (count === 0) return null;
                   return (

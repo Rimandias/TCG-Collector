@@ -402,3 +402,20 @@ export const getCompleteCardNumber = (card: Card): string => {
   }
   return card.number;
 };
+
+// Ordena por coleção (mais nova pra mais antiga, por data de lançamento) e, dentro da mesma
+// coleção, por número da carta crescente (numérico, não alfabético - "10" vem depois de "9",
+// nunca antes). Usado em qualquer lista de cartas que misture coleções sem ordem própria
+// (Pasta de Repetidas, pastas personalizadas, pasta de amigos, link público) - sem isso, a
+// ordem vinha da iteração arbitrária de `Object.entries(ownedCards)`, parecendo aleatória.
+export const compareCardsByCollectionThenNumber = (
+  a: Card,
+  b: Card,
+  releaseDateBySetId: Record<string, string>
+): number => {
+  const dateA = releaseDateBySetId[a.set.id] || '';
+  const dateB = releaseDateBySetId[b.set.id] || '';
+  if (dateA !== dateB) return dateB.localeCompare(dateA);
+  if (a.set.id !== b.set.id) return a.set.id.localeCompare(b.set.id);
+  return a.number.localeCompare(b.number, undefined, { numeric: true });
+};

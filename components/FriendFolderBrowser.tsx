@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, LANGUAGE_OPTIONS, PokemonSet, UserCardData, VisibleFolder, VARIATION_TYPES, CardCondition } from '../types';
-import { getCompleteCardNumber, getConfirmedVariationTypes } from '../db';
+import { getCompleteCardNumber, getConfirmedVariationTypes, compareCardsByCollectionThenNumber } from '../db';
 import { fetchCardsBySet, fetchSets, fetchSetVariantFlags, CardVariantInfo } from '../api';
 import { getFriendVisibleFolders, TradeItemSelection } from '../trades';
 import Pagination, { PAGE_SIZE } from './Pagination';
@@ -126,7 +126,37 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
     return sets.find((s) => s.id === card.set.id)?.series;
   };
 
-  const eras = useMemo(() => Array.from(new Set(sets.map((s) => s.series))), [sets]);
+  const releaseDateBySetId = useMemo(() => {
+    const map: Record<string, string> = {};
+    sets.forEach((s) => { map[s.id] = s.releaseDate; });
+    return map;
+  }, [sets]);
+
+  // Mais nova pra mais antiga (mesma convenção de TradesView/CollectionView) - antes vinha
+  // na ordem arbitrária de `sets`, sem relação com data de lançamento.
+  const eras = useMemo(() => {
+    const uniqueSeries: string[] = Array.from(new Set(sets.map((s) => s.series)));
+    const oldestReleaseDate = (era: string): string => {
+      const eraSets = sets.filter((s) => s.series === era);
+      if (eraSets.length === 0) return '9999-99-99';
+      const dates = eraSets.map((s) => s.releaseDate).sort();
+      return dates[0];
+    };
+    return uniqueSeries.sort((a, b) => {
+      const dateA = oldestReleaseDate(a);
+      const dateB = oldestReleaseDate(b);
+      return dateB.localeCompare(dateA);
+    });
+  }, [sets]);
+
+  // ResolvedLine.card pode ser null (metadados da carta ainda não resolvidos) - manda pro
+  // fim em vez de quebrar a ordenação por coleção/número.
+  const compareLinesByCollectionThenNumber = (a: ResolvedLine, b: ResolvedLine): number => {
+    if (!a.card && !b.card) return 0;
+    if (!a.card) return 1;
+    if (!b.card) return -1;
+    return compareCardsByCollectionThenNumber(a.card, b.card, releaseDateBySetId);
+  };
 
   const lines: ResolvedLine[] = useMemo(() => {
     if (!selectedFolder) return [];
@@ -224,8 +254,15 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
       if (filterQuality !== 'all' && line.condition !== filterQuality) return false;
       return true;
     });
-    return [...base].sort((a, b) => getCardPriority(a.cardId) - getCardPriority(b.cardId));
-  }, [lines, searchQuery, filterRarity, filterSet, filterCategory, filterQuality, ownedCardIdSet, wishlistCardIdSet]);
+    // Prioridade (desejado/não possuído/resto) primeiro, coleção mais nova + número crescente
+    // como desempate - antes disso, cartas de mesma prioridade vinham na ordem arbitrária de
+    // `selectedFolder.cards`, parecendo bagunçada.
+    return [...base].sort((a, b) => {
+      const priorityDiff = getCardPriority(a.cardId) - getCardPriority(b.cardId);
+      if (priorityDiff !== 0) return priorityDiff;
+      return compareLinesByCollectionThenNumber(a, b);
+    });
+  }, [lines, searchQuery, filterRarity, filterSet, filterCategory, filterQuality, ownedCardIdSet, wishlistCardIdSet, releaseDateBySetId]);
 
   // Opções para preencher os seletores de filtro, com base nas cartas desta pasta
   const folderRarities = useMemo(() => {
@@ -705,7 +742,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {sets
                   .filter((s) => s.series === selectedEra)
-                  .sort((a, b) => a.releaseDate.localeCompare(b.releaseDate))
+                  .sort((a, b) => b.releaseDate.localeCompare(a.releaseDate))
                   .map((set) => {
                     const count = new Set(filteredLines.filter((line) => line.card?.set.id === set.id).map((l) => l.cardId)).size;
                     if (count === 0) return null;
