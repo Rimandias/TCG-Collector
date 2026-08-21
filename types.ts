@@ -121,6 +121,14 @@ export interface TradeFolder {
   cardIds: string[];
   visibleToFriends: boolean;
   variationSelections?: Record<string, TradeFolderVariationSelection[]>;
+  // Cartas que continuam na Pasta de Repetidas mas foram ocultadas manualmente pelo dono -
+  // nunca aparecem para outra pessoa (nem pela pasta de amigos, nem pelo link público),
+  // ainda que continuem contando para a regra automática de duplicatas.
+  hiddenCardIds?: string[];
+  // Token do link público de compartilhamento (sem exigir login para visualizar) - só o
+  // backend gera/revoga (rotas dedicadas em routes/share.ts), nunca escrito via PUT /users/me;
+  // aqui é só leitura, pra saber se a pasta já tem link e montar a URL de compartilhamento.
+  shareToken?: string | null;
 }
 
 export interface TradeItem {

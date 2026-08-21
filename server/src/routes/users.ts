@@ -39,6 +39,7 @@ const folderSchema = z.object({
   cardIds: z.array(z.string().regex(cardIdPattern)).max(5000),
   visibleToFriends: z.boolean().default(false),
   variationSelections: z.record(z.string().regex(cardIdPattern), z.array(variationSelectionSchema).max(50)).default({}),
+  hiddenCardIds: z.array(z.string().regex(cardIdPattern)).max(5000).default([]),
 });
 
 const userDataSchema = z.object({

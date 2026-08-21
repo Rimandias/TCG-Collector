@@ -126,7 +126,7 @@ function applySelection(
 export async function getVisibleFolders(friendUserId: string): Promise<VisibleFolder[]> {
   const { data: folders, error } = await supabase
     .from('trade_folders')
-    .select('id, name, variation_selections')
+    .select('id, name, variation_selections, hidden_card_ids')
     .eq('user_id', friendUserId)
     .eq('visible_to_friends', true);
   if (error) throw error;
@@ -155,7 +155,8 @@ export async function getVisibleFolders(friendUserId: string): Promise<VisibleFo
   }
 
   return folders.map((folder) => {
-    const cardIds = cardIdsByFolder[folder.id] || [];
+    const hiddenCardIds = new Set<string>(Array.isArray((folder as any).hidden_card_ids) ? (folder as any).hidden_card_ids : []);
+    const cardIds = (cardIdsByFolder[folder.id] || []).filter((cardId) => !hiddenCardIds.has(cardId));
     const variationSelections = (folder as any).variation_selections || {};
     const cards = cardIds
       .map((cardId) => ({
@@ -165,6 +166,84 @@ export async function getVisibleFolders(friendUserId: string): Promise<VisibleFo
       .filter((c) => c.items.length > 0);
     return { id: folder.id, name: folder.name, cards };
   });
+}
+
+// Gera/retorna o token de compartilhamento por link público de uma pasta - independente do
+// toggle "visível para amigos" (uma pasta pode ter link público sem estar visível a amigos, e
+// vice-versa). A checagem de dono (`user_id.eq(userId)`) é o que impede alguém de gerar/
+// revogar o link de uma pasta que não é sua - devolve null se a pasta não existe ou não é dela.
+export async function setFolderShareToken(userId: string, folderId: string, token: string | null): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('trade_folders')
+    .update({ share_token: token })
+    .eq('id', folderId)
+    .eq('user_id', userId)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  return !!data;
+}
+
+export async function getFolderShareToken(userId: string, folderId: string): Promise<string | null | undefined> {
+  const { data, error } = await supabase
+    .from('trade_folders')
+    .select('share_token')
+    .eq('id', folderId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data === null ? undefined : data.share_token;
+}
+
+export interface PublicFolder {
+  ownerUserId: string;
+  name: string;
+  cards: { cardId: string; items: VariationEntry[] }[];
+}
+
+// Pasta exposta por um link público (identificado só pelo token, sem saber de antemão o dono
+// nem o id da pasta) - mesma regra de ocultação por carta usada em getVisibleFolders (uma
+// carta marcada como oculta na Pasta de Repetidas nunca aparece aqui, mesmo com o link ativo).
+export async function getPublicFolderByToken(token: string): Promise<PublicFolder | null> {
+  const { data: folder, error } = await supabase
+    .from('trade_folders')
+    .select('id, user_id, name, variation_selections, hidden_card_ids')
+    .eq('share_token', token)
+    .maybeSingle();
+  if (error) throw error;
+  if (!folder) return null;
+
+  const { data: folderCardRows, error: fcError } = await supabase
+    .from('trade_folder_cards')
+    .select('card_id')
+    .eq('folder_id', folder.id);
+  if (fcError) throw fcError;
+
+  const hiddenCardIds = new Set<string>(Array.isArray((folder as any).hidden_card_ids) ? (folder as any).hidden_card_ids : []);
+  const cardIds = (folderCardRows || []).map((r) => r.card_id).filter((cardId) => !hiddenCardIds.has(cardId));
+
+  const variationsByCard: Record<string, any> = {};
+  if (cardIds.length > 0) {
+    const { data: userCardsRows, error: ucError } = await supabase
+      .from('user_cards')
+      .select('card_id, variations')
+      .eq('user_id', folder.user_id)
+      .in('card_id', cardIds);
+    if (ucError) throw ucError;
+    for (const row of userCardsRows || []) {
+      variationsByCard[row.card_id] = row.variations;
+    }
+  }
+
+  const variationSelections = (folder as any).variation_selections || {};
+  const cards = cardIds
+    .map((cardId) => ({
+      cardId,
+      items: applySelection(entriesFromVariations(variationsByCard[cardId]), variationSelections[cardId]),
+    }))
+    .filter((c) => c.items.length > 0);
+
+  return { ownerUserId: folder.user_id, name: folder.name, cards };
 }
 
 function parseTradeRow(row: any): Trade {

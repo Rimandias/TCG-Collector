@@ -162,11 +162,6 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
     if (!cachedInfo) reconcileVariation(variation, normalized[variation][CardCondition.NM].quantity, false);
   };
 
-  const toggleTrade = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onUpdateUser(updateCardStatus(user, card.id, { isForTrade: !cardData.isForTrade }));
-  };
-
   const isWishlisted = (user.wishlist || []).includes(card.id);
 
   const toggleWishlist = (e: React.MouseEvent) => {
@@ -244,13 +239,6 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button
-            onClick={toggleTrade}
-            className={`p-1.5 rounded-lg transition-all ${cardData.isForTrade ? 'bg-[#646B99] text-white' : 'bg-slate-50 text-slate-300 hover:text-[#646B99]'}`}
-            title="Adicionar para Trocas"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
-          </button>
           <button
             onClick={toggleWishlist}
             className={`p-1.5 rounded-lg transition-all ${isWishlisted ? 'bg-red-500 text-white' : 'bg-slate-50 text-slate-300 hover:text-red-500'}`}
@@ -349,13 +337,6 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
             <span className="text-[7px] text-slate-400 mt-0.5 font-mono">#{getCompleteCardNumber(card)}</span>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
-            <button
-              onClick={toggleTrade}
-              className={`p-1.5 rounded-lg transition-all ${cardData.isForTrade ? 'bg-[#646B99] text-white' : 'bg-slate-50 text-slate-300 hover:text-[#646B99]'}`}
-              title="Adicionar para Trocas"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
-            </button>
             <button
               onClick={toggleWishlist}
               className={`p-1.5 rounded-lg transition-all ${isWishlisted ? 'bg-red-500 text-white' : 'bg-slate-50 text-slate-300 hover:text-red-500'}`}

@@ -2,9 +2,10 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, Card, UserCardData, TradeFolder, TradeFolderVariationSelection, Friend, Trade, CardCondition, VARIATION_TYPES, LANGUAGE_OPTIONS } from '../types';
 import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getCardEstimatedValue, getVariationSubtotal, getConfirmedVariationTypes, getVariationSlot } from '../db';
 import { fetchCardsBySet, fetchSets, fetchSetVariantFlags, CardVariantInfo } from '../api';
-import { createTradeRequest, getMyTrades, TradeItemSelection } from '../trades';
+import { createTradeRequest, getMyTrades, createFolderShareLink, TradeItemSelection } from '../trades';
 import { fetchCurrentUser } from '../auth';
 import CardModal from '../components/CardModal';
+import VariationSlotTile, { VariationSlot } from '../components/VariationSlotTile';
 import FriendFolderBrowser from '../components/FriendFolderBrowser';
 import CardImage from '../components/CardImage';
 import TradeActionModal from '../components/TradeActionModal';
@@ -208,7 +209,11 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   const [showManageCards, setShowManageCards] = useState(false);
   const [variationPickerCardId, setVariationPickerCardId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [tradeCards, setTradeCards] = useState<{card: Card, data: UserCardData}[]>([]);
+  // Metadados (Card) de TODA a coleção do usuário (qualquer carta com quantidade > 0 em
+  // alguma variação/condição) - usado tanto para derivar a Pasta de Repetidas (ver
+  // `tradeCards` abaixo) quanto para o modal "Gerenciar Pasta" de pastas personalizadas, que
+  // permite escolher qualquer carta já possuída, não só as com duplicata/marcada para troca.
+  const [ownedCardsWithData, setOwnedCardsWithData] = useState<{card: Card, data: UserCardData}[]>([]);
   const [editingCard, setEditingCard] = useState<Card | null>(null);
 
   // New features states (Lists and metadata)
@@ -290,41 +295,50 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     [user.ownedCards]
   );
 
-  // Carrega as informações das cartas que estão marcadas para troca ou possuem duplicatas (>1 cópias)
+  // Carrega as informações (Card) de toda a coleção do usuário (qualquer carta com
+  // quantidade > 0), buscando cada coleção referenciada uma única vez (igual à Lista de
+  // Desejos abaixo) em vez de uma chamada sequencial por carta - importante aqui porque o
+  // universo agora é a coleção inteira do usuário (pode passar de 700 cartas), não só as
+  // poucas marcadas para troca/duplicadas de antes.
   useEffect(() => {
-    const loadTradeCards = async () => {
+    const loadOwnedCards = async () => {
       setLoading(true);
-      const trades = (Object.entries(user.ownedCards) as [string, UserCardData][])
-        .filter(([_, data]) => {
-          // Automatic duplicate rule: more than 1 copy of any quality and category
-          const normalized = getNormalizedVariations(data.variations);
-          const hasDuplicate = Object.values(normalized).some(conditionsObj => 
-            Object.values(conditionsObj).some(details => details.quantity > 1)
-          );
-          return data.isForTrade || hasDuplicate;
-        });
-      
-      const loaded: {card: Card, data: UserCardData}[] = [];
-      
-      for (const [id, data] of trades) {
-        const setId = id.split('-')[0];
-        try {
-          const cardsInSet = await fetchCardsBySet(setId);
-          const card = cardsInSet.find(c => c.id === id);
-          if (card) loaded.push({ card, data });
-        } catch (e) {
-          console.error("Failed to fetch cards in set", setId, e);
-        }
-      }
-      
-      setTradeCards(loaded);
+      const ownedEntries = (Object.entries(user.ownedCards) as [string, UserCardData][])
+        .filter(([_, data]) => getCardTotalQuantity(data.variations) > 0);
+      const neededSetIds = Array.from(new Set(ownedEntries.map(([id]) => id.split('-')[0])));
+      const cardsById: Record<string, Card> = {};
+      await Promise.all(
+        neededSetIds.map(async (setId) => {
+          try {
+            const cardsInSet = await fetchCardsBySet(setId);
+            for (const card of cardsInSet) cardsById[card.id] = card;
+          } catch (e) {
+            console.error("Failed to fetch cards in set", setId, e);
+          }
+        })
+      );
+      const loaded: {card: Card, data: UserCardData}[] = ownedEntries
+        .map(([id, data]) => ({ card: cardsById[id], data }))
+        .filter((entry): entry is {card: Card, data: UserCardData} => !!entry.card);
+      setOwnedCardsWithData(loaded);
       setLoading(false);
     };
 
     if (activeTab === 'my') {
-      loadTradeCards();
+      loadOwnedCards();
     }
   }, [user.ownedCards, activeTab]);
+
+  // Regra automática da Pasta de Repetidas: cartas marcadas para troca (flag legada, não há
+  // mais como ativá-la pela UI) ou com mais de 1 cópia em alguma variação/condição - derivada
+  // do superconjunto acima, sem nova busca de rede.
+  const tradeCards = useMemo(() => ownedCardsWithData.filter(({ data }) => {
+    const normalized = getNormalizedVariations(data.variations);
+    const hasDuplicate = Object.values(normalized).some(conditionsObj =>
+      Object.values(conditionsObj).some(details => details.quantity > 1)
+    );
+    return data.isForTrade || hasDuplicate;
+  }), [ownedCardsWithData]);
 
   // Carrega os metadados das coleções (leve, uma única chamada) sempre.
   useEffect(() => {
@@ -436,11 +450,13 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
         data: user.ownedCards[card.id] || getInitialCardData(card.id)
       }));
     } else if (selectedFolderId) {
+      // Pastas personalizadas podem conter qualquer carta que o usuário possua (não só
+      // duplicada/marcada para troca), então resolvem contra o superconjunto, não `tradeCards`.
       const currentFolder = folders.find(f => f.id === selectedFolderId);
-      return tradeCards.filter(tc => currentFolder?.cardIds.includes(tc.card.id));
+      return ownedCardsWithData.filter(tc => currentFolder?.cardIds.includes(tc.card.id));
     }
     return [];
-  }, [selectedFolderId, tradeCards, wishlistCards, folders, user.ownedCards]);
+  }, [selectedFolderId, tradeCards, ownedCardsWithData, wishlistCards, folders, user.ownedCards]);
 
   // Aplicação de todos os filtros nas cartas da pasta
   const filteredFolderCards = useMemo(() => {
@@ -525,6 +541,33 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     return filteredFolderCards.slice(start, start + PAGE_SIZE);
   }, [filteredFolderCards, folderCardsPage]);
 
+  // Pasta de Repetidas: em vez de 1 tile por carta, cada combinação carta+variação+qualidade
+  // com quantidade > 0 vira seu próprio "slot" (estilo Master Set) - o mesmo Pikachu com 3
+  // Standard/NM e 2 Standard/D vira 2 slots distintos, cada um com sua própria quantidade,
+  // preço e tags de variação/qualidade. Mesma regra usada pela pasta de amigos (ver
+  // FriendFolderBrowser `lines`), reaplicada aqui para a visão do próprio dono.
+  const duplicateSlots = useMemo<VariationSlot[]>(() => {
+    if (selectedFolderId !== 'duplicates') return [];
+    const slots: VariationSlot[] = [];
+    for (const { card, data } of filteredFolderCards) {
+      const normalized = getNormalizedVariations(data.variations);
+      Object.entries(normalized).forEach(([variation, conditionsObj]) => {
+        Object.entries(conditionsObj).forEach(([condition, details]) => {
+          if (details.quantity > 0) {
+            const price = parseFloat(details.price || '');
+            slots.push({ card, variation, condition, quantity: details.quantity, price: isNaN(price) ? 0 : price });
+          }
+        });
+      });
+    }
+    return slots;
+  }, [selectedFolderId, filteredFolderCards]);
+
+  const paginatedDuplicateSlots = useMemo(() => {
+    const start = (folderCardsPage - 1) * PAGE_SIZE;
+    return duplicateSlots.slice(start, start + PAGE_SIZE);
+  }, [duplicateSlots, folderCardsPage]);
+
   // Paginação (20 por página) da lista de cartas de uma coleção específica (modo "Coleções")
   const [setCardsPage, setSetCardsPage] = useState(1);
   useEffect(() => {
@@ -535,9 +578,9 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   const [manageSearchQuery, setManageSearchQuery] = useState('');
   const [managePage, setManagePage] = useState(1);
   const manageFilteredCards = useMemo(() => {
-    if (!manageSearchQuery.trim()) return tradeCards;
+    if (!manageSearchQuery.trim()) return ownedCardsWithData;
     const q = manageSearchQuery.toLowerCase().trim();
-    return tradeCards.filter(({ card }) => {
+    return ownedCardsWithData.filter(({ card }) => {
       const fullNum = getCompleteCardNumber(card).toLowerCase();
       return (
         card.name.toLowerCase().includes(q) ||
@@ -547,7 +590,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
         (card.artist || '').toLowerCase().includes(q)
       );
     });
-  }, [tradeCards, manageSearchQuery]);
+  }, [ownedCardsWithData, manageSearchQuery]);
   useEffect(() => {
     setManagePage(1);
   }, [manageFilteredCards]);
@@ -709,6 +752,84 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     });
   };
 
+  // Oculta/reexibe uma carta especificamente na Pasta de Repetidas: ela continua contando
+  // para a regra automática (isForTrade/duplicata) e continua visível só para o próprio
+  // dono, mas some do que é exposto a terceiros (ver filtro em getVisibleFolders no backend).
+  const hiddenCardIds = useMemo(
+    () => new Set(folders.find(f => f.id === DEFAULT_FOLDER_ID)?.hiddenCardIds || []),
+    [folders, DEFAULT_FOLDER_ID]
+  );
+
+  const handleToggleCardHidden = (cardId: string) => {
+    const updatedFolders = folders.map(f => {
+      if (f.id !== DEFAULT_FOLDER_ID) return f;
+      const current = new Set(f.hiddenCardIds || []);
+      if (current.has(cardId)) current.delete(cardId);
+      else current.add(cardId);
+      return { ...f, hiddenCardIds: Array.from(current) };
+    });
+    onUpdateUser({
+      ...user,
+      folders: updatedFolders
+    });
+  };
+
+  // Link público: o token vem do backend (rota dedicada, ver trades.ts/server/routes/share.ts),
+  // nunca do payload de PUT /users/me - guardado à parte de `folders` (que segue o pipeline de
+  // debounce/save normal) pra não misturar os dois fluxos. `folder.shareToken` (vindo do GET
+  // /users/me) é o valor inicial; esse estado só existe pra refletir na hora um link recém-gerado.
+  const [shareTokensById, setShareTokensById] = useState<Record<string, string>>({});
+  const [shareLinkBusyId, setShareLinkBusyId] = useState<string | null>(null);
+  const [copiedFolderId, setCopiedFolderId] = useState<string | null>(null);
+
+  const resolveFolderShareToken = (folder: TradeFolder): string | null =>
+    shareTokensById[folder.id] ?? folder.shareToken ?? null;
+
+  const handleCopyShareLink = async (folder: TradeFolder) => {
+    let token = resolveFolderShareToken(folder);
+    if (!token) {
+      setShareLinkBusyId(folder.id);
+      const result = await createFolderShareLink(folder.id);
+      setShareLinkBusyId(null);
+      if (!result.token) return;
+      token = result.token;
+      setShareTokensById(prev => ({ ...prev, [folder.id]: token! }));
+    }
+    const url = `${window.location.origin}/f/${token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedFolderId(folder.id);
+      setTimeout(() => setCopiedFolderId(current => (current === folder.id ? null : current)), 2000);
+    } catch {
+      // Clipboard indisponível (ex: contexto não seguro) - sem feedback visual, mas sem quebrar nada.
+    }
+  };
+
+  const renderShareLinkButton = (folder: TradeFolder | undefined) => {
+    if (!folder) return null;
+    const busy = shareLinkBusyId === folder.id;
+    const copied = copiedFolderId === folder.id;
+    return (
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          handleCopyShareLink(folder);
+        }}
+        disabled={busy}
+        className={`p-1.5 rounded-lg transition-all ${copied ? 'text-emerald-600 bg-emerald-50' : 'text-slate-300 hover:text-[#646B99] hover:bg-[#646B99]/5'} disabled:opacity-50`}
+        title={copied ? 'Link copiado!' : 'Copiar link público desta pasta (não exige login para visualizar)'}
+      >
+        {busy ? (
+          <span className="block w-4 h-4 border-2 border-[#646B99] border-t-transparent rounded-full animate-spin" />
+        ) : copied ? (
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        )}
+      </button>
+    );
+  };
+
   return (
     // Sem max-width fixo: essa era a razão de Trocas ficar preso ao layout mobile mesmo no
     // desktop, diferente de Home/Coleção (que só usam padding, sem teto de largura próprio) -
@@ -811,6 +932,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                     <span className="text-[9px] bg-[#646B99]/10 text-[#646B99] px-2 py-0.5 rounded uppercase tracking-wider font-semibold">
                       Automática
                     </span>
+                    {renderShareLinkButton(folders.find(f => f.id === DEFAULT_FOLDER_ID))}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -860,8 +982,8 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
                 {/* 3. Custom Folders */}
                 {folders.filter(folder => folder.id !== DEFAULT_FOLDER_ID).map(folder => {
-                  const validCardsCount = folder.cardIds.filter(id => 
-                    tradeCards.some(tc => tc.card.id === id)
+                  const validCardsCount = folder.cardIds.filter(id =>
+                    ownedCardsWithData.some(tc => tc.card.id === id)
                   ).length;
 
                   return (
@@ -888,6 +1010,8 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                         <span className="text-xs bg-slate-50 border border-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-medium" onClick={() => setSelectedFolderId(folder.id)}>
                           {validCardsCount}
                         </span>
+
+                        {renderShareLinkButton(folder)}
 
                         <button
                           onClick={(e) => {
@@ -1011,7 +1135,9 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                           : 'Uma seleção de suas cartas de troca organizadas nesta pasta.'}
                     </p>
                     <p className="text-[10px] text-slate-400 mt-1">
-                      Total nesta pasta: <span className="font-semibold text-slate-700">{activeFolderCards.length} cartas</span>
+                      {isDuplicates
+                        ? <>Total nesta pasta: <span className="font-semibold text-slate-700">{duplicateSlots.length} {duplicateSlots.length === 1 ? 'slot' : 'slots'}</span></>
+                        : <>Total nesta pasta: <span className="font-semibold text-slate-700">{activeFolderCards.length} cartas</span></>}
                     </p>
                   </div>
                 </div>
@@ -1149,8 +1275,34 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
                 {/* Folder Rendering - Based on visual toggles */}
                 {folderViewMode === 'cards' ? (
-                  // --- CARDS LIST VIEW ---
-                  filteredFolderCards.length === 0 ? (
+                  isDuplicates ? (
+                    // --- PASTA DE REPETIDAS: 1 slot por combinação carta+variação+qualidade ---
+                    duplicateSlots.length === 0 ? (
+                      <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 mx-auto text-slate-200 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                        <p className="text-slate-400 font-medium text-sm">Nenhuma carta encontrada</p>
+                        <p className="text-[10px] text-slate-300 mt-1 uppercase tracking-wider">
+                          Tente ajustar os filtros ou a pesquisa
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className={folderCardsLayout === 'list' ? 'grid gap-3' : getCardGridClassName(folderCardsLayout)}>
+                          {paginatedDuplicateSlots.map((slot, i) => (
+                            <VariationSlotTile
+                              key={`${slot.card.id}::${slot.variation}::${slot.condition}::${i}`}
+                              slot={slot}
+                              viewMode={folderCardsLayout}
+                              hidden={hiddenCardIds.has(slot.card.id)}
+                              onToggleHidden={() => handleToggleCardHidden(slot.card.id)}
+                              onClick={() => setEditingCard(slot.card)}
+                            />
+                          ))}
+                        </div>
+                        <Pagination page={folderCardsPage} totalPages={Math.max(1, Math.ceil(duplicateSlots.length / PAGE_SIZE))} onPageChange={setFolderCardsPage} />
+                      </div>
+                    )
+                  ) : filteredFolderCards.length === 0 ? (
                     <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-100">
                       <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 mx-auto text-slate-200 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
                       <p className="text-slate-400 font-medium text-sm">Nenhuma carta encontrada</p>
@@ -1958,13 +2110,12 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                <div className="bg-white border border-slate-100 w-full max-w-sm rounded-2xl shadow-2xl p-6 max-h-[85vh] flex flex-col">
                   <div className="mb-4">
                     <h3 className="text-sm font-semibold text-slate-800">Gerenciar Pasta</h3>
-                    <p className="text-[10px] text-slate-400">Selecione quais cartas marcadas para troca pertencem à pasta: <span className="font-semibold text-slate-600">{currentFolder.name}</span></p>
+                    <p className="text-[10px] text-slate-400">Selecione quais cartas da sua coleção pertencem à pasta: <span className="font-semibold text-slate-600">{currentFolder.name}</span></p>
                   </div>
 
-                  {tradeCards.length === 0 ? (
+                  {ownedCardsWithData.length === 0 ? (
                     <div className="flex-1 overflow-y-auto py-10 text-center bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center justify-center">
-                      <p className="text-xs text-slate-400">Você não possui nenhuma carta marcada para troca.</p>
-                      <p className="text-[9px] text-slate-300 uppercase mt-1">Marque-as primeiro na aba Home</p>
+                      <p className="text-xs text-slate-400">Você ainda não possui nenhuma carta na coleção.</p>
                     </div>
                   ) : (
                     <>
