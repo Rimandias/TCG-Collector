@@ -5,6 +5,7 @@ import { supabase } from '../supabase.js';
 import { asyncHandler } from '../asyncHandler.js';
 import { FALLBACK_CARDS, FALLBACK_SETS, generateMockCards, mapSetSeries } from '../fallbackData.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
+import { parsePrice } from '../tradeStore.js';
 
 export const tcgRouter = Router();
 
@@ -426,7 +427,7 @@ tcgRouter.get(
             // cada idioma informado entra na mesma estatística de variação/condição.
             for (const lang of Object.values<any>(languages)) {
               const quantity = typeof lang?.quantity === 'number' ? lang.quantity : 0;
-              const price = parseFloat(lang?.price);
+              const price = parsePrice(lang?.price);
               if (quantity <= 0 || !isFinite(price) || price <= 0) continue;
               buckets[variation] ??= {};
               buckets[variation][condition] ??= [];
@@ -435,7 +436,7 @@ tcgRouter.get(
             continue;
           }
           const quantity = typeof details?.quantity === 'number' ? details.quantity : 0;
-          const price = parseFloat(details?.price);
+          const price = parsePrice(details?.price);
           if (quantity <= 0 || !isFinite(price) || price <= 0) continue;
           buckets[variation] ??= {};
           buckets[variation][condition] ??= [];

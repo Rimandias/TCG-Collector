@@ -82,7 +82,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         onClick={() => setShowSplash(false)}
       >
         <div className="flex flex-col items-center gap-2">
-            <img src="/logo.svg" alt="TCG Collector" className="w-56 h-auto mb-4" />
+            <img src="/logo.svg" alt="TCG Colecionador" className="w-56 h-auto mb-4" />
             <p className="mt-20 text-[10px] text-slate-400 uppercase animate-pulse tracking-widest">Toque para iniciar</p>
         </div>
       </div>

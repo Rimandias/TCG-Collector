@@ -1,5 +1,5 @@
 {
-  "name": "PokéTracker - TCG Companion",
+  "name": "TCG Colecionador",
   "description": "A comprehensive Pokémon card tracking application to manage collections, track card conditions, and trade with friends.",
   "requestFramePermissions": [
     "camera"

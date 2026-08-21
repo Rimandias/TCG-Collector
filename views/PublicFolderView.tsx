@@ -9,7 +9,7 @@ import { CardViewMode } from '../components/CardItem';
 import VariationSlotTile, { VariationSlot } from '../components/VariationSlotTile';
 import Pagination, { PAGE_SIZE } from '../components/Pagination';
 import CardImage from '../components/CardImage';
-import { getCardGridClassName } from '../viewMode';
+import { getCardGridClassName, getInitialCardViewMode, saveCardViewMode } from '../viewMode';
 
 interface PublicFolderViewProps {
   token: string;
@@ -69,7 +69,7 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
       const cardInfo = cardsById[card.cardId];
       if (!cardInfo) continue;
       for (const item of card.items) {
-        result.push({ card: cardInfo, variation: item.variation, condition: item.condition, quantity: item.quantity, price: item.price });
+        result.push({ card: cardInfo, variation: item.variation, condition: item.condition, language: item.language, quantity: item.quantity, price: item.price });
       }
     }
     return result;
@@ -79,7 +79,12 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
   const [browseMode, setBrowseMode] = useState<'cards' | 'collections'>('cards');
   const [selectedEra, setSelectedEra] = useState<string | null>(null);
   const [selectedSetId, setSelectedSetId] = useState<string | null>(null);
-  const [cardsLayout, setCardsLayout] = useState<CardViewMode>('list');
+  // Grid por padrão (grid3 no mobile, grid6 no desktop - ver getInitialCardViewMode).
+  const [cardsLayout, setCardsLayoutState] = useState<CardViewMode>(getInitialCardViewMode);
+  const setCardsLayout = (mode: CardViewMode) => {
+    setCardsLayoutState(mode);
+    saveCardViewMode(mode);
+  };
   const [showFilters, setShowFilters] = useState(false);
   const [filterRarity, setFilterRarity] = useState('all');
   const [filterSet, setFilterSet] = useState('all');
@@ -207,7 +212,7 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
           />
           <div className="flex-1 min-w-0">
             <h1 className="text-sm font-semibold text-slate-800 truncate">{data.owner.username}</h1>
-            <p className="text-[10px] text-slate-400">compartilhou uma pasta com você via PokéTracker</p>
+            <p className="text-[10px] text-slate-400">compartilhou uma pasta com você via TCG Colecionador</p>
           </div>
           <button
             onClick={handleAddFriend}
@@ -429,7 +434,7 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
               <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             </div>
             <p className="text-sm font-semibold text-slate-700">Crie uma conta para interagir</p>
-            <p className="text-xs text-slate-400">Você pode visualizar esta pasta livremente, mas precisa de uma conta no PokéTracker para adicionar {data.owner.username} como amigo.</p>
+            <p className="text-xs text-slate-400">Você pode visualizar esta pasta livremente, mas precisa de uma conta no TCG Colecionador para adicionar {data.owner.username} como amigo.</p>
             <div className="flex gap-2 w-full mt-1">
               <button
                 onClick={() => setShowAccountPopup(false)}

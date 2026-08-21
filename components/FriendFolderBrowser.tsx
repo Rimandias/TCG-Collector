@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, LANGUAGE_OPTIONS, PokemonSet, UserCardData, VisibleFolder, VARIATION_TYPES, CardCondition } from '../types';
+import { Card, LANGUAGE_OPTIONS, PokemonSet, UserCardData, VisibleFolder, VARIATION_TYPES, CardCondition, getLanguageFlag } from '../types';
 import { getCompleteCardNumber, getConfirmedVariationTypes, compareCardsByCollectionThenNumber } from '../db';
 import { fetchCardsBySet, fetchSets, fetchSetVariantFlags, CardVariantInfo } from '../api';
 import { getFriendVisibleFolders, TradeItemSelection } from '../trades';
 import Pagination, { PAGE_SIZE } from './Pagination';
 import CardViewModeSelector from './CardViewModeSelector';
 import { CardViewMode } from './CardItem';
-import { getCardGridClassName } from '../viewMode';
+import { getCardGridClassName, getInitialCardViewMode, saveCardViewMode } from '../viewMode';
 import CardImage from './CardImage';
 import SetProgressBar from './SetProgressBar';
 import MasterSetTile from './MasterSetTile';
@@ -74,7 +74,13 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
   const [page, setPage] = useState(1);
   // Mesmo seletor lista/grade-3/grade-6 usado em Home, Coleção e nas próprias pastas
   // (TradesView) - padronização entre todas as visualizações de pasta do app.
-  const [cardsLayout, setCardsLayout] = useState<CardViewMode>('list');
+  // Grid por padrão (grid3 no mobile, grid6 no desktop - ver getInitialCardViewMode),
+  // preferência compartilhada com Home/Coleção/Trocas via localStorage.
+  const [cardsLayout, setCardsLayoutState] = useState<CardViewMode>(getInitialCardViewMode);
+  const setCardsLayout = (mode: CardViewMode) => {
+    setCardsLayoutState(mode);
+    saveCardViewMode(mode);
+  };
   const [showFilters, setShowFilters] = useState(false);
   const [filterRarity, setFilterRarity] = useState('all');
   const [filterSet, setFilterSet] = useState('all');
@@ -337,6 +343,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
     const key = selectionKey(line.cardId, line.variation, line.condition, line.language);
     const qty = selectedQuantities[key] || 0;
     const langLabel = languageLabel(line.language);
+    const langFlag = getLanguageFlag(line.language);
     const isSelected = qty > 0;
     const iDontOwn = !ownedCardIdSet.has(line.cardId);
     const isWishlisted = wishlistCardIdSet.has(line.cardId);
@@ -363,7 +370,8 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
             )}
           </h4>
           <p className="text-[9px] text-slate-400">
-            {line.card ? `#${getCompleteCardNumber(line.card)} · ` : ''}{line.variation} · {line.condition}{langLabel ? ` · ${langLabel}` : ''}
+            {line.card ? `#${getCompleteCardNumber(line.card)} · ` : ''}{line.variation} · {line.condition}
+            {langFlag && <span title={langLabel || undefined}> {langFlag}</span>}
           </p>
           <p className="text-[9px] text-slate-400">
             Disponível: {line.availableQuantity} · R${line.price.toFixed(2)}/un
@@ -401,6 +409,8 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
   const renderGridTile = (line: ResolvedLine) => {
     const key = selectionKey(line.cardId, line.variation, line.condition, line.language);
     const qty = selectedQuantities[key] || 0;
+    const langLabel = languageLabel(line.language);
+    const langFlag = getLanguageFlag(line.language);
     const isSelected = qty > 0;
     const iDontOwn = !ownedCardIdSet.has(line.cardId);
     const isWishlisted = wishlistCardIdSet.has(line.cardId);
@@ -423,7 +433,10 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
             Não possuo
           </span>
         )}
-        <p className="text-[8px] text-slate-400 text-center leading-tight">{line.variation} · {line.condition}</p>
+        <p className="text-[8px] text-slate-400 text-center leading-tight">
+          {line.variation} · {line.condition}
+          {langFlag && <span title={langLabel || undefined}> {langFlag}</span>}
+        </p>
         <div className="flex items-center bg-slate-50 border border-slate-200 rounded-full overflow-hidden h-6 w-full justify-between flex-shrink-0">
           <button
             onClick={() => setLineQuantity(line, qty - 1)}
