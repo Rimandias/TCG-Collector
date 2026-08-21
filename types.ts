@@ -58,7 +58,9 @@ export const LANGUAGE_FLAGS: Record<string, string> = {
   PTEN: '🇧🇷🇺🇸',
 };
 
-export const getLanguageFlag = (code?: string): string | null => (code ? LANGUAGE_FLAGS[code] || null : null);
+// Sem idioma registrado (ex: carta nunca aberta em +Info), assume o idioma padrão do app (BR)
+// pra sempre mostrar alguma bandeira em vez de deixar a tag sem identificação nenhuma.
+export const getLanguageFlag = (code?: string): string | null => LANGUAGE_FLAGS[code || 'BR'] || null;
 
 export interface LanguageDetails {
   quantity: number;
