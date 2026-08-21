@@ -126,7 +126,7 @@ function applySelection(
 export async function getVisibleFolders(friendUserId: string): Promise<VisibleFolder[]> {
   const { data: folders, error } = await supabase
     .from('trade_folders')
-    .select('id, name, variation_selections')
+    .select('id, name, variation_selections, hidden_card_ids')
     .eq('user_id', friendUserId)
     .eq('visible_to_friends', true);
   if (error) throw error;
@@ -155,7 +155,8 @@ export async function getVisibleFolders(friendUserId: string): Promise<VisibleFo
   }
 
   return folders.map((folder) => {
-    const cardIds = cardIdsByFolder[folder.id] || [];
+    const hiddenCardIds = new Set<string>(Array.isArray((folder as any).hidden_card_ids) ? (folder as any).hidden_card_ids : []);
+    const cardIds = (cardIdsByFolder[folder.id] || []).filter((cardId) => !hiddenCardIds.has(cardId));
     const variationSelections = (folder as any).variation_selections || {};
     const cards = cardIds
       .map((cardId) => ({

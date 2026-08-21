@@ -121,6 +121,10 @@ export interface TradeFolder {
   cardIds: string[];
   visibleToFriends: boolean;
   variationSelections?: Record<string, TradeFolderVariationSelection[]>;
+  // Cartas que continuam na Pasta de Repetidas mas foram ocultadas manualmente pelo dono -
+  // nunca aparecem para outra pessoa (nem pela pasta de amigos, nem pelo futuro link
+  // público), ainda que continuem contando para a regra automática de duplicatas.
+  hiddenCardIds?: string[];
 }
 
 export interface TradeItem {

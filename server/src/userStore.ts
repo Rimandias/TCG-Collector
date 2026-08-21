@@ -100,7 +100,7 @@ export interface FullUser {
   isPremium: boolean;
   ownedCards: Record<string, { cardId: string; isOwned: boolean; isForTrade: boolean; variations: Record<string, any> }>;
   friends: FriendEntry[];
-  folders: { id: string; name: string; cardIds: string[]; visibleToFriends: boolean; variationSelections: Record<string, TradeFolderVariationSelection[]> }[];
+  folders: { id: string; name: string; cardIds: string[]; visibleToFriends: boolean; variationSelections: Record<string, TradeFolderVariationSelection[]>; hiddenCardIds: string[] }[];
   wishlist: string[];
 }
 
@@ -118,7 +118,7 @@ export async function assembleFullUser(userId: string, email: string): Promise<F
       supabase.from('user_cards').select('card_id, is_owned, is_for_trade, variations').eq('user_id', userId).range(from, to)
     ),
     supabase.from('friends').select('friend_user_id, added_at').eq('user_id', userId).order('added_at', { ascending: true }),
-    supabase.from('trade_folders').select('id, name, visible_to_friends, variation_selections').eq('user_id', userId),
+    supabase.from('trade_folders').select('id, name, visible_to_friends, variation_selections, hidden_card_ids').eq('user_id', userId),
     supabase.from('wishlist').select('card_id').eq('user_id', userId),
   ]);
   if (friendsRes.error) throw friendsRes.error;
@@ -178,7 +178,7 @@ async function resolveFriends(userId: string, friendRows: { friend_user_id: stri
   }));
 }
 
-async function resolveFolders(folderRows: { id: string; name: string; visible_to_friends: boolean; variation_selections: any }[]): Promise<FullUser['folders']> {
+async function resolveFolders(folderRows: { id: string; name: string; visible_to_friends: boolean; variation_selections: any; hidden_card_ids: any }[]): Promise<FullUser['folders']> {
   const folderIds = folderRows.map((f) => f.id);
   const folderCardsByFolder: Record<string, string[]> = {};
   if (folderIds.length > 0) {
@@ -197,6 +197,7 @@ async function resolveFolders(folderRows: { id: string; name: string; visible_to
     visibleToFriends: f.visible_to_friends,
     cardIds: folderCardsByFolder[f.id] || [],
     variationSelections: f.variation_selections || {},
+    hiddenCardIds: Array.isArray(f.hidden_card_ids) ? f.hidden_card_ids : [],
   }));
 }
 
@@ -208,7 +209,7 @@ export interface UserDataInput {
   avatarUrl?: string;
   ownedCards?: Record<string, { isOwned?: boolean; isForTrade?: boolean; variations?: Record<string, any> }>;
   cardsDiff?: { changed: Record<string, { isOwned?: boolean; isForTrade?: boolean; variations?: Record<string, any> }>; removed: string[] };
-  folders?: { id: string; name: string; cardIds: string[]; visibleToFriends?: boolean; variationSelections?: Record<string, TradeFolderVariationSelection[]> }[];
+  folders?: { id: string; name: string; cardIds: string[]; visibleToFriends?: boolean; variationSelections?: Record<string, TradeFolderVariationSelection[]>; hiddenCardIds?: string[] }[];
   wishlist?: string[];
 }
 
@@ -382,9 +383,10 @@ async function replaceUserDataUnlocked(userId: string, data: UserDataInput): Pro
         name: f.name,
         visible_to_friends: !!f.visibleToFriends,
         variation_selections: f.variationSelections || {},
+        hidden_card_ids: f.hiddenCardIds || [],
       })),
       onConflict: 'id',
-      compareColumns: ['name', 'visible_to_friends', 'variation_selections'],
+      compareColumns: ['name', 'visible_to_friends', 'variation_selections', 'hidden_card_ids'],
     });
     // trade_folder_cards é removido em cascata quando a linha de trade_folders correspondente
     // é apagada, então só falta sincronizar as cartas das pastas que continuam existindo.
