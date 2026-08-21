@@ -553,6 +553,20 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
       const normalized = getNormalizedVariations(data.variations);
       Object.entries(normalized).forEach(([variation, conditionsObj]) => {
         Object.entries(conditionsObj).forEach(([condition, details]) => {
+          // Condição com idioma detalhado (ver +Info): quantity/price agregados no nível de
+          // condição podem não refletir preços distintos por idioma - um slot por idioma,
+          // cada um com sua própria quantidade/preço, igual entriesFromVariations no backend
+          // (tradeStore.ts) e getCardEstimatedValue (db.ts). Sem isso, preço/quantidade exibidos
+          // aqui podiam ficar errados justamente pra cartas com esse detalhamento.
+          if (details.languages && Object.keys(details.languages).length > 0) {
+            Object.values(details.languages).forEach((langDetails: any) => {
+              if (langDetails.quantity > 0) {
+                const price = parseFloat(langDetails.price || '');
+                slots.push({ card, variation, condition, quantity: langDetails.quantity, price: isNaN(price) ? 0 : price });
+              }
+            });
+            return;
+          }
           if (details.quantity > 0) {
             const price = parseFloat(details.price || '');
             slots.push({ card, variation, condition, quantity: details.quantity, price: isNaN(price) ? 0 : price });

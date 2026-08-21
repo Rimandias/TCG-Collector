@@ -57,16 +57,22 @@ const Tags: React.FC<{ slot: VariationSlot; size: 'sm' | 'xs' }> = ({ slot, size
 // quantidade/preço/tags, mesma regra usada pela pasta de amigos (ver FriendFolderBrowser).
 const VariationSlotTile: React.FC<VariationSlotTileProps> = ({ slot, viewMode, hidden, onToggleHidden, onClick }) => {
   const { card } = slot;
+  // Mesmo efeito holográfico do Master Set (index.css .holo-shine): só reverse foil de
+  // verdade, nunca foil comum - reverse é a impressão que reflete luz por trás do desenho.
+  const isReverseFoil = slot.variation === 'Reverse Foil';
 
   if (viewMode === 'list') {
     return (
       <div className={`flex items-center gap-3 bg-white border rounded-xl p-2 shadow-sm transition-opacity ${hidden ? 'border-slate-100 opacity-50' : 'border-slate-100'}`}>
-        <CardImage
-          src={card.imageUrl}
-          alt={card.name}
-          onClick={onClick}
-          className="w-12 h-16 rounded-lg object-contain bg-slate-50 border border-slate-100/40 flex-shrink-0 cursor-pointer"
-        />
+        <div className="relative w-12 h-16 rounded-lg overflow-hidden flex-shrink-0">
+          <CardImage
+            src={card.imageUrl}
+            alt={card.name}
+            onClick={onClick}
+            className="w-full h-full object-contain bg-slate-50 border border-slate-100/40 cursor-pointer"
+          />
+          {isReverseFoil && <div className="holo-shine absolute inset-0 pointer-events-none" />}
+        </div>
         <div className="flex-1 min-w-0" onClick={onClick}>
           <h4 className="text-xs font-semibold text-slate-800 truncate cursor-pointer hover:text-[#646B99] transition-colors">{card.name}</h4>
           <p className="text-[9px] text-slate-400 mb-1">#{getCompleteCardNumber(card)}</p>
@@ -102,12 +108,15 @@ const VariationSlotTile: React.FC<VariationSlotTileProps> = ({ slot, viewMode, h
           {hidden ? <EyeOffIcon /> : <EyeIcon />}
         </button>
       )}
-      <CardImage
-        src={card.imageUrl}
-        alt={card.name}
-        onClick={onClick}
-        className="w-full aspect-[5/7] rounded-lg object-contain bg-slate-50 border border-slate-100/40 cursor-pointer"
-      />
+      <div className="relative w-full aspect-[5/7] rounded-lg overflow-hidden">
+        <CardImage
+          src={card.imageUrl}
+          alt={card.name}
+          onClick={onClick}
+          className="w-full h-full object-contain bg-slate-50 border border-slate-100/40 cursor-pointer"
+        />
+        {isReverseFoil && <div className="holo-shine absolute inset-0 pointer-events-none" />}
+      </div>
       <p onClick={onClick} className={`text-slate-700 font-semibold truncate w-full text-center cursor-pointer hover:text-[#646B99] transition-colors ${isCompact ? 'text-[8px]' : 'text-[9px]'}`}>
         {card.name}
       </p>
