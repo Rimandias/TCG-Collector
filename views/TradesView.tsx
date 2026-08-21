@@ -593,18 +593,24 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
           // cada um com sua própria quantidade/preço, igual entriesFromVariations no backend
           // (tradeStore.ts) e getCardEstimatedValue (db.ts). Sem isso, preço/quantidade exibidos
           // aqui podiam ficar errados justamente pra cartas com esse detalhamento.
+          // Regra da Pasta de Repetidas: SEMPRE preserva 1 cópia de cada combinação (nunca
+          // oferece a última unidade sem querer) - só entra aqui quem tem MAIS de 1, e o que
+          // aparece/fica disponível pra troca é sempre (quantidade real - 1), nunca a
+          // quantidade cheia. Uma carta com só 1 cópia não pertence a esta pasta - quem quiser
+          // trocar/vender uma unidade única precisa colocá-la manualmente numa pasta
+          // personalizada (aí sim expõe a quantidade real).
           if (details.languages && Object.keys(details.languages).length > 0) {
             Object.values(details.languages).forEach((langDetails: any) => {
-              if (langDetails.quantity > 0) {
+              if (langDetails.quantity > 1) {
                 const price = parseFloat(langDetails.price || '');
-                slots.push({ card, variation, condition, quantity: langDetails.quantity, price: isNaN(price) ? 0 : price });
+                slots.push({ card, variation, condition, quantity: langDetails.quantity - 1, price: isNaN(price) ? 0 : price });
               }
             });
             return;
           }
-          if (details.quantity > 0) {
+          if (details.quantity > 1) {
             const price = parseFloat(details.price || '');
-            slots.push({ card, variation, condition, quantity: details.quantity, price: isNaN(price) ? 0 : price });
+            slots.push({ card, variation, condition, quantity: details.quantity - 1, price: isNaN(price) ? 0 : price });
           }
         });
       });
@@ -1550,6 +1556,37 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                 ))}
                               </div>
                             )
+                          ) : isDuplicates ? (
+                            // Pasta de Repetidas dentro de "Coleções": mesmos slots (1 por
+                            // carta+variação+qualidade, com 1 unidade sempre reservada) da aba
+                            // "Todas as Cartas", só que restritos a este set específico.
+                            (() => {
+                              const setSlots = duplicateSlots.filter(
+                                slot => slot.card.set.id === selectedFolderSetId && (folderSetTierFilter !== 'base' || !slot.card.isSecret)
+                              );
+                              return setSlots.length === 0 ? (
+                                <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-100">
+                                  <p className="text-slate-400 font-medium text-xs uppercase tracking-widest">Nenhuma carta nesta coleção</p>
+                                  <p className="text-[10px] text-slate-300 mt-1 uppercase tracking-wider">corresponde aos filtros ativos</p>
+                                </div>
+                              ) : (
+                                <div className="space-y-3">
+                                  <div className={folderCardsLayout === 'list' ? 'grid gap-3' : getCardGridClassName(folderCardsLayout)}>
+                                    {setSlots.slice((setCardsPage - 1) * PAGE_SIZE, setCardsPage * PAGE_SIZE).map((slot, i) => (
+                                      <VariationSlotTile
+                                        key={`${slot.card.id}::${slot.variation}::${slot.condition}::${i}`}
+                                        slot={slot}
+                                        viewMode={folderCardsLayout}
+                                        hidden={hiddenCardIds.has(slot.card.id)}
+                                        onToggleHidden={() => handleToggleCardHidden(slot.card.id)}
+                                        onClick={() => setEditingCard(slot.card)}
+                                      />
+                                    ))}
+                                  </div>
+                                  <Pagination page={setCardsPage} totalPages={Math.max(1, Math.ceil(setSlots.length / PAGE_SIZE))} onPageChange={setSetCardsPage} />
+                                </div>
+                              );
+                            })()
                           ) : setCardsInFolder.length === 0 ? (
                             <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-100">
                               <p className="text-slate-400 font-medium text-xs uppercase tracking-widest">Nenhuma carta nesta coleção</p>

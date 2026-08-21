@@ -122,6 +122,21 @@ function applySelection(
   return result;
 }
 
+// O id da Pasta de Repetidas (automática) é sempre `default-${userId}` (ver defaultFolderId
+// no frontend, TradesView.tsx) - nunca criado à mão pelo usuário (pastas personalizadas usam
+// `${userId}-${timestamp}`), então essa checagem por convenção de nome é suficiente e não
+// depende de nenhum dado que o cliente possa forjar de forma prejudicial a outra pessoa (o
+// pior caso de burlar isso é o próprio dono expor mais da própria coleção, nunca de terceiros).
+const isAutoRepeatFolder = (folderId: string, ownerUserId: string): boolean => folderId === `default-${ownerUserId}`;
+
+// Pasta de Repetidas: nunca expõe a última cópia de uma combinação variação/condição/idioma -
+// sempre reserva 1 unidade pro dono manter na própria coleção, então só oferece (quantidade
+// real - 1). Pastas personalizadas não passam por aqui: lá o usuário decidiu manualmente o que
+// incluir, podendo ser inclusive uma unidade só (é o caminho pra isso, por design).
+function reserveOneCopy(entries: VariationEntry[]): VariationEntry[] {
+  return entries.map((e) => ({ ...e, quantity: e.quantity - 1 })).filter((e) => e.quantity > 0);
+}
+
 // Pastas de um amigo marcadas como visíveis, com a quantidade/condição/preço reais das cartas nelas.
 export async function getVisibleFolders(friendUserId: string): Promise<VisibleFolder[]> {
   const { data: folders, error } = await supabase
@@ -158,11 +173,13 @@ export async function getVisibleFolders(friendUserId: string): Promise<VisibleFo
     const hiddenCardIds = new Set<string>(Array.isArray((folder as any).hidden_card_ids) ? (folder as any).hidden_card_ids : []);
     const cardIds = (cardIdsByFolder[folder.id] || []).filter((cardId) => !hiddenCardIds.has(cardId));
     const variationSelections = (folder as any).variation_selections || {};
+    const isAuto = isAutoRepeatFolder(folder.id, friendUserId);
     const cards = cardIds
-      .map((cardId) => ({
-        cardId,
-        items: applySelection(entriesFromVariations(variationsByCard[cardId]), variationSelections[cardId]),
-      }))
+      .map((cardId) => {
+        let items = applySelection(entriesFromVariations(variationsByCard[cardId]), variationSelections[cardId]);
+        if (isAuto) items = reserveOneCopy(items);
+        return { cardId, items };
+      })
       .filter((c) => c.items.length > 0);
     return { id: folder.id, name: folder.name, cards };
   });
@@ -236,11 +253,13 @@ export async function getPublicFolderByToken(token: string): Promise<PublicFolde
   }
 
   const variationSelections = (folder as any).variation_selections || {};
+  const isAuto = isAutoRepeatFolder(folder.id, folder.user_id);
   const cards = cardIds
-    .map((cardId) => ({
-      cardId,
-      items: applySelection(entriesFromVariations(variationsByCard[cardId]), variationSelections[cardId]),
-    }))
+    .map((cardId) => {
+      let items = applySelection(entriesFromVariations(variationsByCard[cardId]), variationSelections[cardId]);
+      if (isAuto) items = reserveOneCopy(items);
+      return { cardId, items };
+    })
     .filter((c) => c.items.length > 0);
 
   return { ownerUserId: folder.user_id, name: folder.name, cards };
