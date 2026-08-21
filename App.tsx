@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useDeferredValue, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useDeferredValue, Suspense, lazy } from 'react';
 import { User, UserCardData, AppTab, PokemonSet } from './types';
 import { fetchCurrentUser, persistUser, logout as clearSession, warmBackend } from './auth';
 import { supabase } from './supabaseClient';
@@ -17,6 +17,10 @@ const CollectionView = lazy(() => import('./views/CollectionView'));
 const TradesView = lazy(() => import('./views/TradesView'));
 const DecksView = lazy(() => import('./views/DecksView'));
 const SettingsView = lazy(() => import('./views/SettingsView'));
+// Link público de pasta (/f/:token) - página sem login nem menu do app, então nem entra no
+// fluxo normal de sessão/abas abaixo; carregada sob demanda porque a esmagadora maioria das
+// visitas ao app não passa por um link compartilhado.
+const PublicFolderView = lazy(() => import('./views/PublicFolderView'));
 
 const ViewLoadingFallback: React.FC = () => (
   <div className="flex items-center justify-center h-full py-20">
@@ -61,6 +65,14 @@ const App: React.FC = () => {
   // sendo salvo - navegadores não permitem customizar o texto do beforeunload nativo, então
   // esse é o único jeito de perguntar "quer mesmo sair?" com uma mensagem de verdade.
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+
+  // Não usa react-router (o app inteiro navega por estado de aba, nunca por URL) - esse é o
+  // único caminho que precisa mesmo de uma URL de verdade, pra poder ser aberto por quem nunca
+  // usou o app. Calculado uma vez (a URL não muda durante a vida da SPA).
+  const publicFolderToken = useMemo(() => {
+    const match = window.location.pathname.match(/^\/f\/([^/]+)\/?$/);
+    return match ? decodeURIComponent(match[1]) : null;
+  }, []);
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -223,6 +235,20 @@ const App: React.FC = () => {
   const handleTabChange = (tab: AppTab) => {
     setActiveTab(tab);
   };
+
+  if (publicFolderToken) {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center h-screen bg-white">
+            <div className="w-10 h-10 border-4 border-[#646B99] border-t-transparent rounded-full animate-spin" />
+          </div>
+        }
+      >
+        <PublicFolderView token={publicFolderToken} />
+      </Suspense>
+    );
+  }
 
   if (checkingSession) {
     return (

@@ -26,6 +26,41 @@ export const getFriendVisibleFolders = async (friendUserId: string): Promise<Vis
   return body.folders || [];
 };
 
+// Gera (ou devolve o já existente) token de link público de uma pasta - só o dono da pasta
+// consegue, via token de sessão (ver requireAuth/share.ts no backend).
+export const createFolderShareLink = async (folderId: string): Promise<{ token?: string; error?: string }> => {
+  const response = await fetch(`${API_BASE}/share/folders/${encodeURIComponent(folderId)}`, {
+    method: 'POST',
+    headers: await authHeaders(),
+  });
+  if (!response.ok) {
+    return { error: await parseErrorMessage(response, 'Não foi possível gerar o link.') };
+  }
+  const body = await response.json();
+  return { token: body.token };
+};
+
+export const revokeFolderShareLink = async (folderId: string): Promise<boolean> => {
+  const response = await fetch(`${API_BASE}/share/folders/${encodeURIComponent(folderId)}`, {
+    method: 'DELETE',
+    headers: await authHeaders(),
+  });
+  return response.ok;
+};
+
+export interface PublicFolderData {
+  folderName: string;
+  owner: { username: string; avatarUrl: string; friendCode: string };
+  cards: VisibleFolder['cards'];
+}
+
+// Único fetch do app que nunca manda Authorization - é a página pública, acessível sem login.
+export const getPublicFolder = async (token: string): Promise<PublicFolderData | null> => {
+  const response = await fetch(`${API_BASE}/share/${encodeURIComponent(token)}`);
+  if (!response.ok) return null;
+  return response.json();
+};
+
 export interface TradeItemSelection {
   cardId: string;
   variation: string;

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, Card, UserCardData, TradeFolder, TradeFolderVariationSelection, Friend, Trade, CardCondition, VARIATION_TYPES, LANGUAGE_OPTIONS } from '../types';
 import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getCardEstimatedValue, getVariationSubtotal, getConfirmedVariationTypes, getVariationSlot } from '../db';
 import { fetchCardsBySet, fetchSets, fetchSetVariantFlags, CardVariantInfo } from '../api';
-import { createTradeRequest, getMyTrades, TradeItemSelection } from '../trades';
+import { createTradeRequest, getMyTrades, createFolderShareLink, TradeItemSelection } from '../trades';
 import { fetchCurrentUser } from '../auth';
 import CardModal from '../components/CardModal';
 import VariationSlotTile, { VariationSlot } from '../components/VariationSlotTile';
@@ -774,6 +774,62 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     });
   };
 
+  // Link público: o token vem do backend (rota dedicada, ver trades.ts/server/routes/share.ts),
+  // nunca do payload de PUT /users/me - guardado à parte de `folders` (que segue o pipeline de
+  // debounce/save normal) pra não misturar os dois fluxos. `folder.shareToken` (vindo do GET
+  // /users/me) é o valor inicial; esse estado só existe pra refletir na hora um link recém-gerado.
+  const [shareTokensById, setShareTokensById] = useState<Record<string, string>>({});
+  const [shareLinkBusyId, setShareLinkBusyId] = useState<string | null>(null);
+  const [copiedFolderId, setCopiedFolderId] = useState<string | null>(null);
+
+  const resolveFolderShareToken = (folder: TradeFolder): string | null =>
+    shareTokensById[folder.id] ?? folder.shareToken ?? null;
+
+  const handleCopyShareLink = async (folder: TradeFolder) => {
+    let token = resolveFolderShareToken(folder);
+    if (!token) {
+      setShareLinkBusyId(folder.id);
+      const result = await createFolderShareLink(folder.id);
+      setShareLinkBusyId(null);
+      if (!result.token) return;
+      token = result.token;
+      setShareTokensById(prev => ({ ...prev, [folder.id]: token! }));
+    }
+    const url = `${window.location.origin}/f/${token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedFolderId(folder.id);
+      setTimeout(() => setCopiedFolderId(current => (current === folder.id ? null : current)), 2000);
+    } catch {
+      // Clipboard indisponível (ex: contexto não seguro) - sem feedback visual, mas sem quebrar nada.
+    }
+  };
+
+  const renderShareLinkButton = (folder: TradeFolder | undefined) => {
+    if (!folder) return null;
+    const busy = shareLinkBusyId === folder.id;
+    const copied = copiedFolderId === folder.id;
+    return (
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          handleCopyShareLink(folder);
+        }}
+        disabled={busy}
+        className={`p-1.5 rounded-lg transition-all ${copied ? 'text-emerald-600 bg-emerald-50' : 'text-slate-300 hover:text-[#646B99] hover:bg-[#646B99]/5'} disabled:opacity-50`}
+        title={copied ? 'Link copiado!' : 'Copiar link público desta pasta (não exige login para visualizar)'}
+      >
+        {busy ? (
+          <span className="block w-4 h-4 border-2 border-[#646B99] border-t-transparent rounded-full animate-spin" />
+        ) : copied ? (
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        )}
+      </button>
+    );
+  };
+
   return (
     // Sem max-width fixo: essa era a razão de Trocas ficar preso ao layout mobile mesmo no
     // desktop, diferente de Home/Coleção (que só usam padding, sem teto de largura próprio) -
@@ -876,6 +932,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                     <span className="text-[9px] bg-[#646B99]/10 text-[#646B99] px-2 py-0.5 rounded uppercase tracking-wider font-semibold">
                       Automática
                     </span>
+                    {renderShareLinkButton(folders.find(f => f.id === DEFAULT_FOLDER_ID))}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -953,6 +1010,8 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                         <span className="text-xs bg-slate-50 border border-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-medium" onClick={() => setSelectedFolderId(folder.id)}>
                           {validCardsCount}
                         </span>
+
+                        {renderShareLinkButton(folder)}
 
                         <button
                           onClick={(e) => {
