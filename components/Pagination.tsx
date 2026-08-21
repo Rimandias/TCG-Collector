@@ -32,6 +32,9 @@ const Pagination: React.FC<PaginationProps> = ({ page, totalPages, onPageChange 
   );
 };
 
-export const PAGE_SIZE = 20;
+// Múltiplo de 6 (maior contagem de colunas usada nas grids, ver getCardGridClassName) pra
+// toda página cheia fechar a última linha certinho, tanto no grid-3 quanto no grid-6 - com
+// 20 a última linha sempre sobrava com espaço vazio (20 % 6 = 2), parecendo "faltando cards".
+export const PAGE_SIZE = 24;
 
 export default Pagination;

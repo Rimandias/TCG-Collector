@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, Card, UserCardData, TradeFolder, TradeFolderVariationSelection, Friend, Trade, CardCondition, VARIATION_TYPES, LANGUAGE_OPTIONS } from '../types';
-import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getCardEstimatedValue, getVariationSubtotal, getConfirmedVariationTypes, getVariationSlot, compareCardsByCollectionThenNumber, parseUserPrice } from '../db';
+import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getVariationSubtotal, getConfirmedVariationTypes, getVariationSlot, compareCardsByCollectionThenNumber, parseUserPrice } from '../db';
 import { fetchCardsBySet, fetchSets, fetchSetVariantFlags, CardVariantInfo } from '../api';
 import { createTradeRequest, getMyTrades, createFolderShareLink, TradeItemSelection } from '../trades';
 import { fetchCurrentUser } from '../auth';
@@ -572,7 +572,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     return [...base, ...extra];
   }, [activeFolderCards]);
 
-  // Paginação (20 por página) da lista "Todas as Cartas" da pasta ativa
+  // Paginação (ver PAGE_SIZE) da lista "Todas as Cartas" da pasta ativa
   const [folderCardsPage, setFolderCardsPage] = useState(1);
   useEffect(() => {
     setFolderCardsPage(1);
@@ -629,7 +629,40 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     return duplicateSlots.slice(start, start + PAGE_SIZE);
   }, [duplicateSlots, folderCardsPage]);
 
-  // Paginação (20 por página) da lista de cartas de uma coleção específica (modo "Coleções")
+  // Pasta personalizada: mesma ideia de slots da Pasta de Repetidas acima, mas sem a reserva
+  // de 1 cópia - o dono escolheu manualmente colocar a carta aqui, então mostra a quantidade real.
+  const customFolderSlots = useMemo<VariationSlot[]>(() => {
+    if (selectedFolderId === 'duplicates' || selectedFolderId === 'wishlist') return [];
+    const slots: VariationSlot[] = [];
+    for (const { card, data } of filteredFolderCards) {
+      const normalized = getNormalizedVariations(data.variations);
+      Object.entries(normalized).forEach(([variation, conditionsObj]) => {
+        Object.entries(conditionsObj).forEach(([condition, details]) => {
+          if (details.languages && Object.keys(details.languages).length > 0) {
+            Object.entries(details.languages).forEach(([language, langDetails]: [string, any]) => {
+              if (langDetails.quantity > 0) {
+                const price = parseUserPrice(langDetails.price);
+                slots.push({ card, variation, condition, language, quantity: langDetails.quantity, price: isNaN(price) ? 0 : price });
+              }
+            });
+            return;
+          }
+          if (details.quantity > 0) {
+            const price = parseUserPrice(details.price);
+            slots.push({ card, variation, condition, quantity: details.quantity, price: isNaN(price) ? 0 : price });
+          }
+        });
+      });
+    }
+    return slots;
+  }, [selectedFolderId, filteredFolderCards]);
+
+  const paginatedCustomFolderSlots = useMemo(() => {
+    const start = (folderCardsPage - 1) * PAGE_SIZE;
+    return customFolderSlots.slice(start, start + PAGE_SIZE);
+  }, [customFolderSlots, folderCardsPage]);
+
+  // Paginação (ver PAGE_SIZE) da lista de cartas de uma coleção específica (modo "Coleções")
   const [setCardsPage, setSetCardsPage] = useState(1);
   useEffect(() => {
     setSetCardsPage(1);
@@ -1150,7 +1183,6 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                 <h4 onClick={() => setEditingCard(card)} className="text-slate-700 font-semibold truncate w-full text-center text-[9px] mt-1 cursor-pointer hover:text-[#646B99] transition-colors">
                   {card.name}
                 </h4>
-                <p className="text-[8px] text-emerald-500 font-semibold">R${getCardEstimatedValue(data.variations).toFixed(2)}</p>
               </div>
             );
 
@@ -1191,8 +1223,8 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100/50 flex items-center justify-between">
                   <div>
                     <p className="text-xs text-slate-500">
-                      {isDuplicates 
-                        ? 'Todas as cartas que você tem mais de 1 cópia ou marcou para troca estão aqui automaticamente.'
+                      {isDuplicates
+                        ? 'Todas as cartas e variações que você tem mais de 1 cópia estão aqui automaticamente.'
                         : isWishlist 
                           ? 'Todas as cartas que você adicionou à sua lista clicando no ícone de coração.'
                           : 'Uma seleção de suas cartas de troca organizadas nesta pasta.'}
@@ -1365,6 +1397,34 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                         <Pagination page={folderCardsPage} totalPages={Math.max(1, Math.ceil(duplicateSlots.length / PAGE_SIZE))} onPageChange={setFolderCardsPage} />
                       </div>
                     )
+                  ) : !isWishlist ? (
+                    // --- PASTA PERSONALIZADA: mesmo layout de slots da Pasta de Repetidas
+                    // (1 por carta+variação+qualidade, tags, bandeira, holo reverse foil), mas
+                    // sem a reserva de 1 cópia - aqui sempre mostra a quantidade real, já que o
+                    // dono escolheu manualmente colocar a carta aqui pra troca/venda. ---
+                    customFolderSlots.length === 0 ? (
+                      <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 mx-auto text-slate-200 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                        <p className="text-slate-400 font-medium text-sm">Nenhuma carta encontrada</p>
+                        <p className="text-[10px] text-slate-300 mt-1 uppercase tracking-wider">
+                          Tente ajustar os filtros ou a pesquisa
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className={folderCardsLayout === 'list' ? 'grid gap-3' : getCardGridClassName(folderCardsLayout)}>
+                          {paginatedCustomFolderSlots.map((slot, i) => (
+                            <VariationSlotTile
+                              key={`${slot.card.id}::${slot.variation}::${slot.condition}::${i}`}
+                              slot={slot}
+                              viewMode={folderCardsLayout}
+                              onClick={() => setEditingCard(slot.card)}
+                            />
+                          ))}
+                        </div>
+                        <Pagination page={folderCardsPage} totalPages={Math.max(1, Math.ceil(customFolderSlots.length / PAGE_SIZE))} onPageChange={setFolderCardsPage} />
+                      </div>
+                    )
                   ) : filteredFolderCards.length === 0 ? (
                     <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-100">
                       <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 mx-auto text-slate-200 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
@@ -1399,7 +1459,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                               {card.name}
                             </h4>
                             <p className="text-[9px] text-slate-400">{card.rarity} • #{getCompleteCardNumber(card)} ({card.set.name})</p>
-                            
+
                              <div className="flex flex-wrap gap-1 mt-2">
                               {(() => {
                                 const normalized = getNormalizedVariations(data.variations);
@@ -1409,17 +1469,16 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                     if (details.quantity > 0) {
                                       const isOnlyOne = details.quantity === 1;
                                       badges.push(
-                                        <span 
-                                          key={`${varType}-${cond}`} 
+                                        <span
+                                          key={`${varType}-${cond}`}
                                           className={`px-1.5 py-0.5 border rounded text-[8px] font-medium flex items-center gap-1 ${
-                                            isOnlyOne 
-                                              ? 'bg-amber-50 border-amber-200 text-amber-700 font-semibold' 
+                                            isOnlyOne
+                                              ? 'bg-amber-50 border-amber-200 text-amber-700 font-semibold'
                                               : 'bg-slate-50 border-slate-100 text-[#646B99]'
                                           }`}
                                         >
                                           {isOnlyOne && <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />}
                                           {varType} {cond}: {details.quantity}
-                                          {details.price ? ` (R$${details.price})` : ''}
                                           {isOnlyOne && ' (Única!)'}
                                         </span>
                                       );
@@ -1446,39 +1505,19 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                           </div>
 
                           <div className="flex flex-col items-end gap-1">
-                            <span className="text-[10px] font-semibold text-emerald-500">
-                              R${getCardEstimatedValue(data.variations).toFixed(2)}
-                            </span>
-                            
-                            {isWishlist ? (
-                              <button 
-                                onClick={() => {
-                                  const updatedWishlist = (user.wishlist || []).filter(id => id !== card.id);
-                                  onUpdateUser({
-                                    ...user,
-                                    wishlist: updatedWishlist
-                                  });
-                                }}
-                                className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Remover da lista de desejos"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                              </button>
-                            ) : (
-                              <button 
-                                onClick={() => {
-                                  if (isDuplicates) {
-                                    handleRemoveFromTrade(card.id);
-                                  } else if (currentFolder) {
-                                    handleRemoveFromFolder(currentFolder.id, card.id);
-                                  }
-                                }}
-                                className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                title={isDuplicates ? "Remover de todas as trocas" : "Remover desta pasta"}
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                              </button>
-                            )}
+                            <button
+                              onClick={() => {
+                                const updatedWishlist = (user.wishlist || []).filter(id => id !== card.id);
+                                onUpdateUser({
+                                  ...user,
+                                  wishlist: updatedWishlist
+                                });
+                              }}
+                              className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Remover da lista de desejos"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -1593,6 +1632,34 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                 </div>
                               );
                             })()
+                          ) : !isWishlist ? (
+                            // Pasta personalizada dentro de "Coleções": mesmo layout de slots
+                            // da Pasta de Repetidas, sem a reserva de 1 cópia.
+                            (() => {
+                              const setSlots = customFolderSlots.filter(
+                                slot => slot.card.set.id === selectedFolderSetId && (folderSetTierFilter !== 'base' || !slot.card.isSecret)
+                              );
+                              return setSlots.length === 0 ? (
+                                <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-100">
+                                  <p className="text-slate-400 font-medium text-xs uppercase tracking-widest">Nenhuma carta nesta coleção</p>
+                                  <p className="text-[10px] text-slate-300 mt-1 uppercase tracking-wider">corresponde aos filtros ativos</p>
+                                </div>
+                              ) : (
+                                <div className="space-y-3">
+                                  <div className={folderCardsLayout === 'list' ? 'grid gap-3' : getCardGridClassName(folderCardsLayout)}>
+                                    {setSlots.slice((setCardsPage - 1) * PAGE_SIZE, setCardsPage * PAGE_SIZE).map((slot, i) => (
+                                      <VariationSlotTile
+                                        key={`${slot.card.id}::${slot.variation}::${slot.condition}::${i}`}
+                                        slot={slot}
+                                        viewMode={folderCardsLayout}
+                                        onClick={() => setEditingCard(slot.card)}
+                                      />
+                                    ))}
+                                  </div>
+                                  <Pagination page={setCardsPage} totalPages={Math.max(1, Math.ceil(setSlots.length / PAGE_SIZE))} onPageChange={setSetCardsPage} />
+                                </div>
+                              );
+                            })()
                           ) : setCardsInFolder.length === 0 ? (
                             <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-100">
                               <p className="text-slate-400 font-medium text-xs uppercase tracking-widest">Nenhuma carta nesta coleção</p>
@@ -1670,38 +1737,19 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                   </div>
 
                                   <div className="flex flex-col items-end gap-1">
-                                    <span className="text-[10px] font-semibold text-emerald-500">
-                                      R${getCardEstimatedValue(data.variations).toFixed(2)}
-                                    </span>
-                                    {isWishlist ? (
-                                      <button 
-                                        onClick={() => {
-                                          const updatedWishlist = (user.wishlist || []).filter(id => id !== card.id);
-                                          onUpdateUser({
-                                            ...user,
-                                            wishlist: updatedWishlist
-                                          });
-                                        }}
-                                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                        title="Remover da lista de desejos"
-                                      >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                                      </button>
-                                    ) : (
-                                      <button 
-                                        onClick={() => {
-                                          if (isDuplicates) {
-                                            handleRemoveFromTrade(card.id);
-                                          } else if (currentFolder) {
-                                            handleRemoveFromFolder(currentFolder.id, card.id);
-                                          }
-                                        }}
-                                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                        title={isDuplicates ? "Remover de todas as trocas" : "Remover desta pasta"}
-                                      >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                                      </button>
-                                    )}
+                                    <button
+                                      onClick={() => {
+                                        const updatedWishlist = (user.wishlist || []).filter(id => id !== card.id);
+                                        onUpdateUser({
+                                          ...user,
+                                          wishlist: updatedWishlist
+                                        });
+                                      }}
+                                      className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                      title="Remover da lista de desejos"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                                    </button>
                                   </div>
                                 </div>
                               ))}
