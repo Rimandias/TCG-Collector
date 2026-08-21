@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, Card, UserCardData, TradeFolder, TradeFolderVariationSelection, Friend, Trade, CardCondition, VARIATION_TYPES, LANGUAGE_OPTIONS } from '../types';
-import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getCardEstimatedValue, getVariationSubtotal, getConfirmedVariationTypes, getVariationSlot } from '../db';
+import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getCardEstimatedValue, getVariationSubtotal, getConfirmedVariationTypes, getVariationSlot, compareCardsByCollectionThenNumber } from '../db';
 import { fetchCardsBySet, fetchSets, fetchSetVariantFlags, CardVariantInfo } from '../api';
 import { createTradeRequest, getMyTrades, createFolderShareLink, TradeItemSelection } from '../trades';
 import { fetchCurrentUser } from '../auth';
@@ -422,10 +422,12 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
       return dates[0];
     };
 
+    // Mais nova pra mais antiga (era mais recente primeiro) - mesma convenção já usada em
+    // CollectionView (Minha Pasta), diferente da Home (que lista da mais antiga em diante).
     return uniqueSeries.sort((a, b) => {
       const dateA = getEraOldestReleaseDate(a);
       const dateB = getEraOldestReleaseDate(b);
-      return dateA.localeCompare(dateB);
+      return dateB.localeCompare(dateA);
     });
   }, [sets]);
 
@@ -482,6 +484,15 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
     return [];
   }, [selectedFolderId, tradeCards, ownedCardsWithData, wishlistCards, folders, user.ownedCards]);
 
+  // Data de lançamento de cada coleção (pra ordenar "Todas as Cartas" da mais nova pra mais
+  // antiga) - antes a lista vinha na ordem arbitrária de `Object.entries(ownedCards)`,
+  // parecendo bagunçada/aleatória.
+  const releaseDateBySetId = useMemo(() => {
+    const map: Record<string, string> = {};
+    sets.forEach(s => { map[s.id] = s.releaseDate; });
+    return map;
+  }, [sets]);
+
   // Aplicação de todos os filtros nas cartas da pasta
   const filteredFolderCards = useMemo(() => {
     return activeFolderCards.filter(({ card, data }) => {
@@ -522,8 +533,8 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
       }
 
       return true;
-    });
-  }, [activeFolderCards, searchQuery, filterRarity, filterSet, filterCategory, filterQuality, selectedFolderId]);
+    }).sort((a, b) => compareCardsByCollectionThenNumber(a.card, b.card, releaseDateBySetId));
+  }, [activeFolderCards, searchQuery, filterRarity, filterSet, filterCategory, filterQuality, selectedFolderId, releaseDateBySetId]);
 
   // Opções para preencher os seletores com base nas cartas da pasta ativa
   const folderRarities = useMemo(() => {
@@ -616,19 +627,21 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   const [manageSearchQuery, setManageSearchQuery] = useState('');
   const [managePage, setManagePage] = useState(1);
   const manageFilteredCards = useMemo(() => {
-    if (!manageSearchQuery.trim()) return ownedCardsWithData;
-    const q = manageSearchQuery.toLowerCase().trim();
-    return ownedCardsWithData.filter(({ card }) => {
-      const fullNum = getCompleteCardNumber(card).toLowerCase();
-      return (
-        card.name.toLowerCase().includes(q) ||
-        card.number.toLowerCase().includes(q) ||
-        fullNum.includes(q) ||
-        card.set.name.toLowerCase().includes(q) ||
-        (card.artist || '').toLowerCase().includes(q)
-      );
-    });
-  }, [ownedCardsWithData, manageSearchQuery]);
+    const base = !manageSearchQuery.trim()
+      ? ownedCardsWithData
+      : ownedCardsWithData.filter(({ card }) => {
+          const q = manageSearchQuery.toLowerCase().trim();
+          const fullNum = getCompleteCardNumber(card).toLowerCase();
+          return (
+            card.name.toLowerCase().includes(q) ||
+            card.number.toLowerCase().includes(q) ||
+            fullNum.includes(q) ||
+            card.set.name.toLowerCase().includes(q) ||
+            (card.artist || '').toLowerCase().includes(q)
+          );
+        });
+    return [...base].sort((a, b) => compareCardsByCollectionThenNumber(a.card, b.card, releaseDateBySetId));
+  }, [ownedCardsWithData, manageSearchQuery, releaseDateBySetId]);
   useEffect(() => {
     setManagePage(1);
   }, [manageFilteredCards]);
@@ -1675,7 +1688,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                             {sets
                               .filter(s => s.series === selectedFolderSeries)
-                              .sort((a, b) => a.releaseDate.localeCompare(b.releaseDate))
+                              .sort((a, b) => b.releaseDate.localeCompare(a.releaseDate))
                               .map(set => {
                                 const count = filteredFolderCards.filter(tc => tc.card.set.id === set.id).length;
                                 if (count === 0 && !isWishlist) return null; // Only show sets containing cards
@@ -2238,7 +2251,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                         <div className="grid grid-cols-2 gap-2">
                           {sets
                             .filter(s => s.series === manageSelectedSeries)
-                            .sort((a, b) => a.releaseDate.localeCompare(b.releaseDate))
+                            .sort((a, b) => b.releaseDate.localeCompare(a.releaseDate))
                             .map(set => {
                               const count = manageFilteredCards.filter(({ card }) => card.set.id === set.id).length;
                               if (count === 0) return null;
