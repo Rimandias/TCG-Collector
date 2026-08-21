@@ -36,6 +36,30 @@ export const LANGUAGE_OPTIONS: { code: string; label: string }[] = [
   { code: 'PTEN', label: 'Português/Inglês' },
 ];
 
+// Bandeira exibida em vez de texto pra identificar o idioma registrado de uma carta (ver
+// +Info) - "EN" sempre usa a bandeira dos EUA (convenção mais comum no hobby de TCG pra
+// "carta em inglês", já que a maioria das cartas em inglês em circulação no Brasil é
+// impressão americana). "PTEN" (Português/Inglês, cartas bilíngues antigas) combina as duas.
+export const LANGUAGE_FLAGS: Record<string, string> = {
+  BR: '🇧🇷',
+  EN: '🇺🇸',
+  JP: '🇯🇵',
+  DE: '🇩🇪',
+  ES: '🇪🇸',
+  FR: '🇫🇷',
+  IT: '🇮🇹',
+  PL: '🇵🇱',
+  RU: '🇷🇺',
+  KO: '🇰🇷',
+  ID: '🇮🇩',
+  TH: '🇹🇭',
+  TW: '🇹🇼',
+  TK: '🇹🇷',
+  PTEN: '🇧🇷🇺🇸',
+};
+
+export const getLanguageFlag = (code?: string): string | null => (code ? LANGUAGE_FLAGS[code] || null : null);
+
 export interface LanguageDetails {
   quantity: number;
   price?: string;

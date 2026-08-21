@@ -51,8 +51,18 @@ export async function areFriends(userId: string, otherId: string): Promise<boole
   return !!data;
 }
 
-function parsePrice(raw: any): number {
-  const n = parseFloat(raw);
+// Preço digitado pelo usuário (CardModal, +Info) aceita vírgula decimal, padrão BR - "0,10"
+// (10 centavos), não "0.10". parseFloat só entende ponto e trunca silenciosamente no primeiro
+// caractere inválido (parseFloat("0,10") === 0, não 0.10), então normaliza antes de converter.
+// Bug real encontrado: preços com vírgula apareciam como R$0,00 em qualquer lugar que somasse/
+// exibisse o valor numérico (pasta de amigos, link público, valor estimado da coleção,
+// estatística de preço da comunidade).
+export function parsePrice(raw: any): number {
+  if (typeof raw !== 'string') {
+    const n = Number(raw);
+    return isNaN(n) ? 0 : n;
+  }
+  const n = parseFloat(raw.trim().replace(',', '.'));
   return isNaN(n) ? 0 : n;
 }
 

@@ -74,5 +74,5 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 });
 
 app.listen(env.port, () => {
-  console.log(`PokéTracker backend rodando em http://localhost:${env.port}`);
+  console.log(`TCG Colecionador backend rodando em http://localhost:${env.port}`);
 });

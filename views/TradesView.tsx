@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, Card, UserCardData, TradeFolder, TradeFolderVariationSelection, Friend, Trade, CardCondition, VARIATION_TYPES, LANGUAGE_OPTIONS } from '../types';
-import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getCardEstimatedValue, getVariationSubtotal, getConfirmedVariationTypes, getVariationSlot, compareCardsByCollectionThenNumber } from '../db';
+import { updateCardStatus, getNormalizedVariations, getCardTotalQuantity, getInitialCardData, getCompleteCardNumber, getCardEstimatedValue, getVariationSubtotal, getConfirmedVariationTypes, getVariationSlot, compareCardsByCollectionThenNumber, parseUserPrice } from '../db';
 import { fetchCardsBySet, fetchSets, fetchSetVariantFlags, CardVariantInfo } from '../api';
 import { createTradeRequest, getMyTrades, createFolderShareLink, TradeItemSelection } from '../trades';
 import { fetchCurrentUser } from '../auth';
@@ -15,7 +15,7 @@ import CardViewModeSelector from '../components/CardViewModeSelector';
 import { CardViewMode } from '../components/CardItem';
 import SetProgressBar from '../components/SetProgressBar';
 import MasterSetTile from '../components/MasterSetTile';
-import { getCardGridClassName } from '../viewMode';
+import { getCardGridClassName, getInitialCardViewMode, saveCardViewMode } from '../viewMode';
 import { getSetTierStatsFromCounts } from '../setProgress';
 
 type SetTierFilter = 'base' | 'complete' | 'master';
@@ -234,7 +234,13 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
   // Lista (padrão, mantido) vs grade de 3/6 - mesmo seletor usado em Home/Coleção
   // (CardViewModeSelector), só afeta como as cartas dentro de uma pasta são exibidas, não a
   // lógica de quais cartas aparecem.
-  const [folderCardsLayout, setFolderCardsLayout] = useState<CardViewMode>('list');
+  // Grid por padrão (grid3 no mobile, grid6 no desktop - ver getInitialCardViewMode),
+  // preferência compartilhada com Home/Coleção via localStorage.
+  const [folderCardsLayout, setFolderCardsLayoutState] = useState<CardViewMode>(getInitialCardViewMode);
+  const setFolderCardsLayout = (mode: CardViewMode) => {
+    setFolderCardsLayoutState(mode);
+    saveCardViewMode(mode);
+  };
 
   // Search/Filters states inside folders
   const [searchQuery, setSearchQuery] = useState('');
@@ -600,16 +606,16 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
           // trocar/vender uma unidade única precisa colocá-la manualmente numa pasta
           // personalizada (aí sim expõe a quantidade real).
           if (details.languages && Object.keys(details.languages).length > 0) {
-            Object.values(details.languages).forEach((langDetails: any) => {
+            Object.entries(details.languages).forEach(([language, langDetails]: [string, any]) => {
               if (langDetails.quantity > 1) {
-                const price = parseFloat(langDetails.price || '');
-                slots.push({ card, variation, condition, quantity: langDetails.quantity - 1, price: isNaN(price) ? 0 : price });
+                const price = parseUserPrice(langDetails.price);
+                slots.push({ card, variation, condition, language, quantity: langDetails.quantity - 1, price: isNaN(price) ? 0 : price });
               }
             });
             return;
           }
           if (details.quantity > 1) {
-            const price = parseFloat(details.price || '');
+            const price = parseUserPrice(details.price);
             slots.push({ card, variation, condition, quantity: details.quantity - 1, price: isNaN(price) ? 0 : price });
           }
         });

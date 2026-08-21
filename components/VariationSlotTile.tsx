@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, CardCondition } from '../types';
+import { Card, CardCondition, getLanguageFlag } from '../types';
 import { getCompleteCardNumber } from '../db';
 import CardImage from './CardImage';
 import { CardViewMode } from './CardItem';
@@ -22,6 +22,10 @@ export interface VariationSlot {
   card: Card;
   variation: string;
   condition: string;
+  // Idioma específico registrado via +Info (ver ConditionDetails.languages) - ausente
+  // significa "sem detalhamento de idioma" (dado legado ou nunca especificado), não deve
+  // exibir bandeira nenhuma nesse caso (não sabemos qual idioma é de verdade).
+  language?: string;
   quantity: number;
   price: number;
 }
@@ -44,10 +48,14 @@ const EyeOffIcon = () => (
 
 const Tags: React.FC<{ slot: VariationSlot; size: 'sm' | 'xs' }> = ({ slot, size }) => {
   const cls = size === 'sm' ? 'text-[9px] px-1.5 py-0.5' : 'text-[7px] px-1 py-0.5';
+  const flag = getLanguageFlag(slot.language);
   return (
-    <div className="flex flex-wrap gap-1">
+    <div className="flex flex-wrap items-center gap-1">
       <span className={`${cls} rounded border font-semibold ${VARIATION_TAG_CLASSES}`}>{slot.variation}</span>
       <span className={`${cls} rounded border font-semibold ${CONDITION_TAG_CLASSES[slot.condition] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{slot.condition}</span>
+      {flag && (
+        <span className={size === 'sm' ? 'text-xs' : 'text-[9px]'} title="Idioma registrado">{flag}</span>
+      )}
     </div>
   );
 };

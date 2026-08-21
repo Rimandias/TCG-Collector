@@ -368,6 +368,16 @@ export const updateCardStatus = (user: User, cardId: string, updates: Partial<Us
   return newUser;
 };
 
+// Preço digitado pelo usuário (CardModal, +Info) aceita vírgula decimal, padrão BR - "0,10"
+// (10 centavos), não "0.10". parseFloat só entende ponto e trunca silenciosamente no primeiro
+// caractere inválido (parseFloat("0,10") === 0, não 0.10), então normaliza antes de converter.
+// Bug real encontrado: preços com vírgula apareciam como R$0,00 em qualquer lugar que somasse/
+// exibisse o valor numérico (valor estimado da coleção, Pasta de Repetidas).
+export const parseUserPrice = (raw: unknown): number => {
+  if (typeof raw !== 'string' || raw.trim() === '') return NaN;
+  return parseFloat(raw.trim().replace(',', '.'));
+};
+
 // Valor estimado de uma carta = soma de (quantidade * preço) que o próprio usuário
 // preencheu em cada combinação de variação/condição. Não usa nenhum preço de mercado externo.
 export const getCardEstimatedValue = (variations: Record<string, any>): number => {
@@ -380,13 +390,13 @@ export const getCardEstimatedValue = (variations: Record<string, any>): number =
         // Com idiomas detalhados, cada um pode ter preço próprio (ex.: cópia EN
         // custou diferente da PT) - soma por idioma em vez do agregado.
         for (const lang of Object.values(details.languages)) {
-          const langPrice = parseFloat(lang.price || '');
+          const langPrice = parseUserPrice(lang.price);
           if (lang.quantity > 0 && !isNaN(langPrice)) {
             total += lang.quantity * langPrice;
           }
         }
       } else {
-        const price = parseFloat(details.price || '');
+        const price = parseUserPrice(details.price);
         if (details.quantity > 0 && !isNaN(price)) {
           total += details.quantity * price;
         }
