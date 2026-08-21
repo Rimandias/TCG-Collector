@@ -307,16 +307,40 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
         .filter(([_, data]) => getCardTotalQuantity(data.variations) > 0);
       const neededSetIds = Array.from(new Set(ownedEntries.map(([id]) => id.split('-')[0])));
       const cardsById: Record<string, Card> = {};
-      await Promise.all(
-        neededSetIds.map(async (setId) => {
-          try {
-            const cardsInSet = await fetchCardsBySet(setId);
-            for (const card of cardsInSet) cardsById[card.id] = card;
-          } catch (e) {
-            console.error("Failed to fetch cards in set", setId, e);
-          }
-        })
-      );
+
+      // Buscar TODAS as coleções do usuário de uma vez (Promise.all sem limite) já causou
+      // cartas sumindo silenciosamente pra contas grandes (uma real chegou a ter 147
+      // coleções distintas): fetchCardsBySet nunca rejeita (sempre resolve, [] em caso de
+      // erro - ver api.ts), então o único sintoma é a coleção vir vazia. Com ~150 fetches
+      // simultâneos pro mesmo domínio, boa parte fica na fila do navegador tempo suficiente
+      // pra estourar os 20s de timeout de cada uma ANTES mesmo da requisição sair de fato -
+      // o relógio do AbortController começa a contar na hora que a Promise é criada, não
+      // quando o navegador realmente despacha a requisição. Buscando em lotes pequenos, cada
+      // fetch tem a janela de 20s inteira pra rodar de verdade.
+      const CONCURRENCY = 8;
+      const fetchSet = async (setId: string): Promise<boolean> => {
+        const cardsInSet = await fetchCardsBySet(setId);
+        for (const card of cardsInSet) cardsById[card.id] = card;
+        return cardsInSet.length > 0;
+      };
+      const failedSetIds: string[] = [];
+      for (let i = 0; i < neededSetIds.length; i += CONCURRENCY) {
+        const chunk = neededSetIds.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(chunk.map(fetchSet));
+        chunk.forEach((setId, idx) => {
+          if (!results[idx]) failedSetIds.push(setId);
+        });
+      }
+      // Uma coleção que o usuário tem cartas registradas nunca deveria voltar vazia de
+      // verdade - uma segunda tentativa (agora com bem menos fetches concorrentes disputando
+      // a fila) resolve a esmagadora maioria dos casos que falharam só por essa contenção.
+      if (failedSetIds.length > 0) {
+        for (let i = 0; i < failedSetIds.length; i += CONCURRENCY) {
+          const chunk = failedSetIds.slice(i, i + CONCURRENCY);
+          await Promise.all(chunk.map(fetchSet));
+        }
+      }
+
       const loaded: {card: Card, data: UserCardData}[] = ownedEntries
         .map(([id, data]) => ({ card: cardsById[id], data }))
         .filter((entry): entry is {card: Card, data: UserCardData} => !!entry.card);
