@@ -294,7 +294,10 @@ const DeckEditor: React.FC<DeckEditorProps> = ({ deck, sets, user, onUpdateUser,
 
   const handleImport = async (text: string) => {
     const lines = parseDecklistText(text);
-    if (lines.length === 0) return;
+    if (lines.length === 0) {
+      alert('Nenhuma linha reconhecida nessa lista. Cada linha de carta precisa estar no formato "4 Nome CÓDIGO NÚMERO" (ex: "4 Beldum TEF 113").');
+      return;
+    }
     const { resolved, unresolved } = await resolveDecklistLines(
       lines.map((l, index) => ({ index, code: l.code, number: l.number }))
     );
