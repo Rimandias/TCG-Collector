@@ -91,8 +91,8 @@ const PrivacyPolicyView: React.FC = () => {
             <h3 className="text-slate-800 font-semibold mb-1">Contato</h3>
             <p>
               Dúvidas sobre privacidade ou sobre esta política:{' '}
-              <a href="mailto:contato@tcgcolecionador.com.br" className="text-[#646B99] font-medium">
-                contato@tcgcolecionador.com.br
+              <a href="mailto:sergioriman@gmail.com" className="text-[#646B99] font-medium">
+                sergioriman@gmail.com
               </a>.
             </p>
           </section>
