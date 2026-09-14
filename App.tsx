@@ -21,6 +21,9 @@ const SettingsView = lazy(() => import('./views/SettingsView'));
 // fluxo normal de sessão/abas abaixo; carregada sob demanda porque a esmagadora maioria das
 // visitas ao app não passa por um link compartilhado.
 const PublicFolderView = lazy(() => import('./views/PublicFolderView'));
+// Política de Privacidade (/privacidade) - página estática pública, mesma razão de não entrar
+// no fluxo normal de sessão/abas: precisa abrir sem login (é a URL exigida pelo Google Play).
+const PrivacyPolicyView = lazy(() => import('./views/PrivacyPolicyView'));
 
 const ViewLoadingFallback: React.FC = () => (
   <div className="flex items-center justify-center h-full py-20">
@@ -73,6 +76,7 @@ const App: React.FC = () => {
     const match = window.location.pathname.match(/^\/f\/([^/]+)\/?$/);
     return match ? decodeURIComponent(match[1]) : null;
   }, []);
+  const isPrivacyPolicyRoute = useMemo(() => /^\/privacidade\/?$/.test(window.location.pathname), []);
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -246,6 +250,20 @@ const App: React.FC = () => {
         }
       >
         <PublicFolderView token={publicFolderToken} />
+      </Suspense>
+    );
+  }
+
+  if (isPrivacyPolicyRoute) {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center h-screen bg-white">
+            <div className="w-10 h-10 border-4 border-[#646B99] border-t-transparent rounded-full animate-spin" />
+          </div>
+        }
+      >
+        <PrivacyPolicyView />
       </Suspense>
     );
   }
