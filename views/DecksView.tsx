@@ -193,6 +193,7 @@ const DeckEditor: React.FC<DeckEditorProps> = ({ deck, sets, user, onUpdateUser,
   const [viewMode, setViewMode] = useState<CardViewMode>(getInitialCardViewMode);
   const [showSearch, setShowSearch] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [importResult, setImportResult] = useState<{ addedCount: number; unresolved: string[] } | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -294,25 +295,33 @@ const DeckEditor: React.FC<DeckEditorProps> = ({ deck, sets, user, onUpdateUser,
 
   const handleImport = async (text: string) => {
     const lines = parseDecklistText(text);
-    if (lines.length === 0) return;
-    const { resolved, unresolved } = await resolveDecklistLines(
-      lines.map((l, index) => ({ index, code: l.code, number: l.number }))
-    );
-    let next = [...cards];
-    for (const r of resolved) {
-      const line = lines[r.index];
-      const existing = next.find((c) => c.cardId === r.cardId);
-      const nextQty = Math.min(MAX_DECK_CARDS, (existing?.quantity || 0) + line.quantity);
-      next = [...next.filter((c) => c.cardId !== r.cardId), { cardId: r.cardId, quantity: nextQty }];
-    }
-    const total = next.reduce((sum, c) => sum + c.quantity, 0);
-    if (total > MAX_DECK_CARDS) {
-      alert(`A importação passaria do limite de ${MAX_DECK_CARDS} cartas (ficaria em ${total}) - ajuste a lista e tente de novo.`);
+    if (lines.length === 0) {
+      alert('Nenhuma linha reconhecida nessa lista. Cada linha de carta precisa estar no formato "4 Nome CÓDIGO NÚMERO" (ex: "4 Beldum TEF 113").');
       return;
     }
-    scheduleSave(next);
-    setImportResult({ addedCount: resolved.length, unresolved: unresolved.map((i) => lines[i].raw) });
-    setShowImport(false);
+    setIsImporting(true);
+    try {
+      const { resolved, unresolved } = await resolveDecklistLines(
+        lines.map((l, index) => ({ index, code: l.code, number: l.number }))
+      );
+      let next = [...cards];
+      for (const r of resolved) {
+        const line = lines[r.index];
+        const existing = next.find((c) => c.cardId === r.cardId);
+        const nextQty = Math.min(MAX_DECK_CARDS, (existing?.quantity || 0) + line.quantity);
+        next = [...next.filter((c) => c.cardId !== r.cardId), { cardId: r.cardId, quantity: nextQty }];
+      }
+      const total = next.reduce((sum, c) => sum + c.quantity, 0);
+      if (total > MAX_DECK_CARDS) {
+        alert(`A importação passaria do limite de ${MAX_DECK_CARDS} cartas (ficaria em ${total}) - ajuste a lista e tente de novo.`);
+        return;
+      }
+      scheduleSave(next);
+      setImportResult({ addedCount: resolved.length, unresolved: unresolved.map((i) => lines[i].raw) });
+      setShowImport(false);
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   const buildExportText = (): string => {
@@ -408,7 +417,7 @@ const DeckEditor: React.FC<DeckEditorProps> = ({ deck, sets, user, onUpdateUser,
       </div>
 
       {showSearch && <CardSearchModal onPick={(cardId) => addCard(cardId, 1)} onClose={() => setShowSearch(false)} />}
-      {showImport && <ImportModal onImport={handleImport} onClose={() => setShowImport(false)} />}
+      {showImport && <ImportModal onImport={handleImport} onClose={() => setShowImport(false)} isImporting={isImporting} />}
 
       {importResult && (
         <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center px-6" onClick={() => setImportResult(null)}>
@@ -571,10 +580,17 @@ const CardSearchModal: React.FC<{ onPick: (cardId: string) => void; onClose: () 
   );
 };
 
-const ImportModal: React.FC<{ onImport: (text: string) => void; onClose: () => void }> = ({ onImport, onClose }) => {
+const ImportModal: React.FC<{ onImport: (text: string) => void; onClose: () => void; isImporting: boolean }> = ({
+  onImport,
+  onClose,
+  isImporting,
+}) => {
   const [text, setText] = useState('');
   return (
-    <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center px-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center px-4"
+      onClick={isImporting ? undefined : onClose}
+    >
       <div className="bg-white rounded-2xl shadow-xl p-4 w-full max-w-md space-y-3" onClick={(e) => e.stopPropagation()}>
         <p className="text-xs font-semibold text-slate-700">Cole a lista do deck</p>
         <textarea
@@ -583,11 +599,25 @@ const ImportModal: React.FC<{ onImport: (text: string) => void; onClose: () => v
           onChange={(e) => setText(e.target.value)}
           placeholder={'Pokémon: 18\n4 Beldum TEF 113\n...'}
           rows={10}
-          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-mono outline-none focus:ring-1 focus:ring-[#646B99]"
+          disabled={isImporting}
+          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-mono outline-none focus:ring-1 focus:ring-[#646B99] disabled:opacity-60"
         />
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 bg-slate-100 text-slate-600 text-xs font-semibold py-2 rounded-xl">Cancelar</button>
-          <button onClick={() => onImport(text)} className="flex-1 bg-[#646B99] text-white text-xs font-semibold py-2 rounded-xl">Importar</button>
+          <button
+            onClick={onClose}
+            disabled={isImporting}
+            className="flex-1 bg-slate-100 text-slate-600 text-xs font-semibold py-2 rounded-xl disabled:opacity-60"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => onImport(text)}
+            disabled={isImporting}
+            className="flex-1 bg-[#646B99] text-white text-xs font-semibold py-2 rounded-xl flex items-center justify-center gap-2 disabled:opacity-80"
+          >
+            {isImporting && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+            {isImporting ? 'Importando...' : 'Importar'}
+          </button>
         </div>
       </div>
     </div>
