@@ -12,6 +12,17 @@ dist
 dist-ssr
 *.local
 
+# TWA (Bubblewrap) signing key - nunca commitar, perder isso impede atualizar o app
+# publicado na Play Store sob o mesmo pacote.
+twa/*.keystore
+twa/KEYSTORE_README.txt
+twa/build
+twa/app/build
+twa/.gradle
+twa/*.apk
+twa/*.apk.idsig
+twa/*.aab
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
