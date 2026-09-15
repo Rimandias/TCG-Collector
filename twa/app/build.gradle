@@ -21,7 +21,7 @@ plugins {
 }
 
 def twaManifest = [
-    applicationId: 'br.com.tcgcolecionador.twa',
+    applicationId: 'com.tcgcolecionador.myapp',
     hostName: 'www.tcgcolecionador.com.br', // The domain being opened in the TWA.
     launchUrl: '/', // The start path for the TWA. Must be relative to the domain.
     name: 'TCG Colecionador', // The application name.
@@ -52,9 +52,9 @@ def twaManifest = [
 
 android {
     compileSdkVersion 36
-    namespace "br.com.tcgcolecionador.twa"
+    namespace "com.tcgcolecionador.myapp"
     defaultConfig {
-        applicationId "br.com.tcgcolecionador.twa"
+        applicationId "com.tcgcolecionador.myapp"
         minSdkVersion 21
         targetSdkVersion 36
         versionCode 1

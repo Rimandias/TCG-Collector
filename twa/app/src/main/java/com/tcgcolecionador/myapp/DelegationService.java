@@ -1,4 +1,4 @@
-package br.com.tcgcolecionador.twa;
+package com.tcgcolecionador.myapp;
 
 
 
