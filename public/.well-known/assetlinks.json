@@ -2,7 +2,7 @@
   "relation": ["delegate_permission/common.handle_all_urls"],
   "target": {
     "namespace": "android_app",
-    "package_name": "br.com.tcgcolecionador.twa",
+    "package_name": "com.tcgcolecionador.myapp",
     "sha256_cert_fingerprints": ["50:1C:94:4E:41:05:15:48:94:D0:25:3A:43:79:D0:4F:05:63:A5:99:EC:4F:E7:36:6D:45:7A:37:CB:8C:FA:01"]
   }
 }]

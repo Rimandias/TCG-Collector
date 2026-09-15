@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package br.com.tcgcolecionador.twa;
+package com.tcgcolecionador.myapp;
 
 import android.content.pm.ActivityInfo;
 import android.net.Uri;
