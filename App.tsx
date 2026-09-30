@@ -38,11 +38,6 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.HOME);
   const [selectedSeries, setSelectedSeries] = useState<string | null>(null);
   const [selectedSet, setSelectedSet] = useState<PokemonSet | null>(null);
-  // Drill-down independente da Home (Era selecionada / Coleção Selecionada) - a aba Coleção
-  // só lista eras/sets que o usuário já possui algo (ver CollectionView), então precisa da
-  // própria navegação em vez de reaproveitar selectedSeries/selectedSet da Home.
-  const [collectionEra, setCollectionEra] = useState<string | null>(null);
-  const [collectionSet, setCollectionSet] = useState<PokemonSet | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   // O campo de busca fica preso ao valor digitado (nunca trava), mas a filtragem pesada em
   // HomeView (que roda sobre o catálogo inteiro, ~200 coleções) usa esse valor "atrasado" —
@@ -307,16 +302,7 @@ const App: React.FC = () => {
       case AppTab.COLLECTION:
         return (
           <Suspense fallback={<ViewLoadingFallback />}>
-            <CollectionView
-              user={user}
-              onUpdateUser={handleUpdateUser}
-              selectedEra={collectionEra}
-              setSelectedEra={setCollectionEra}
-              selectedSet={collectionSet}
-              setSelectedSet={setCollectionSet}
-              searchQuery={deferredSearchQuery}
-              setSearchQuery={setSearchQuery}
-            />
+            <CollectionView user={user} />
           </Suspense>
         );
       case AppTab.TRADES:
@@ -361,17 +347,7 @@ const App: React.FC = () => {
           {activeTab !== AppTab.HOME || selectedSeries || selectedSet ? (
             <button
               onClick={() => {
-                if (activeTab === AppTab.COLLECTION) {
-                  if (collectionSet) {
-                    setCollectionSet(null);
-                    setSearchQuery('');
-                  } else if (collectionEra) {
-                    setCollectionEra(null);
-                    setSearchQuery('');
-                  } else {
-                    handleTabChange(AppTab.HOME);
-                  }
-                } else if (selectedSet) {
+                if (selectedSet) {
                   setSelectedSet(null);
                   setSearchQuery('');
                 } else if (selectedSeries) {
@@ -401,23 +377,19 @@ const App: React.FC = () => {
           <input 
             type="text" 
             placeholder={
-              activeTab === AppTab.COLLECTION
-                ? collectionSet
-                  ? `Buscar em ${collectionSet.name}...`
-                  : "Buscar carta..."
-                : activeTab !== AppTab.HOME
-                  ? "Buscar carta..."
-                  : selectedSet
-                    ? `Buscar em ${selectedSet.name}...`
-                    : selectedSeries
-                      ? `Buscar em ${selectedSeries}...`
-                      : "Buscar carta..."
+              activeTab !== AppTab.HOME
+                ? "Buscar carta..."
+                : selectedSet
+                  ? `Buscar em ${selectedSet.name}...`
+                  : selectedSeries
+                    ? `Buscar em ${selectedSeries}...`
+                    : "Buscar carta..."
             }
             value={searchQuery}
             onChange={(e) => {
               const val = e.target.value;
               setSearchQuery(val);
-              if (activeTab !== AppTab.HOME && activeTab !== AppTab.COLLECTION) {
+              if (activeTab !== AppTab.HOME) {
                 setSelectedSet(null);
                 setSelectedSeries(null);
                 handleTabChange(AppTab.HOME);

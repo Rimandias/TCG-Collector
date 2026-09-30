@@ -248,21 +248,6 @@ const HomeView: React.FC<HomeViewProps> = ({
     });
   }, [sets]);
 
-  const getEraStyle = useCallback((eraName: string) => {
-    const index = eras.indexOf(eraName);
-    const safeIndex = index >= 0 ? index : 0;
-    
-    // 0: Vermelho, 1: Azul com vermelho, 2: Preto com amarelo, 3: Roxo com rosa
-    const styles = [
-      { bg: 'bg-red-600', dotBg: 'bg-red-500' },
-      { bg: 'bg-blue-600', dotBg: 'bg-red-500' },
-      { bg: 'bg-zinc-950', dotBg: 'bg-yellow-400' },
-      { bg: 'bg-purple-600', dotBg: 'bg-pink-500' },
-    ];
-    
-    return styles[safeIndex % styles.length];
-  }, [eras]);
-
   const setsInSeries = useMemo(() => {
     return sets
       .filter(s => s.series === selectedSeries)
@@ -447,106 +432,52 @@ const HomeView: React.FC<HomeViewProps> = ({
     );
   }
 
-  const PokeballDivider = () => (
-    <div className="relative w-full h-12 flex items-center justify-center z-10 -mb-6">
-       <div className="absolute inset-0 flex items-center">
-         <div className="w-full h-[6px] bg-slate-950"></div>
-       </div>
-       <div className="relative w-12 h-12 rounded-full border-[5px] border-slate-950 bg-white flex items-center justify-center shadow-lg">
-          <div className="w-4 h-4 rounded-full border-[2.5px] border-slate-950 bg-white"></div>
-       </div>
-    </div>
-  );
-
-  const renderPokeballBottomBg = (eraName: string) => {
-    const index = eras.indexOf(eraName);
-    const styleIndex = index >= 0 ? index % 4 : 0;
-    
-    switch (styleIndex) {
-      case 0: // Red Poke Ball
-        return (
-          <div className="w-full h-full bg-[#EF232F] relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none"></div>
-          </div>
-        );
-      case 1: // Great Ball
-        return (
-          <div className="w-full h-full bg-[#0048FF] relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none"></div>
-            {/* Red angular patches exactly like Great Ball */}
-            <div className="absolute bottom-[-2vh] left-[-4vw] w-[35%] h-[12vh] bg-[#EF232F] rotate-45 transform origin-bottom-left rounded-sm shadow-md"></div>
-            <div className="absolute bottom-[-2vh] right-[-4vw] w-[35%] h-[12vh] bg-[#EF232F] -rotate-45 transform origin-bottom-right rounded-sm shadow-md"></div>
-          </div>
-        );
-      case 2: // Ultra Ball
-        return (
-          <div className="w-full h-full bg-[#313131] relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none"></div>
-            {/* Yellow rectangular patches in corners */}
-            <div className="absolute bottom-0 left-0 w-[24%] h-[75%] bg-[#FFCC00] rounded-tr-xl shadow-md"></div>
-            <div className="absolute bottom-0 right-0 w-[24%] h-[75%] bg-[#FFCC00] rounded-tl-xl shadow-md"></div>
-          </div>
-        );
-      case 3: // Master Ball
-        return (
-          <div className="w-full h-full bg-[#9B42D5] relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none"></div>
-            {/* Pink circular arcs in the bottom corners */}
-            <div className="absolute bottom-[-6vh] left-[-6vw] w-[45vw] h-[45vw] max-w-[180px] max-h-[180px] rounded-full bg-[#E5489B] shadow-md"></div>
-            <div className="absolute bottom-[-6vh] right-[-6vw] w-[45vw] h-[45vw] max-w-[180px] max-h-[180px] rounded-full bg-[#E5489B] shadow-md"></div>
-          </div>
-        );
-      default:
-        return <div className="w-full h-full bg-[#EF232F]"></div>;
-    }
-  };
-
   if (selectedSet) {
     return (
-      <div className="animate-in slide-in-from-right duration-300 px-4 pb-10">
-        <div className="flex items-center justify-center gap-1.5 mb-6 pt-4">
-            {selectedSet.symbolUrl && <CardImage src={selectedSet.symbolUrl} alt="" className="w-3.5 h-3.5 object-contain flex-shrink-0" fallback="empty" />}
-            <span className="text-sm text-slate-500 text-center font-medium uppercase tracking-wider">
-                {selectedSet.releaseDate.split('-')[0]} — {selectedSet.name}
-            </span>
+      <div className="animate-in slide-in-from-right duration-300 px-6 pb-10 pt-4">
+        <h2 className="text-xl text-slate-800 font-semibold text-center uppercase tracking-tight">
+          {selectedSet.name} - {selectedSet.releaseDate.split('-')[0]}
+        </h2>
+
+        <div className="mt-6 grid grid-cols-3 gap-2.5">
+          <div className="flex flex-col items-center justify-center gap-2.5 min-h-[68px] p-2.5 bg-[var(--color-surface)] rounded-md shadow-[var(--shadow-inset)] text-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px] text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 18 3 14 7 10"/><path d="M17 10 21 14 17 18"/><rect width="10" height="14" x="7" y="5" rx="2"/></svg>
+            <p className="text-[8px] text-[var(--color-text-muted)]">{setStats?.totalCards || selectedSet.total} cartas</p>
+          </div>
+          <div className="flex flex-col items-center justify-center gap-2.5 min-h-[68px] p-2.5 bg-[var(--color-surface)] rounded-md shadow-[var(--shadow-inset)] text-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px] text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            <p className="text-[8px] text-[var(--color-text-muted)]">{setStats?.secretCount ?? 0} secretas</p>
+          </div>
+          <div className="flex flex-col items-center justify-center gap-2.5 min-h-[68px] p-2.5 bg-[var(--color-surface)] rounded-md shadow-[var(--shadow-inset)] text-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px] text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 1 0 0 7h5a3.5 3.5 0 1 1 0 7H6"/></svg>
+            <p className="text-[8px] text-[var(--color-text-muted)] leading-tight">Valor estimado<br />R${setStats?.value.toFixed(2) ?? '0.00'}</p>
+          </div>
         </div>
 
-        <div className="mb-8">
-          <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide">
-             <div className="flex-1 min-w-[85px] bg-white p-3 rounded-xl border border-slate-200 flex flex-col items-center justify-center gap-2 shadow-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-slate-900" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 18 3 14 7 10"/><path d="M17 10 21 14 17 18"/><rect width="10" height="14" x="7" y="5" rx="2"/></svg>
-                <p className="text-[10px] text-slate-400">{setStats?.totalCards || selectedSet.total} cartas</p>
-             </div>
-             <div className="flex-1 min-w-[85px] bg-white p-3 rounded-xl border border-slate-200 flex flex-col items-center justify-center gap-2 shadow-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                <p className="text-[10px] text-slate-400">{setStats?.secretCount ?? 0} secretas</p>
-             </div>
-             <div className="flex-1 min-w-[85px] bg-white p-3 rounded-xl border border-slate-200 flex flex-col items-center justify-center gap-2 shadow-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                <div className="flex flex-col items-center">
-                    <p className="text-[9px] text-slate-400 leading-tight">Valor estimado</p>
-                    <p className="text-[10px] text-[#616895]">R${setStats?.value.toFixed(2) ?? '0.00'}</p>
-                </div>
-             </div>
-          </div>
-
-          <div className="mt-2">
-            <SetProgressBar stats={tierStats} />
+        <div className="mt-5 space-y-2">
+          <SetProgressBar stats={tierStats} />
+          <div className="flex items-center justify-between">
+            <TierDots stats={tierStats} />
+            {selectedSet.symbolUrl && (
+              <div className="w-9 h-5 rounded-[3px] bg-black flex items-center justify-center flex-shrink-0 overflow-hidden">
+                <CardImage src={selectedSet.symbolUrl} alt="" className="w-full h-full object-contain p-0.5" fallback="empty" />
+              </div>
+            )}
           </div>
         </div>
 
         {/* Abas de Filtro */}
-        <div className="flex items-center gap-2 mb-3">
-          <div className="flex flex-1 bg-slate-50 p-1 rounded-xl border border-slate-100">
+        <div className="mt-5 flex items-center gap-2">
+          <div className="flex flex-1 bg-[var(--color-surface)] p-1 rounded-md border border-[var(--color-border)] shadow-[var(--shadow-inset)]">
             <button
               onClick={() => setFilterTab('tudo')}
-              className={`flex-1 py-2 rounded-lg text-xs uppercase tracking-widest transition-all ${filterTab === 'tudo' ? 'bg-white text-[#616895] shadow-sm' : 'text-slate-400'}`}
+              className={`flex-1 py-2 rounded-sm text-xs transition-all ${filterTab === 'tudo' ? 'bg-white text-[var(--color-text-muted)] shadow-[var(--shadow-tab)]' : 'text-[var(--color-text-muted)]'}`}
             >
               Tudo
             </button>
             <button
               onClick={() => setFilterTab('restantes')}
-              className={`flex-1 py-2 rounded-lg text-xs uppercase tracking-widest transition-all ${filterTab === 'restantes' ? 'bg-white text-[#616895] shadow-sm' : 'text-slate-400'}`}
+              className={`flex-1 py-2 rounded-sm text-xs transition-all ${filterTab === 'restantes' ? 'bg-white text-[var(--color-text-muted)] shadow-[var(--shadow-tab)]' : 'text-[var(--color-text-muted)]'}`}
             >
               Restantes
             </button>
@@ -556,16 +487,16 @@ const HomeView: React.FC<HomeViewProps> = ({
 
         {/* Base Set / Complete Set / Master Set - Master Set explode cada carta por variação
             e não é editável (ver masterEntries), então os botões em lote abaixo somem lá. */}
-        <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100 mb-3">
+        <div className="mt-2 flex bg-[var(--color-surface)] p-1 rounded-md border border-[var(--color-border)] shadow-[var(--shadow-inset)]">
           {([
-            ['base', 'Base Set'],
-            ['complete', 'Complete Set'],
-            ['master', 'Master Set'],
+            ['base', 'Base set'],
+            ['complete', 'Complete set'],
+            ['master', 'Master set'],
           ] as [SetTierFilter, string][]).map(([value, label]) => (
             <button
               key={value}
               onClick={() => setSetTierFilter(value)}
-              className={`flex-1 py-2 rounded-lg text-[10px] uppercase tracking-widest transition-all ${setTierFilter === value ? 'bg-white text-[#9B6BD9] shadow-sm font-semibold' : 'text-slate-400'}`}
+              className={`flex-1 py-2 rounded-sm text-xs transition-all ${setTierFilter === value ? 'bg-white text-[var(--color-primary)] shadow-[var(--shadow-tab)] font-medium' : 'text-[var(--color-text-muted)]'}`}
             >
               {label}
             </button>
@@ -573,23 +504,21 @@ const HomeView: React.FC<HomeViewProps> = ({
         </div>
 
         {setTierFilter === 'master' && (
-          <p className="text-[9px] text-slate-400 mb-3 px-1">
+          <p className="text-[9px] text-slate-400 mt-3 px-1">
             Somente leitura - mostra 1 carta por variação que ela realmente tem, colorida conforme você já registrou pelo menos 1 unidade daquela variação específica.
           </p>
         )}
 
         {setTierFilter !== 'master' && (
-          <div className="mb-4 flex gap-2">
-            <button
-              onClick={handleSelectAllInSet}
-              className="flex-1 py-2 bg-[#616895]/5 border border-[#616895]/20 text-[#616895] text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-[#616895]/10 transition-colors"
-            >
-              Selecionar Todas
-            </button>
-          </div>
+          <button
+            onClick={handleSelectAllInSet}
+            className="mt-3 w-full py-2.5 bg-white border border-[var(--color-border-strong)] text-[var(--color-text-muted)] text-sm rounded-md shadow-[var(--shadow-tab)] hover:bg-slate-50 transition-colors"
+          >
+            Selecionar todas
+          </button>
         )}
 
-        <div className={getCardGridClassName(viewMode)}>
+        <div className={`mt-4 ${getCardGridClassName(viewMode)}`}>
           {setTierFilter === 'master' ? (
             loadingCards ? (
               [...Array(6)].map((_, i) => <div key={i} className="aspect-[2/2.8] bg-slate-100 animate-pulse rounded-xl" />)
@@ -644,86 +573,65 @@ const HomeView: React.FC<HomeViewProps> = ({
 
   if (selectedSeries) {
     return (
-      <div className="relative flex flex-col bg-transparent animate-in slide-in-from-right duration-300 pb-10">
-        {/* Fixed Background Layer */}
-        <div className="fixed inset-x-0 bottom-0 h-[50vh] pointer-events-none z-0 flex flex-col justify-end">
-          <PokeballDivider />
-          <div className="w-full flex-1 overflow-hidden relative">
-              {renderPokeballBottomBg(selectedSeries)}
-              <div className="absolute inset-x-0 bottom-10 flex items-center justify-center">
-                <p className="text-white/20 text-6xl font-black uppercase tracking-tighter opacity-10 select-none text-center">
-                    {selectedSeries}
-                </p>
-              </div>
-          </div>
-        </div>
+      <div className="animate-in slide-in-from-right duration-300 px-6 pb-10 pt-4">
+        <h2 className="text-xl text-slate-800 font-semibold text-center uppercase tracking-tight">{selectedSeries}</h2>
+        <p className="text-xs text-slate-400 text-center mt-1">{getEraYear(selectedSeries)}</p>
 
-        {/* Scrollable Content Layer */}
-        <div className="relative z-10 p-4">
-            <div className="flex items-center justify-center mb-6 pt-4">
-                <span className="text-xs text-slate-500 uppercase tracking-[0.2em] font-semibold">{selectedSeries}</span>
+        {searchQuery.trim() !== '' ? (
+          <div className="mt-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2 gap-2">
+              <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                Cartas encontradas ({searchResults.length})
+              </h3>
+              <CardViewModeSelector viewMode={viewMode} onChange={setViewMode} />
             </div>
-           
-           {searchQuery.trim() !== '' ? (
-             <div className="space-y-4">
-               <div className="flex items-center justify-between border-b border-slate-100 pb-2 gap-2">
-                 <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                   Cartas encontradas ({searchResults.length})
-                 </h3>
-                 <CardViewModeSelector viewMode={viewMode} onChange={setViewMode} />
-               </div>
 
-               {searchResults.length === 0 ? (
-                 <div className="py-20 text-center bg-white/80 rounded-2xl border border-slate-100">
-                   <p className="text-slate-400 text-xs uppercase tracking-widest">Nenhuma carta encontrada nesta era</p>
-                 </div>
-               ) : (
-                 <div className={`${getCardGridClassName(viewMode)} bg-white/80 p-3 rounded-2xl border border-slate-100`}>
-                   {searchResults.map(card => (
-                     <CardItem
-                       key={card.id}
-                       card={card}
-                       user={user}
-                       onUpdateUser={onUpdateUser}
-                       onShowInfo={setInfoCard}
-                       viewMode={viewMode}
-                     />
-                   ))}
-                 </div>
-               )}
-             </div>
-           ) : (
-             // md:grid-cols-3 é só no desktop - no mobile continua o grid-cols-2 de sempre
-             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 px-2">
-             {setsInSeries.map(set => {
-                const tierStats = getSetTierStatsFromCounts(set, user.ownedCards, seriesVariantFlags[set.id]);
-                return (
-                  <button
-                    key={set.id}
-                    onClick={() => setSelectedSet(set)}
-                    className="flex flex-col items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group min-h-[160px]"
-                  >
-                    <div className="h-14 w-full flex items-center justify-center mb-2">
-                        <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain filter group-hover:scale-110 transition-transform" fallback="empty" />
-                    </div>
-                    <div className="w-full space-y-2 mt-auto">
-                        <p className="text-[10px] font-medium text-slate-600 text-center line-clamp-1 group-hover:text-[#616895] transition-colors flex items-center justify-center gap-1">
-                            {set.symbolUrl && <CardImage src={set.symbolUrl} alt="" className="w-3 h-3 object-contain flex-shrink-0" fallback="empty" />}
-                            {set.name}
-                        </p>
-                        <div className="flex flex-col md:flex-row items-center gap-1.5">
-                            <div className="w-full md:flex-1 md:w-auto md:min-w-0">
-                                <SetProgressBar stats={tierStats} size="sm" />
-                            </div>
-                            <TierDots stats={tierStats} size="xs" />
-                        </div>
-                    </div>
-                  </button>
-                );
-             })}
-           </div>
-          )}
-        </div>
+            {searchResults.length === 0 ? (
+              <div className="py-20 text-center bg-slate-50 rounded-2xl border border-slate-100">
+                <p className="text-slate-400 text-xs uppercase tracking-widest">Nenhuma carta encontrada nesta era</p>
+              </div>
+            ) : (
+              <div className={getCardGridClassName(viewMode)}>
+                {searchResults.map(card => (
+                  <CardItem
+                    key={card.id}
+                    card={card}
+                    user={user}
+                    onUpdateUser={onUpdateUser}
+                    onShowInfo={setInfoCard}
+                    viewMode={viewMode}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="mt-6 grid grid-cols-2 gap-4">
+            {setsInSeries.map(set => {
+              const tierStats = getSetTierStatsFromCounts(set, user.ownedCards, seriesVariantFlags[set.id]);
+              return (
+                <button
+                  key={set.id}
+                  onClick={() => setSelectedSet(set)}
+                  className="flex flex-col justify-center gap-2 h-40 p-4 bg-white border border-[var(--color-border)] rounded-md shadow-[var(--shadow-card)] text-left"
+                >
+                  <div className="h-8 w-full flex items-center justify-center">
+                    <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain" fallback="empty" />
+                  </div>
+                  <p className="text-xs text-slate-700 text-center truncate">{set.name}</p>
+                  <div className="flex items-center justify-between">
+                    <TierDots stats={tierStats} size="xs" />
+                    {set.symbolUrl && (
+                      <div className="w-9 h-[19px] rounded-[3px] bg-black flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        <CardImage src={set.symbolUrl} alt="" className="w-full h-full object-contain p-0.5" fallback="empty" />
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {infoCard && (
           <CardModal
