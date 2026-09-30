@@ -245,6 +245,20 @@ tcgRouter.get(
         .filter((raw: any) => !EXCLUDED_SERIE_IDS.has(raw.serie?.id))
         .map(mapSet);
 
+      // Uma busca "ao vivo" que não lançou exceção mas voltou com muito menos coleções que o
+      // cache anterior normalmente não é o catálogo real encolhendo - é falha parcial e
+      // silenciosa de algumas das ~230 chamadas individuais de detalhe (timeout pontual na
+      // TCGdex, ver mapConcurrent acima), que aqui só vira `null` e é filtrada, sem lançar erro.
+      // Sem essa checagem, esse resultado incompleto era salvo como se fosse bom e sobrescrevia
+      // um cache íntegro por até CACHE_TTL_MS (12h) - já aconteceu em produção (catálogo caiu de
+      // ~230 pra 117 coleções, perdendo tudo de Sun & Moon em diante). Mais seguro continuar
+      // servindo o cache antigo (ainda que expirado) e tentar de novo na próxima chamada.
+      const previousCount = Array.isArray(cached?.data) ? cached.data.length : 0;
+      if (cached && previousCount > 0 && mapped.length < previousCount * 0.9) {
+        console.warn(`[tcg] Busca ao vivo de /sets voltou com só ${mapped.length} coleções (cache anterior tinha ${previousCount}) - mantendo cache antigo em vez de sobrescrever.`);
+        return res.json({ data: cached.data, source: 'stale-cache-protected' });
+      }
+
       const byId = new Map(mapped.map((s: any) => [s.id, s]));
       for (const [setId, fallbackId] of Object.entries(FALLBACK_LOGO_SET_ID)) {
         const set = byId.get(setId);
