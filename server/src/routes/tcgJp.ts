@@ -70,8 +70,12 @@ function mapSet(raw: any) {
   };
 }
 
+// TTL do navegador bem menor que CACHE_TTL_MS (cache do servidor em Supabase) de propósito -
+// ver o mesmo ajuste/comentário em routes/tcg.ts, mesma razão (evitar prender um catálogo
+// ruim no navegador de cada usuário por até 12h mesmo depois do cache do servidor já corrigido).
+const BROWSER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
 const catalogCacheControl = (_req: Request, res: Response, next: NextFunction) => {
-  res.set('Cache-Control', `public, max-age=${Math.floor(CACHE_TTL_MS / 1000)}`);
+  res.set('Cache-Control', `public, max-age=${Math.floor(BROWSER_CACHE_TTL_MS / 1000)}`);
   next();
 };
 
@@ -96,6 +100,16 @@ tcgJpRouter.get(
         }
       });
       const mapped = details.filter(Boolean).map(mapSet);
+
+      // Mesma proteção contra falha parcial silenciosa de routes/tcg.ts (ver comentário lá) -
+      // uma busca "ao vivo" que não lança exceção mas volta com muito menos coleções que o
+      // cache anterior não sobrescreve um cache bom.
+      const previousCount = Array.isArray(cached?.data) ? cached.data.length : 0;
+      if (cached && previousCount > 0 && mapped.length < previousCount * 0.9) {
+        console.warn(`[tcg-jp] Busca ao vivo de /sets voltou com só ${mapped.length} coleções (cache anterior tinha ${previousCount}) - mantendo cache antigo em vez de sobrescrever.`);
+        return res.json({ data: cached.data, source: 'stale-cache-protected' });
+      }
+
       await supabase.from('sets_cache').upsert({ id: ALL_SETS_CACHE_ID, data: mapped, updated_at: new Date().toISOString() });
       return res.json({ data: mapped, source: 'live' });
     } catch (err) {
