@@ -188,10 +188,17 @@ function mapSet(raw: any) {
 
 // Catálogo (sets/cards) muda muito pouco e é igual pra todo mundo - marcar como cacheável
 // deixa o navegador (e qualquer CDN na frente) reaproveitar a resposta sem nem chegar no
-// Render de novo dentro da mesma janela do nosso próprio cache em Supabase, cortando tráfego
-// de saída em requisições repetidas (ex: usuário reabrindo o app, várias abas).
+// Render de novo, cortando tráfego de saída em requisições repetidas (ex: usuário reabrindo
+// o app, várias abas). TTL do NAVEGADOR é bem menor que o TTL do nosso cache em Supabase
+// (CACHE_TTL_MS, 12h) de propósito: usar o mesmo valor aqui já causou um catálogo incompleto
+// (falha parcial silenciosa numa busca "ao vivo", ver checagem em /sets abaixo) ficar preso no
+// navegador de cada usuário por até 12h mesmo DEPOIS do cache do servidor já ter sido corrigido,
+// porque o fetch() do frontend respeita esse header e nem chega a repetir a requisição nesse
+// meio tempo. 5 minutos ainda corta a esmagadora maioria do tráfego repetido (reabrir o app,
+// trocar de aba) sem prender um catálogo ruim por horas.
+const BROWSER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
 const catalogCacheControl = (_req: Request, res: Response, next: NextFunction) => {
-  res.set('Cache-Control', `public, max-age=${Math.floor(CACHE_TTL_MS / 1000)}`);
+  res.set('Cache-Control', `public, max-age=${Math.floor(BROWSER_CACHE_TTL_MS / 1000)}`);
   next();
 };
 
