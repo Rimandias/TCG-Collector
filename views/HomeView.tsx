@@ -422,7 +422,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           <h3 className="text-slate-800 text-sm uppercase tracking-widest">Erro de Conexão</h3>
           <p className="text-slate-400 text-xs leading-relaxed">{error}</p>
         </div>
-        <button 
+        <button
           onClick={init}
           className="px-8 py-3 bg-[#616895] text-white text-xs uppercase tracking-widest rounded-full hover:bg-[#4a4d73] transition-all shadow-lg"
         >
@@ -431,6 +431,66 @@ const HomeView: React.FC<HomeViewProps> = ({
       </div>
     );
   }
+
+  // Divisória "costura de bola de pokébola" entre o conteúdo branco e o fundo temático da
+  // era (ver renderPokeballBottomBg) - mesma faixa preta com o círculo central que a tela
+  // "Era selecionada" sempre teve.
+  const PokeballDivider = () => (
+    <div className="relative w-full h-12 flex items-center justify-center z-10 -mb-6">
+       <div className="absolute inset-0 flex items-center">
+         <div className="w-full h-[6px] bg-slate-950"></div>
+       </div>
+       <div className="relative w-12 h-12 rounded-full border-[5px] border-slate-950 bg-white flex items-center justify-center shadow-lg">
+          <div className="w-4 h-4 rounded-full border-[2.5px] border-slate-950 bg-white"></div>
+       </div>
+    </div>
+  );
+
+  // Fundo temático (cor + recortes de bola) atrás da grade de sets de uma era - cicla entre
+  // 4 estilos de pokébola pela posição da era na lista (mais recente primeiro), aparecendo
+  // nos vãos entre os cards brancos do grid acima dele.
+  const renderPokeballBottomBg = (eraName: string) => {
+    const index = eras.indexOf(eraName);
+    const styleIndex = index >= 0 ? index % 4 : 0;
+
+    switch (styleIndex) {
+      case 0: // Red Poke Ball
+        return (
+          <div className="w-full h-full bg-[#EF232F] relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none"></div>
+          </div>
+        );
+      case 1: // Great Ball
+        return (
+          <div className="w-full h-full bg-[#0048FF] relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none"></div>
+            {/* Red angular patches exactly like Great Ball */}
+            <div className="absolute bottom-[-2vh] left-[-4vw] w-[35%] h-[12vh] bg-[#EF232F] rotate-45 transform origin-bottom-left rounded-sm shadow-md"></div>
+            <div className="absolute bottom-[-2vh] right-[-4vw] w-[35%] h-[12vh] bg-[#EF232F] -rotate-45 transform origin-bottom-right rounded-sm shadow-md"></div>
+          </div>
+        );
+      case 2: // Ultra Ball
+        return (
+          <div className="w-full h-full bg-[#313131] relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none"></div>
+            {/* Yellow rectangular patches in corners */}
+            <div className="absolute bottom-0 left-0 w-[24%] h-[75%] bg-[#FFCC00] rounded-tr-xl shadow-md"></div>
+            <div className="absolute bottom-0 right-0 w-[24%] h-[75%] bg-[#FFCC00] rounded-tl-xl shadow-md"></div>
+          </div>
+        );
+      case 3: // Master Ball
+        return (
+          <div className="w-full h-full bg-[#9B42D5] relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none"></div>
+            {/* Pink circular arcs in the bottom corners */}
+            <div className="absolute bottom-[-6vh] left-[-6vw] w-[45vw] h-[45vw] max-w-[180px] max-h-[180px] rounded-full bg-[#E5489B] shadow-md"></div>
+            <div className="absolute bottom-[-6vh] right-[-6vw] w-[45vw] h-[45vw] max-w-[180px] max-h-[180px] rounded-full bg-[#E5489B] shadow-md"></div>
+          </div>
+        );
+      default:
+        return <div className="w-full h-full bg-[#EF232F]"></div>;
+    }
+  };
 
   if (selectedSet) {
     return (
@@ -441,7 +501,7 @@ const HomeView: React.FC<HomeViewProps> = ({
 
         <div className="mt-6 grid grid-cols-3 gap-2.5">
           <div className="flex flex-col items-center justify-center gap-2.5 min-h-[68px] p-2.5 bg-[var(--color-surface)] rounded-md shadow-[var(--shadow-inset)] text-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px] text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 18 3 14 7 10"/><path d="M17 10 21 14 17 18"/><rect width="10" height="14" x="7" y="5" rx="2"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[19px] text-slate-500" viewBox="0 0 20 19" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.75 1H13.73C13.9899 1 14.2392 1.10531 14.423 1.29276C14.6068 1.4802 14.71 1.73444 14.71 1.99953V5.49788M17.6501 2.99906C17.9089 3.11101 18.1597 3.21596 18.4028 3.31391C18.642 3.41745 18.8312 3.61367 18.9286 3.8594C19.026 4.10514 19.0237 4.38027 18.9222 4.62429L16.6701 9.99577M1.58151 4.1955L8.57698 1.08796C8.69242 1.0375 8.81659 1.01112 8.94218 1.01038C9.06776 1.00963 9.19222 1.03454 9.30822 1.08364C9.42422 1.13273 9.52941 1.20501 9.61758 1.29622C9.70576 1.38743 9.77514 1.49572 9.82163 1.61471L14.6473 13.5111C14.7476 13.7523 14.751 14.0241 14.6568 14.2679C14.5626 14.5117 14.3783 14.7079 14.1436 14.8145L7.14908 17.922C7.03359 17.9727 6.90933 17.9992 6.78364 18C6.65794 18.0008 6.53336 17.9759 6.41724 17.9268C6.30113 17.8777 6.19584 17.8054 6.1076 17.7141C6.01935 17.6228 5.94994 17.5144 5.90346 17.3953L1.07777 5.49788C0.977471 5.25665 0.97406 4.98489 1.06827 4.74112C1.16249 4.49734 1.3468 4.30205 1.58151 4.1955Z" /></svg>
             <p className="text-[8px] text-[var(--color-text-muted)]">{setStats?.totalCards || selectedSet.total} cartas</p>
           </div>
           <div className="flex flex-col items-center justify-center gap-2.5 min-h-[68px] p-2.5 bg-[var(--color-surface)] rounded-md shadow-[var(--shadow-inset)] text-center">
@@ -459,9 +519,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           <div className="flex items-center justify-between">
             <TierDots stats={tierStats} />
             {selectedSet.symbolUrl && (
-              <div className="w-9 h-5 rounded-[3px] bg-black flex items-center justify-center flex-shrink-0 overflow-hidden">
-                <CardImage src={selectedSet.symbolUrl} alt="" className="w-full h-full object-contain p-0.5" fallback="empty" />
-              </div>
+              <CardImage src={selectedSet.symbolUrl} alt="" className="w-9 h-5 rounded-[3px] object-cover flex-shrink-0" fallback="empty" />
             )}
           </div>
         </div>
@@ -573,65 +631,74 @@ const HomeView: React.FC<HomeViewProps> = ({
 
   if (selectedSeries) {
     return (
-      <div className="animate-in slide-in-from-right duration-300 px-6 pb-10 pt-4">
-        <h2 className="text-xl text-slate-800 font-semibold text-center uppercase tracking-tight">{selectedSeries}</h2>
-        <p className="text-xs text-slate-400 text-center mt-1">{getEraYear(selectedSeries)}</p>
+      <div className="relative flex flex-col bg-transparent animate-in slide-in-from-right duration-300 pb-10">
+        {/* Camada de fundo fixa (mesma "carta-mãe" temática por era que a Home sempre teve -
+            cor/pokébola aparecendo nos vãos entre os cards do grid, ver getEraBallStyle) */}
+        <div className="fixed inset-x-0 bottom-0 h-[50vh] pointer-events-none z-0 flex flex-col justify-end">
+          <PokeballDivider />
+          <div className="w-full flex-1 overflow-hidden relative">
+            {renderPokeballBottomBg(selectedSeries)}
+          </div>
+        </div>
 
-        {searchQuery.trim() !== '' ? (
-          <div className="mt-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2 gap-2">
-              <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                Cartas encontradas ({searchResults.length})
-              </h3>
-              <CardViewModeSelector viewMode={viewMode} onChange={setViewMode} />
+        <div className="relative z-10 px-6 pt-4">
+          <h2 className="text-xl text-slate-800 font-semibold text-center uppercase tracking-tight">{selectedSeries}</h2>
+          <p className="text-xs text-slate-400 text-center mt-1">{getEraYear(selectedSeries)}</p>
+
+          {searchQuery.trim() !== '' ? (
+            <div className="mt-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2 gap-2">
+                <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                  Cartas encontradas ({searchResults.length})
+                </h3>
+                <CardViewModeSelector viewMode={viewMode} onChange={setViewMode} />
+              </div>
+
+              {searchResults.length === 0 ? (
+                <div className="py-20 text-center bg-white/80 rounded-2xl border border-slate-100">
+                  <p className="text-slate-400 text-xs uppercase tracking-widest">Nenhuma carta encontrada nesta era</p>
+                </div>
+              ) : (
+                <div className={`${getCardGridClassName(viewMode)} bg-white/80 p-3 rounded-2xl border border-slate-100`}>
+                  {searchResults.map(card => (
+                    <CardItem
+                      key={card.id}
+                      card={card}
+                      user={user}
+                      onUpdateUser={onUpdateUser}
+                      onShowInfo={setInfoCard}
+                      viewMode={viewMode}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-
-            {searchResults.length === 0 ? (
-              <div className="py-20 text-center bg-slate-50 rounded-2xl border border-slate-100">
-                <p className="text-slate-400 text-xs uppercase tracking-widest">Nenhuma carta encontrada nesta era</p>
-              </div>
-            ) : (
-              <div className={getCardGridClassName(viewMode)}>
-                {searchResults.map(card => (
-                  <CardItem
-                    key={card.id}
-                    card={card}
-                    user={user}
-                    onUpdateUser={onUpdateUser}
-                    onShowInfo={setInfoCard}
-                    viewMode={viewMode}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="mt-6 grid grid-cols-2 gap-4">
-            {setsInSeries.map(set => {
-              const tierStats = getSetTierStatsFromCounts(set, user.ownedCards, seriesVariantFlags[set.id]);
-              return (
-                <button
-                  key={set.id}
-                  onClick={() => setSelectedSet(set)}
-                  className="flex flex-col justify-center gap-2 h-40 p-4 bg-white border border-[var(--color-border)] rounded-md shadow-[var(--shadow-card)] text-left"
-                >
-                  <div className="h-8 w-full flex items-center justify-center">
-                    <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain" fallback="empty" />
-                  </div>
-                  <p className="text-xs text-slate-700 text-center truncate">{set.name}</p>
-                  <div className="flex items-center justify-between">
-                    <TierDots stats={tierStats} size="xs" />
-                    {set.symbolUrl && (
-                      <div className="w-9 h-[19px] rounded-[3px] bg-black flex items-center justify-center flex-shrink-0 overflow-hidden">
-                        <CardImage src={set.symbolUrl} alt="" className="w-full h-full object-contain p-0.5" fallback="empty" />
-                      </div>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
+          ) : (
+            <div className="mt-6 grid grid-cols-2 gap-4">
+              {setsInSeries.map(set => {
+                const tierStats = getSetTierStatsFromCounts(set, user.ownedCards, seriesVariantFlags[set.id]);
+                return (
+                  <button
+                    key={set.id}
+                    onClick={() => setSelectedSet(set)}
+                    className="flex flex-col justify-center gap-2 h-40 p-4 bg-white border border-[var(--color-border)] rounded-md shadow-[var(--shadow-card)] text-left"
+                  >
+                    <div className="h-8 w-full flex items-center justify-center">
+                      <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain" fallback="empty" />
+                    </div>
+                    <p className="text-xs text-slate-700 text-center truncate">{set.name}</p>
+                    <div className="flex items-center justify-between">
+                      <TierDots stats={tierStats} size="xs" />
+                      {set.symbolUrl && (
+                        <CardImage src={set.symbolUrl} alt="" className="w-9 h-[19px] rounded-[3px] object-cover flex-shrink-0" fallback="empty" />
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {infoCard && (
           <CardModal
