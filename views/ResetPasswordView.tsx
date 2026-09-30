@@ -61,14 +61,14 @@ const ResetPasswordView: React.FC<ResetPasswordViewProps> = ({ onDone }) => {
               placeholder="NOVA SENHA"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs uppercase tracking-widest text-slate-900 outline-none focus:border-[#646B99] transition-colors"
+              className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs uppercase tracking-widest text-slate-900 outline-none focus:border-[#616895] transition-colors"
             />
             <input
               type="password"
               placeholder="CONFIRME A SENHA"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs uppercase tracking-widest text-slate-900 outline-none focus:border-[#646B99] transition-colors"
+              className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs uppercase tracking-widest text-slate-900 outline-none focus:border-[#616895] transition-colors"
             />
 
             {error && <p className="text-red-500 text-[10px] uppercase tracking-widest text-center">{error}</p>}

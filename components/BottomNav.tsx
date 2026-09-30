@@ -27,18 +27,17 @@ const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab }) => {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-t border-slate-100 h-16 flex items-center justify-around px-4 z-50">
+    <nav className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg shadow-[var(--shadow-nav)] h-16 flex items-center justify-around px-4 z-50">
       {tabs.map(tab => (
         <button
           key={tab.id}
           onClick={() => setActiveTab(tab.id)}
-          className={`flex flex-col items-center gap-1 transition-all flex-1 py-1 ${
-            activeTab === tab.id ? 'text-[#646B99]' : 'text-slate-400 hover:text-slate-600'
+          className={`flex flex-col items-center gap-1 transition-all flex-1 mx-0.5 py-1.5 rounded-xl ${
+            activeTab === tab.id ? 'bg-[var(--color-primary)] text-white' : 'text-[var(--color-primary)]'
           }`}
         >
           {tab.icon}
           <span className="text-[9px] uppercase tracking-widest">{tab.label}</span>
-          {activeTab === tab.id && <div className="w-1 h-1 rounded-full bg-[#646B99] mt-0.5"></div>}
         </button>
       ))}
     </nav>

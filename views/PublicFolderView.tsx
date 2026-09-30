@@ -179,7 +179,7 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-white gap-3">
-        <div className="w-10 h-10 border-4 border-[#646B99] border-t-transparent rounded-full animate-spin" />
+        <div className="w-10 h-10 border-4 border-[#616895] border-t-transparent rounded-full animate-spin" />
         <p className="text-slate-400 text-xs uppercase tracking-widest">Carregando pasta...</p>
       </div>
     );
@@ -220,7 +220,7 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
             className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors flex-shrink-0 ${
               friendState === 'sent'
                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                : 'bg-[#646B99] text-white hover:bg-[#4d5275] disabled:opacity-60'
+                : 'bg-[#616895] text-white hover:bg-[#4a4d73] disabled:opacity-60'
             }`}
           >
             {friendState === 'sending' ? 'Enviando...' : friendState === 'sent' ? 'Amigo adicionado!' : '+ Adicionar Amigo'}
@@ -248,7 +248,7 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
                 placeholder="Buscar por nome, número ou set..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#646B99] transition-all shadow-sm"
+                className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#616895] transition-all shadow-sm"
               />
             </div>
             {(browseMode === 'cards' || selectedSetId !== null) && (
@@ -256,7 +256,7 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
                 <CardViewModeSelector viewMode={cardsLayout} onChange={setCardsLayout} />
                 <button
                   onClick={() => setShowFilters(!showFilters)}
-                  className={`px-3 py-2 border rounded-xl flex items-center gap-1.5 text-xs font-semibold transition-all flex-shrink-0 ${showFilters ? 'bg-[#646B99] text-white border-[#646B99]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                  className={`px-3 py-2 border rounded-xl flex items-center gap-1.5 text-xs font-semibold transition-all flex-shrink-0 ${showFilters ? 'bg-[#616895] text-white border-[#616895]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                   Filtros
@@ -268,13 +268,13 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
           <div className="flex bg-white p-1 rounded-xl border border-slate-200">
             <button
               onClick={() => { setBrowseMode('cards'); setSelectedEra(null); setSelectedSetId(null); }}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${browseMode === 'cards' ? 'bg-[#646B99] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${browseMode === 'cards' ? 'bg-[#616895] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
             >
               Todas as Cartas
             </button>
             <button
               onClick={() => { setBrowseMode('collections'); setSelectedEra(null); setSelectedSetId(null); }}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${browseMode === 'collections' ? 'bg-[#646B99] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${browseMode === 'collections' ? 'bg-[#616895] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
             >
               Coleções
             </button>
@@ -284,7 +284,7 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 animate-in fade-in duration-200">
               <div className="flex flex-col gap-1">
                 <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Raridade</span>
-                <select value={filterRarity} onChange={(e) => setFilterRarity(e.target.value)} className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]">
+                <select value={filterRarity} onChange={(e) => setFilterRarity(e.target.value)} className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#616895]">
                   <option value="all">Todas as Raridades</option>
                   {rarities.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
@@ -292,7 +292,7 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
               {browseMode === 'cards' && (
                 <div className="flex flex-col gap-1">
                   <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Coleção</span>
-                  <select value={filterSet} onChange={(e) => setFilterSet(e.target.value)} className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]">
+                  <select value={filterSet} onChange={(e) => setFilterSet(e.target.value)} className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#616895]">
                     <option value="all">Todas as Coleções</option>
                     {setOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
@@ -300,14 +300,14 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
               )}
               <div className="flex flex-col gap-1">
                 <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Categoria</span>
-                <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]">
+                <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#616895]">
                   <option value="all">Todas as Categorias</option>
                   {variationOptions.map((v) => <option key={v} value={v}>{v}</option>)}
                 </select>
               </div>
               <div className="flex flex-col gap-1">
                 <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Qualidade</span>
-                <select value={filterQuality} onChange={(e) => setFilterQuality(e.target.value)} className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]">
+                <select value={filterQuality} onChange={(e) => setFilterQuality(e.target.value)} className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#616895]">
                   <option value="all">Todas as Qualidades</option>
                   {Object.keys(CardCondition).map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
@@ -315,7 +315,7 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
               <div className="col-span-2 flex justify-end mt-1">
                 <button
                   onClick={() => { setFilterRarity('all'); setFilterSet('all'); setFilterCategory('all'); setFilterQuality('all'); setSearchQuery(''); }}
-                  className="text-[10px] font-semibold text-slate-400 hover:text-[#646B99] transition-colors"
+                  className="text-[10px] font-semibold text-slate-400 hover:text-[#616895] transition-colors"
                 >
                   Limpar Filtros
                 </button>
@@ -390,13 +390,13 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
                     <button
                       key={set.id}
                       onClick={() => setSelectedSetId(set.id)}
-                      className="flex flex-col items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-[#646B99]/30 transition-all group min-h-[110px]"
+                      className="flex flex-col items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-[#616895]/30 transition-all group min-h-[110px]"
                     >
                       <div className="h-10 w-full flex items-center justify-center mb-1">
                         <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain group-hover:scale-110 transition-transform" fallback="empty" />
                       </div>
                       <p className="text-[10px] font-medium text-slate-600 line-clamp-1 text-center">{set.name}</p>
-                      <p className="text-[9px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2 py-0.5 rounded-full mt-1">
+                      <p className="text-[9px] font-semibold text-[#616895] bg-[#616895]/5 px-2 py-0.5 rounded-full mt-1">
                         {count} {count === 1 ? 'carta' : 'cartas'}
                       </p>
                     </button>
@@ -413,10 +413,10 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
                   <button
                     key={era}
                     onClick={() => setSelectedEra(era)}
-                    className="w-full flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-[#646B99]/30 transition-all"
+                    className="w-full flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-[#616895]/30 transition-all"
                   >
                     <span className="text-xs font-semibold text-slate-700">{era}</span>
-                    <span className="text-[10px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2.5 py-1 rounded-full border border-[#646B99]/10">
+                    <span className="text-[10px] font-semibold text-[#616895] bg-[#616895]/5 px-2.5 py-1 rounded-full border border-[#616895]/10">
                       {count} {count === 1 ? 'carta' : 'cartas'}
                     </span>
                   </button>
@@ -430,7 +430,7 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
       {showAccountPopup && (
         <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center px-6">
           <div className="bg-white rounded-2xl shadow-xl px-6 py-5 flex flex-col items-center gap-3 max-w-xs text-center">
-            <div className="w-12 h-12 bg-[#646B99]/10 text-[#646B99] rounded-full flex items-center justify-center">
+            <div className="w-12 h-12 bg-[#616895]/10 text-[#616895] rounded-full flex items-center justify-center">
               <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             </div>
             <p className="text-sm font-semibold text-slate-700">Crie uma conta para interagir</p>
@@ -444,7 +444,7 @@ const PublicFolderView: React.FC<PublicFolderViewProps> = ({ token }) => {
               </button>
               <button
                 onClick={() => { window.location.href = '/'; }}
-                className="flex-1 bg-[#646B99] text-white text-xs font-semibold py-2 rounded-xl hover:bg-[#4d5275] transition-colors"
+                className="flex-1 bg-[#616895] text-white text-xs font-semibold py-2 rounded-xl hover:bg-[#4a4d73] transition-colors"
               >
                 Criar conta / Entrar
               </button>

@@ -421,7 +421,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-40 gap-4 bg-white min-h-[80vh]">
-        <div className="w-10 h-10 border-4 border-[#646B99] border-t-transparent rounded-full animate-spin" />
+        <div className="w-10 h-10 border-4 border-[#616895] border-t-transparent rounded-full animate-spin" />
         <p className="text-slate-400 text-xs uppercase tracking-widest">Sincronizando...</p>
       </div>
     );
@@ -439,7 +439,7 @@ const HomeView: React.FC<HomeViewProps> = ({
         </div>
         <button 
           onClick={init}
-          className="px-8 py-3 bg-[#646B99] text-white text-xs uppercase tracking-widest rounded-full hover:bg-[#4d5275] transition-all shadow-lg"
+          className="px-8 py-3 bg-[#616895] text-white text-xs uppercase tracking-widest rounded-full hover:bg-[#4a4d73] transition-all shadow-lg"
         >
           Tentar Novamente
         </button>
@@ -525,7 +525,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                 <div className="flex flex-col items-center">
                     <p className="text-[9px] text-slate-400 leading-tight">Valor estimado</p>
-                    <p className="text-[10px] text-[#646B99]">R${setStats?.value.toFixed(2) ?? '0.00'}</p>
+                    <p className="text-[10px] text-[#616895]">R${setStats?.value.toFixed(2) ?? '0.00'}</p>
                 </div>
              </div>
           </div>
@@ -540,13 +540,13 @@ const HomeView: React.FC<HomeViewProps> = ({
           <div className="flex flex-1 bg-slate-50 p-1 rounded-xl border border-slate-100">
             <button
               onClick={() => setFilterTab('tudo')}
-              className={`flex-1 py-2 rounded-lg text-xs uppercase tracking-widest transition-all ${filterTab === 'tudo' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400'}`}
+              className={`flex-1 py-2 rounded-lg text-xs uppercase tracking-widest transition-all ${filterTab === 'tudo' ? 'bg-white text-[#616895] shadow-sm' : 'text-slate-400'}`}
             >
               Tudo
             </button>
             <button
               onClick={() => setFilterTab('restantes')}
-              className={`flex-1 py-2 rounded-lg text-xs uppercase tracking-widest transition-all ${filterTab === 'restantes' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400'}`}
+              className={`flex-1 py-2 rounded-lg text-xs uppercase tracking-widest transition-all ${filterTab === 'restantes' ? 'bg-white text-[#616895] shadow-sm' : 'text-slate-400'}`}
             >
               Restantes
             </button>
@@ -582,7 +582,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           <div className="mb-4 flex gap-2">
             <button
               onClick={handleSelectAllInSet}
-              className="flex-1 py-2 bg-[#646B99]/5 border border-[#646B99]/20 text-[#646B99] text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-[#646B99]/10 transition-colors"
+              className="flex-1 py-2 bg-[#616895]/5 border border-[#616895]/20 text-[#616895] text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-[#616895]/10 transition-colors"
             >
               Selecionar Todas
             </button>
@@ -707,7 +707,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                         <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain filter group-hover:scale-110 transition-transform" fallback="empty" />
                     </div>
                     <div className="w-full space-y-2 mt-auto">
-                        <p className="text-[10px] font-medium text-slate-600 text-center line-clamp-1 group-hover:text-[#646B99] transition-colors flex items-center justify-center gap-1">
+                        <p className="text-[10px] font-medium text-slate-600 text-center line-clamp-1 group-hover:text-[#616895] transition-colors flex items-center justify-center gap-1">
                             {set.symbolUrl && <CardImage src={set.symbolUrl} alt="" className="w-3 h-3 object-contain flex-shrink-0" fallback="empty" />}
                             {set.name}
                         </p>

@@ -1,5 +1,37 @@
 @import "tailwindcss";
 
+/* Tokens do design system extraído do Figma (arquivo 9huib2UjrWJUZeXVDHx2WD) - cores,
+   raios e sombras de referência usados via classes arbitrárias do Tailwind
+   (ex: shadow-[var(--shadow-card)]) em vez de sobrescrever a escala padrão do Tailwind,
+   que já é usada com outro significado em telas não cobertas por este design system. */
+:root {
+  --color-primary: #616895;
+  --color-text: #676767;
+  --color-text-muted: #62748e;
+  --color-surface: #f8fafc;
+  --color-surface-card: #fbfcfd;
+  --color-border: #e7ecf2;
+  --color-border-strong: #cbd5e1;
+  --color-track: #f1f5f9;
+  --color-base: #00d492;
+  --color-complete: #4a90d9;
+  --color-master: #9b6bd9;
+  --color-warn-bg: #fffbeb;
+  --color-warn-border: #ffeca2;
+  --color-warn-text: #d58f5a;
+
+  --shadow-rgb: 141, 141, 141;
+  --shadow-header: 0 2px 1px rgba(var(--shadow-rgb), .25);
+  --shadow-nav: 0 -2px 8px rgba(var(--shadow-rgb), .25);
+  --shadow-card: 2px 2px 2px rgba(var(--shadow-rgb), .25);
+  --shadow-card-lg: 4px 4px 4px rgba(var(--shadow-rgb), .25);
+  --shadow-btn: 4px 4px 2px rgba(var(--shadow-rgb), .25);
+  --shadow-tab: 2px 2px 1px rgba(var(--shadow-rgb), .25);
+  --shadow-icon-btn: 2px 2px 4px rgba(var(--shadow-rgb), .25);
+  --shadow-inset: inset 2px 2px 2px rgba(var(--shadow-rgb), .25);
+  --shadow-inset-lg: inset 2px 2px 4px rgba(var(--shadow-rgb), .25);
+}
+
 /* Brilho holográfico simulado para cartas Reverse Foil no filtro Master Set (ver
    MasterSetTile.tsx) - um degradê arco-íris diagonal em mix-blend-mode: color-dodge,
    parecido com o reflexo de uma reverse holo real sob luz. Só 2 keyframes com "alternate"

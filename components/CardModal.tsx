@@ -236,7 +236,7 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
           
           <h2 className="text-base font-bold text-slate-800 mb-0.5 text-center uppercase tracking-tight">{card.name}</h2>
           <p className="text-slate-400 text-[9px] uppercase tracking-widest mb-1.5">{card.rarity} • #{getCompleteCardNumber(card)}</p>
-          <div className="text-sm font-semibold text-[#646B99] bg-slate-50 border border-slate-100 px-3 py-1 rounded-full text-center">
+          <div className="text-sm font-semibold text-[#616895] bg-slate-50 border border-slate-100 px-3 py-1 rounded-full text-center">
             Total: {totalQty} cartas
           </div>
         </div>
@@ -245,13 +245,13 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
         <div className="flex border-t border-slate-50 flex-shrink-0">
           <button 
             onClick={() => setActiveTab('variations')}
-            className={`flex-1 py-3 text-[10px] uppercase tracking-widest transition-colors font-semibold ${activeTab === 'variations' ? 'text-[#646B99] border-b-2 border-[#646B99]' : 'text-slate-300 hover:text-slate-400'}`}
+            className={`flex-1 py-3 text-[10px] uppercase tracking-widest transition-colors font-semibold ${activeTab === 'variations' ? 'text-[#616895] border-b-2 border-[#616895]' : 'text-slate-300 hover:text-slate-400'}`}
           >
             Variações
           </button>
           <button 
             onClick={() => setActiveTab('price')}
-            className={`flex-1 py-3 text-[10px] uppercase tracking-widest transition-colors font-semibold ${activeTab === 'price' ? 'text-[#646B99] border-b-2 border-[#646B99]' : 'text-slate-300 hover:text-slate-400'}`}
+            className={`flex-1 py-3 text-[10px] uppercase tracking-widest transition-colors font-semibold ${activeTab === 'price' ? 'text-[#616895] border-b-2 border-[#616895]' : 'text-slate-300 hover:text-slate-400'}`}
           >
             Preço Médio
           </button>
@@ -285,7 +285,7 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-semibold text-slate-700">{variation}</span>
                         {subtotal > 0 && (
-                          <span className="px-2 py-0.5 bg-[#646B99] text-white text-[9px] rounded-full font-bold">
+                          <span className="px-2 py-0.5 bg-[#616895] text-white text-[9px] rounded-full font-bold">
                             {subtotal}
                           </span>
                         )}
@@ -354,7 +354,7 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
                                       >
                                         -
                                       </button>
-                                      <span className="w-8 text-center text-[11px] text-[#646B99] font-semibold tabular-nums">
+                                      <span className="w-8 text-center text-[11px] text-[#616895] font-semibold tabular-nums">
                                         {details.quantity}
                                       </span>
                                       <button
@@ -373,20 +373,20 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
                                         placeholder="Preço"
                                         value={details.price || ''}
                                         onChange={(e) => updateVariationValue(variation, cond, { price: e.target.value })}
-                                        className="w-full bg-white border border-slate-200 rounded-lg pl-5 pr-2 py-1 text-[11px] text-[#646B99] font-medium outline-none focus:ring-1 focus:ring-[#646B99] transition-all text-right h-7"
+                                        className="w-full bg-white border border-slate-200 rounded-lg pl-5 pr-2 py-1 text-[11px] text-[#616895] font-medium outline-none focus:ring-1 focus:ring-[#616895] transition-all text-right h-7"
                                       />
                                     </div>
                                   </>
                                 ) : (
                                   <div className="flex items-center justify-center bg-white border border-slate-200 rounded-lg h-7 px-3 shadow-sm">
-                                    <span className="text-[11px] text-[#646B99] font-semibold tabular-nums">{details.quantity}</span>
+                                    <span className="text-[11px] text-[#616895] font-semibold tabular-nums">{details.quantity}</span>
                                   </div>
                                 )}
 
                                 <button
                                   onClick={() => startLanguageBreakdown(variation, cond)}
                                   title="Detalhar por idioma"
-                                  className={`w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-lg border transition-colors ${hasLanguages ? 'bg-[#646B99]/10 border-[#646B99]/30 text-[#646B99]' : 'bg-white border-slate-200 text-slate-300 hover:text-[#646B99]'}`}
+                                  className={`w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-lg border transition-colors ${hasLanguages ? 'bg-[#616895]/10 border-[#616895]/30 text-[#616895]' : 'bg-white border-slate-200 text-slate-300 hover:text-[#616895]'}`}
                                 >
                                   <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"/></svg>
                                 </button>
@@ -400,7 +400,7 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
                                       <select
                                         value={code}
                                         onChange={(e) => changeLanguageCode(variation, cond, code, e.target.value)}
-                                        className="flex-1 min-w-0 bg-white border border-slate-200 rounded-md px-1.5 py-1 text-[10px] text-slate-600 outline-none focus:ring-1 focus:ring-[#646B99]"
+                                        className="flex-1 min-w-0 bg-white border border-slate-200 rounded-md px-1.5 py-1 text-[10px] text-slate-600 outline-none focus:ring-1 focus:ring-[#616895]"
                                       >
                                         {code !== '' && !LANGUAGE_OPTIONS.some(l => l.code === code) && (
                                           <option value={code}>{languageLabel(code)}</option>
@@ -416,7 +416,7 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
                                         >
                                           -
                                         </button>
-                                        <span className="w-6 text-center text-[10px] text-[#646B99] font-semibold tabular-nums">{lang.quantity}</span>
+                                        <span className="w-6 text-center text-[10px] text-[#616895] font-semibold tabular-nums">{lang.quantity}</span>
                                         <button
                                           onClick={() => updateLanguageQuantity(variation, cond, code, 1)}
                                           className="w-6 h-full flex items-center justify-center text-slate-400 hover:text-emerald-500 transition-colors font-bold text-xs"
@@ -431,7 +431,7 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
                                           placeholder="Preço"
                                           value={lang.price || ''}
                                           onChange={(e) => updateLanguagePriceValue(variation, cond, code, e.target.value)}
-                                          className="w-full bg-white border border-slate-200 rounded-md pl-4 pr-1 py-1 text-[10px] text-[#646B99] font-medium outline-none focus:ring-1 focus:ring-[#646B99] text-right h-6"
+                                          className="w-full bg-white border border-slate-200 rounded-md pl-4 pr-1 py-1 text-[10px] text-[#616895] font-medium outline-none focus:ring-1 focus:ring-[#616895] text-right h-6"
                                         />
                                       </div>
                                     </div>
@@ -440,7 +440,7 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
                                     <select
                                       value={pendingLanguageCode}
                                       onChange={(e) => setPendingLanguageCode(e.target.value)}
-                                      className="flex-1 bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] text-slate-600 outline-none focus:ring-1 focus:ring-[#646B99]"
+                                      className="flex-1 bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] text-slate-600 outline-none focus:ring-1 focus:ring-[#616895]"
                                     >
                                       {LANGUAGE_OPTIONS.map(l => (
                                         <option key={l.code} value={l.code}>{l.label}</option>
@@ -448,7 +448,7 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
                                     </select>
                                     <button
                                       onClick={() => addLanguageRow(variation, cond, pendingLanguageCode)}
-                                      className="px-2.5 py-1 bg-[#646B99]/10 text-[#646B99] text-[10px] font-semibold rounded-lg hover:bg-[#646B99]/20 transition-colors flex-shrink-0"
+                                      className="px-2.5 py-1 bg-[#616895]/10 text-[#616895] text-[10px] font-semibold rounded-lg hover:bg-[#616895]/20 transition-colors flex-shrink-0"
                                     >
                                       + Idioma
                                     </button>
@@ -490,7 +490,7 @@ const CardModal: React.FC<CardModalProps> = ({ card, user, onUpdateUser, onClose
                               {stat.count} preço(s) · R${stat.min.toFixed(2)} – R${stat.max.toFixed(2)}
                             </p>
                           </div>
-                          <span className="text-base font-bold text-[#646B99] flex-shrink-0">R${stat.avg.toFixed(2)}</span>
+                          <span className="text-base font-bold text-[#616895] flex-shrink-0">R${stat.avg.toFixed(2)}</span>
                         </div>
                       ))
                     )}

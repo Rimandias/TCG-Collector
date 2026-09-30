@@ -82,18 +82,18 @@ const VariationSlotTile: React.FC<VariationSlotTileProps> = ({ slot, viewMode, h
           {isReverseFoil && <div className="holo-shine absolute inset-0 pointer-events-none" />}
         </div>
         <div className="flex-1 min-w-0" onClick={onClick}>
-          <h4 className="text-xs font-semibold text-slate-800 truncate cursor-pointer hover:text-[#646B99] transition-colors">{card.name}</h4>
+          <h4 className="text-xs font-semibold text-slate-800 truncate cursor-pointer hover:text-[#616895] transition-colors">{card.name}</h4>
           <p className="text-[9px] text-slate-400 mb-1">#{getCompleteCardNumber(card)}</p>
           <Tags slot={slot} size="sm" />
         </div>
         <div className="flex flex-col items-end gap-1 flex-shrink-0">
-          <span className="text-[11px] font-bold text-[#646B99]">{slot.quantity}x</span>
+          <span className="text-[11px] font-bold text-[#616895]">{slot.quantity}x</span>
           <span className="text-[10px] font-semibold text-emerald-500">R${slot.price.toFixed(2)}</span>
         </div>
         {onToggleHidden && (
           <button
             onClick={(e) => { e.stopPropagation(); onToggleHidden(); }}
-            className={`p-1.5 rounded-lg transition-all flex-shrink-0 ${hidden ? 'text-slate-300 hover:text-[#646B99] hover:bg-[#646B99]/5' : 'text-[#646B99] bg-[#646B99]/10'}`}
+            className={`p-1.5 rounded-lg transition-all flex-shrink-0 ${hidden ? 'text-slate-300 hover:text-[#616895] hover:bg-[#616895]/5' : 'text-[#616895] bg-[#616895]/10'}`}
             title={hidden ? 'Oculta para outras pessoas (clique para exibir)' : 'Visível para outras pessoas (clique para ocultar)'}
           >
             {hidden ? <EyeOffIcon /> : <EyeIcon />}
@@ -110,7 +110,7 @@ const VariationSlotTile: React.FC<VariationSlotTileProps> = ({ slot, viewMode, h
       {onToggleHidden && (
         <button
           onClick={(e) => { e.stopPropagation(); onToggleHidden(); }}
-          className={`absolute top-1 right-1 z-10 p-1 rounded-lg shadow-sm border ${hidden ? 'bg-white/95 text-slate-300 border-slate-100 hover:text-[#646B99]' : 'bg-[#646B99] text-white border-[#646B99]'}`}
+          className={`absolute top-1 right-1 z-10 p-1 rounded-lg shadow-sm border ${hidden ? 'bg-white/95 text-slate-300 border-slate-100 hover:text-[#616895]' : 'bg-[#616895] text-white border-[#616895]'}`}
           title={hidden ? 'Oculta para outras pessoas (clique para exibir)' : 'Visível para outras pessoas (clique para ocultar)'}
         >
           {hidden ? <EyeOffIcon /> : <EyeIcon />}
@@ -125,13 +125,13 @@ const VariationSlotTile: React.FC<VariationSlotTileProps> = ({ slot, viewMode, h
         />
         {isReverseFoil && <div className="holo-shine absolute inset-0 pointer-events-none" />}
       </div>
-      <p onClick={onClick} className={`text-slate-700 font-semibold truncate w-full text-center cursor-pointer hover:text-[#646B99] transition-colors ${isCompact ? 'text-[8px]' : 'text-[9px]'}`}>
+      <p onClick={onClick} className={`text-slate-700 font-semibold truncate w-full text-center cursor-pointer hover:text-[#616895] transition-colors ${isCompact ? 'text-[8px]' : 'text-[9px]'}`}>
         {card.name}
       </p>
       <p className="text-[8px] text-slate-400">#{getCompleteCardNumber(card)}</p>
       <Tags slot={slot} size="xs" />
       <div className="flex items-center justify-between w-full">
-        <span className="text-[9px] font-bold text-[#646B99]">{slot.quantity}x</span>
+        <span className="text-[9px] font-bold text-[#616895]">{slot.quantity}x</span>
         <span className="text-[8px] font-semibold text-emerald-500">R${slot.price.toFixed(2)}</span>
       </div>
     </div>

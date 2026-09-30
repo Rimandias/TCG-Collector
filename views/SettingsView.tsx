@@ -228,7 +228,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
                <img src={user.avatarUrl} alt="User Avatar" className="w-20 h-20 rounded-2xl object-cover border-4 border-white shadow-sm" />
                <button
                  onClick={handleChangeAvatar}
-                 className="absolute bottom-0 right-0 p-2 bg-[#646B99] text-white rounded-lg shadow-md hover:scale-105 transition-transform"
+                 className="absolute bottom-0 right-0 p-2 bg-[#616895] text-white rounded-lg shadow-md hover:scale-105 transition-transform"
                >
                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
                </button>
@@ -240,7 +240,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
                       type="text"
                       value={newName}
                       onChange={(e) => setNewName(e.target.value)}
-                      className="bg-white border border-slate-100 rounded-lg px-3 py-1.5 text-slate-700 w-full outline-none focus:ring-1 focus:ring-[#646B99]"
+                      className="bg-white border border-slate-100 rounded-lg px-3 py-1.5 text-slate-700 w-full outline-none focus:ring-1 focus:ring-[#616895]"
                     />
                     <button onClick={handleSaveName} className="p-1.5 bg-emerald-500 text-white rounded-lg">
                       <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -249,7 +249,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
                ) : (
                  <div className="flex items-center gap-2">
                     <h3 className="text-lg text-slate-800">{user.username}</h3>
-                    <button onClick={() => setEditingName(true)} className="text-slate-300 hover:text-[#646B99] transition-colors">
+                    <button onClick={() => setEditingName(true)} className="text-slate-300 hover:text-[#616895] transition-colors">
                       <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
                     </button>
                  </div>
@@ -267,7 +267,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
                 autoComplete="current-password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full bg-white border border-slate-100 rounded-xl px-4 py-2 pr-10 text-sm text-slate-700 focus:ring-1 focus:ring-[#646B99] outline-none"
+                className="w-full bg-white border border-slate-100 rounded-xl px-4 py-2 pr-10 text-sm text-slate-700 focus:ring-1 focus:ring-[#616895] outline-none"
               />
               <button
                 type="button"
@@ -284,7 +284,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
                 autoComplete="new-password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full bg-white border border-slate-100 rounded-xl px-4 py-2 pr-10 text-sm text-slate-700 focus:ring-1 focus:ring-[#646B99] outline-none"
+                className="w-full bg-white border border-slate-100 rounded-xl px-4 py-2 pr-10 text-sm text-slate-700 focus:ring-1 focus:ring-[#616895] outline-none"
               />
               <button
                 type="button"
@@ -301,7 +301,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
                 autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full bg-white border border-slate-100 rounded-xl px-4 py-2 pr-10 text-sm text-slate-700 focus:ring-1 focus:ring-[#646B99] outline-none"
+                className="w-full bg-white border border-slate-100 rounded-xl px-4 py-2 pr-10 text-sm text-slate-700 focus:ring-1 focus:ring-[#616895] outline-none"
               />
               <button
                 type="button"
@@ -330,10 +330,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
         <section className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
           <h4 className="text-[10px] text-slate-300 uppercase tracking-widest mb-3">Seu Código de Amigo</h4>
           <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm mb-6">
-            <span className="text-sm font-mono font-semibold text-[#646B99] tracking-widest">{formatFriendCode(user.friendCode)}</span>
+            <span className="text-sm font-mono font-semibold text-[#616895] tracking-widest">{formatFriendCode(user.friendCode)}</span>
             <button
               onClick={handleCopyCode}
-              className="text-[10px] uppercase tracking-widest font-medium text-slate-400 hover:text-[#646B99] px-2 py-1"
+              className="text-[10px] uppercase tracking-widest font-medium text-slate-400 hover:text-[#616895] px-2 py-1"
             >
               {codeCopied ? 'Copiado!' : 'Copiar'}
             </button>
@@ -344,7 +344,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
             <h4 className="text-[10px] text-slate-300 uppercase tracking-widest">Gerenciar Amigos ({user.friends.length})</h4>
             <button
               onClick={() => { setShowAddFriend(true); setAddFriendError(null); }}
-              className="text-[11px] font-medium text-[#646B99] hover:text-[#4d5275] flex items-center gap-1 bg-white border border-slate-100 px-2.5 py-1 rounded-lg transition-colors shadow-sm"
+              className="text-[11px] font-medium text-[#616895] hover:text-[#4a4d73] flex items-center gap-1 bg-white border border-slate-100 px-2.5 py-1 rounded-lg transition-colors shadow-sm"
             >
               + Adicionar Amigo
             </button>
@@ -357,7 +357,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
               friendsSortedByDate.map(friend => (
                 <div key={friend.userId} className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-[#646B99]/10 flex items-center justify-center text-[#646B99] font-bold text-xs flex-shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-[#616895]/10 flex items-center justify-center text-[#616895] font-bold text-xs flex-shrink-0">
                       {friend.username[0]?.toUpperCase()}
                     </div>
                     <div>
@@ -392,7 +392,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
           <button
             onClick={() => csvInputRef.current?.click()}
             disabled={importing}
-            className="w-full py-3 bg-white border border-slate-100 text-[#646B99] text-xs font-semibold rounded-xl hover:bg-slate-100 transition-colors shadow-sm disabled:opacity-50"
+            className="w-full py-3 bg-white border border-slate-100 text-[#616895] text-xs font-semibold rounded-xl hover:bg-slate-100 transition-colors shadow-sm disabled:opacity-50"
           >
             {importing ? 'Processando arquivo...' : '+ Selecionar arquivo CSV'}
           </button>
@@ -406,7 +406,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
           </p>
           <button
             onClick={handleExportData}
-            className="w-full py-3 bg-white border border-slate-100 text-[#646B99] text-xs font-semibold rounded-xl hover:bg-slate-100 transition-colors shadow-sm"
+            className="w-full py-3 bg-white border border-slate-100 text-[#616895] text-xs font-semibold rounded-xl hover:bg-slate-100 transition-colors shadow-sm"
           >
             Baixar arquivo (.json)
           </button>
@@ -440,7 +440,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
                 value={friendCodeInput}
                 onChange={(e) => setFriendCodeInput(e.target.value)}
                 autoFocus
-                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs text-slate-700 uppercase tracking-widest outline-none focus:ring-1 focus:ring-[#646B99] mb-2"
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs text-slate-700 uppercase tracking-widest outline-none focus:ring-1 focus:ring-[#616895] mb-2"
               />
               {addFriendError && (
                 <p className="text-red-500 text-[10px] mb-2">{addFriendError}</p>
@@ -457,7 +457,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
                 <button
                   type="submit"
                   disabled={!friendCodeInput.trim() || addingFriend}
-                  className="flex-1 py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors disabled:opacity-50"
+                  className="flex-1 py-2 bg-[#616895] text-white text-xs font-semibold rounded-lg hover:bg-[#4a4d73] transition-colors disabled:opacity-50"
                 >
                   {addingFriend ? 'Adicionando...' : 'Confirmar'}
                 </button>
@@ -554,7 +554,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ user, onUpdateUser, onLogou
               <button
                 onClick={handleConfirmImport}
                 disabled={csvSummary.importedCount === 0 || savingImport}
-                className="flex-1 py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors disabled:opacity-50"
+                className="flex-1 py-2 bg-[#616895] text-white text-xs font-semibold rounded-lg hover:bg-[#4a4d73] transition-colors disabled:opacity-50"
               >
                 {savingImport ? 'Salvando...' : `Aplicar ${csvSummary.importedCount} carta(s)`}
               </button>

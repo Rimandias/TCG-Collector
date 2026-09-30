@@ -9,7 +9,7 @@ const PrivacyPolicyView: React.FC = () => {
   return (
     <div className="min-h-screen bg-white">
       <div className="max-w-2xl mx-auto animate-in fade-in duration-500 px-6 pb-16 pt-8">
-        <a href="/" className="text-xs font-semibold text-[#646B99]">&larr; Voltar para o TCG Colecionador</a>
+        <a href="/" className="text-xs font-semibold text-[#616895]">&larr; Voltar para o TCG Colecionador</a>
 
         <h2 className="text-2xl text-slate-800 mt-4">Política de Privacidade</h2>
         <p className="text-slate-400 text-xs">Última atualização: 14 de setembro de 2026.</p>
@@ -91,7 +91,7 @@ const PrivacyPolicyView: React.FC = () => {
             <h3 className="text-slate-800 font-semibold mb-1">Contato</h3>
             <p>
               Dúvidas sobre privacidade ou sobre esta política:{' '}
-              <a href="mailto:sergioriman@gmail.com" className="text-[#646B99] font-medium">
+              <a href="mailto:sergioriman@gmail.com" className="text-[#616895] font-medium">
                 sergioriman@gmail.com
               </a>.
             </p>

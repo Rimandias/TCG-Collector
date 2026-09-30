@@ -912,11 +912,11 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
           handleCopyShareLink(folder);
         }}
         disabled={busy}
-        className={`p-1.5 rounded-lg transition-all ${copied ? 'text-emerald-600 bg-emerald-50' : 'text-slate-300 hover:text-[#646B99] hover:bg-[#646B99]/5'} disabled:opacity-50`}
+        className={`p-1.5 rounded-lg transition-all ${copied ? 'text-emerald-600 bg-emerald-50' : 'text-slate-300 hover:text-[#616895] hover:bg-[#616895]/5'} disabled:opacity-50`}
         title={copied ? 'Link copiado!' : 'Copiar link público desta pasta (não exige login para visualizar)'}
       >
         {busy ? (
-          <span className="block w-4 h-4 border-2 border-[#646B99] border-t-transparent rounded-full animate-spin" />
+          <span className="block w-4 h-4 border-2 border-[#616895] border-t-transparent rounded-full animate-spin" />
         ) : copied ? (
           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
         ) : (
@@ -959,14 +959,14 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
           </button>
         )}
 
-        <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+        <div className="flex bg-[var(--color-surface)] p-1 rounded-lg border border-[var(--color-border)] shadow-[var(--shadow-inset)]">
           <button
             onClick={() => {
               setActiveTab('my');
               handleExitFolder();
               setSelectedFriend(null);
             }}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'my' ? 'bg-white text-[#646B99] shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'my' ? 'bg-white text-[#616895] shadow-[var(--shadow-tab)]' : 'text-slate-400 hover:text-slate-600'}`}
           >
             Minhas Pastas
           </button>
@@ -977,7 +977,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
               setSelectedFriend(null);
               setFriendsSubTab('friends');
             }}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'friends' ? 'bg-white text-[#646B99] shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'friends' ? 'bg-white text-[#616895] shadow-[var(--shadow-tab)]' : 'text-slate-400 hover:text-slate-600'}`}
           >
             Pasta de Amigos
           </button>
@@ -992,7 +992,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
               <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Pastas Ativas</span>
               <button
                 onClick={() => setShowCreateFolder(true)}
-                className="text-[11px] font-medium text-[#646B99] hover:text-[#4d5275] flex items-center gap-1 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-lg transition-colors"
+                className="text-[11px] font-medium text-[#616895] hover:text-[#4a4d73] flex items-center gap-1 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-lg transition-colors"
               >
                 + Criar Pasta
               </button>
@@ -1000,7 +1000,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
 
             {loading ? (
               <div className="flex flex-col items-center justify-center py-20 gap-2">
-                <div className="w-6 h-6 border-2 border-[#646B99] border-t-transparent rounded-full animate-spin" />
+                <div className="w-6 h-6 border-2 border-[#616895] border-t-transparent rounded-full animate-spin" />
                 <p className="text-[10px] text-slate-400 uppercase tracking-widest">Carregando dados...</p>
               </div>
             ) : (
@@ -1008,10 +1008,10 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                 {/* 1. Pasta de Repetidas */}
                 <div
                   onClick={() => setSelectedFolderId('duplicates')}
-                  className="flex items-center justify-between bg-gradient-to-r from-slate-50 to-white p-4 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:border-[#646B99]/30 transition-all group animate-in fade-in"
+                  className="flex items-center justify-between bg-gradient-to-r from-slate-50 to-white p-4 rounded-xl border border-slate-100 shadow-[var(--shadow-tab)] cursor-pointer hover:border-[#616895]/30 transition-all group animate-in fade-in"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-[#646B99]/10 rounded-xl flex items-center justify-center text-[#646B99]">
+                    <div className="w-10 h-10 bg-[#616895]/10 rounded-xl flex items-center justify-center text-[#616895]">
                       <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
                     </div>
                     <div>
@@ -1025,7 +1025,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                     <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full font-medium">
                       {tradeCards.length}
                     </span>
-                    <span className="text-[9px] bg-[#646B99]/10 text-[#646B99] px-2 py-0.5 rounded uppercase tracking-wider font-semibold">
+                    <span className="text-[9px] bg-[#616895]/10 text-[#616895] px-2 py-0.5 rounded uppercase tracking-wider font-semibold">
                       Automática
                     </span>
                     {renderShareLinkButton(folders.find(f => f.id === DEFAULT_FOLDER_ID))}
@@ -1034,7 +1034,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                         e.stopPropagation();
                         handleToggleFolderVisibility(DEFAULT_FOLDER_ID);
                       }}
-                      className={`p-1.5 rounded-lg transition-all ${folders.find(f => f.id === DEFAULT_FOLDER_ID)?.visibleToFriends ? 'text-[#646B99] bg-[#646B99]/10' : 'text-slate-300 hover:text-[#646B99] hover:bg-[#646B99]/5'}`}
+                      className={`p-1.5 rounded-lg transition-all ${folders.find(f => f.id === DEFAULT_FOLDER_ID)?.visibleToFriends ? 'text-[#616895] bg-[#616895]/10' : 'text-slate-300 hover:text-[#616895] hover:bg-[#616895]/5'}`}
                       title={folders.find(f => f.id === DEFAULT_FOLDER_ID)?.visibleToFriends ? 'Visível para amigos (clique para ocultar)' : 'Oculta para amigos (clique para exibir)'}
                     >
                       {folders.find(f => f.id === DEFAULT_FOLDER_ID)?.visibleToFriends ? (
@@ -1049,7 +1049,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                 {/* 2. Lista de Desejos */}
                 <div 
                   onClick={() => setSelectedFolderId('wishlist')}
-                  className="flex items-center justify-between bg-gradient-to-r from-red-50/10 to-white p-4 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:border-red-500/30 transition-all group animate-in fade-in"
+                  className="flex items-center justify-between bg-gradient-to-r from-red-50/10 to-white p-4 rounded-xl border border-slate-100 shadow-[var(--shadow-tab)] cursor-pointer hover:border-red-500/30 transition-all group animate-in fade-in"
                 >
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center text-red-600">
@@ -1085,7 +1085,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                   return (
                     <div 
                       key={folder.id}
-                      className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:border-[#646B99]/30 transition-all group animate-in fade-in"
+                      className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-[var(--shadow-tab)] cursor-pointer hover:border-[#616895]/30 transition-all group animate-in fade-in"
                     >
                       <div 
                         className="flex-1 flex items-center gap-4"
@@ -1095,7 +1095,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                           <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
                         </div>
                         <div>
-                          <h3 className="text-sm font-semibold text-slate-800 group-hover:text-[#646B99] transition-colors">{folder.name}</h3>
+                          <h3 className="text-sm font-semibold text-slate-800 group-hover:text-[#616895] transition-colors">{folder.name}</h3>
                           <p className="text-[10px] text-slate-400">
                             {folder.visibleToFriends ? 'Visível para amigos' : 'Pasta de trocas personalizada'}
                           </p>
@@ -1114,7 +1114,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                             e.stopPropagation();
                             handleToggleFolderVisibility(folder.id);
                           }}
-                          className={`p-1.5 rounded-lg transition-all ${folder.visibleToFriends ? 'text-[#646B99] bg-[#646B99]/10' : 'text-slate-300 hover:text-[#646B99] hover:bg-[#646B99]/5'}`}
+                          className={`p-1.5 rounded-lg transition-all ${folder.visibleToFriends ? 'text-[#616895] bg-[#616895]/10' : 'text-slate-300 hover:text-[#616895] hover:bg-[#616895]/5'}`}
                           title={folder.visibleToFriends ? 'Visível para amigos (clique para ocultar)' : 'Oculta para amigos (clique para exibir)'}
                         >
                           {folder.visibleToFriends ? (
@@ -1166,11 +1166,11 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
             // Visualização compacta em grade - alternativa à lista detalhada de sempre, sem
             // substituí-la. 3 colunas no mobile, 6 a partir de telas grandes (lg).
             const renderGridTile = ({ card, data }: { card: Card; data: UserCardData }) => (
-              <div key={card.id} className="relative bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all p-1.5 flex flex-col items-center">
+              <div key={card.id} className="relative bg-white rounded-xl border border-slate-100 shadow-[var(--shadow-tab)] hover:shadow-md transition-all p-1.5 flex flex-col items-center">
                 <button
                   onClick={() => handleRemoveTile(card.id)}
                   title={isWishlist ? "Remover da lista de desejos" : isDuplicates ? "Remover de todas as trocas" : "Remover desta pasta"}
-                  className="absolute top-1 right-1 z-10 p-1 bg-white/95 text-slate-300 hover:text-red-500 border border-slate-100 rounded-lg shadow-sm"
+                  className="absolute top-1 right-1 z-10 p-1 bg-white/95 text-slate-300 hover:text-red-500 border border-slate-100 rounded-lg shadow-[var(--shadow-tab)]"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                 </button>
@@ -1180,7 +1180,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                   onClick={() => setEditingCard(card)}
                   className="w-full aspect-[5/7] rounded-lg object-contain bg-slate-50/50 border border-slate-100/40 cursor-pointer hover:scale-105 transition-transform"
                 />
-                <h4 onClick={() => setEditingCard(card)} className="text-slate-700 font-semibold truncate w-full text-center text-[9px] mt-1 cursor-pointer hover:text-[#646B99] transition-colors">
+                <h4 onClick={() => setEditingCard(card)} className="text-slate-700 font-semibold truncate w-full text-center text-[9px] mt-1 cursor-pointer hover:text-[#616895] transition-colors">
                   {card.name}
                 </h4>
               </div>
@@ -1211,7 +1211,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                         setManageSelectedSetId(null);
                         setShowManageCards(true);
                       }}
-                      className="text-[11px] font-medium text-[#646B99] hover:bg-[#646B99]/5 border border-[#646B99]/20 px-2.5 py-1 rounded-lg transition-colors uppercase tracking-wider"
+                      className="text-[11px] font-medium text-[#616895] hover:bg-[#616895]/5 border border-[#616895]/20 px-2.5 py-1 rounded-lg transition-colors uppercase tracking-wider"
                     >
                       Gerenciar
                     </button>
@@ -1249,7 +1249,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                         placeholder="Buscar por nome, número ou set..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#646B99] transition-all shadow-sm"
+                        className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#616895] transition-all shadow-[var(--shadow-tab)]"
                       />
                     </div>
                     {(folderViewMode === 'cards' || selectedFolderSetId !== null) && (
@@ -1257,7 +1257,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                         <CardViewModeSelector viewMode={folderCardsLayout} onChange={setFolderCardsLayout} />
                         <button
                           onClick={() => setShowFolderFilters(!showFolderFilters)}
-                          className={`px-3 py-2 border rounded-xl flex items-center gap-1.5 text-xs font-semibold transition-all flex-shrink-0 ${showFolderFilters ? 'bg-[#646B99] text-white border-[#646B99]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                          className={`px-3 py-2 border rounded-xl flex items-center gap-1.5 text-xs font-semibold transition-all flex-shrink-0 ${showFolderFilters ? 'bg-[#616895] text-white border-[#616895]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                           Filtros
@@ -1274,7 +1274,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                         setSelectedFolderSeries(null);
                         setSelectedFolderSetId(null);
                       }}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${folderViewMode === 'cards' ? 'bg-[#646B99] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${folderViewMode === 'cards' ? 'bg-[#616895] text-white shadow-[var(--shadow-tab)]' : 'text-slate-400 hover:text-slate-600'}`}
                     >
                       Todas as Cartas
                     </button>
@@ -1284,7 +1284,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                         setSelectedFolderSeries(null);
                         setSelectedFolderSetId(null);
                       }}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${folderViewMode === 'collections' ? 'bg-[#646B99] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${folderViewMode === 'collections' ? 'bg-[#616895] text-white shadow-[var(--shadow-tab)]' : 'text-slate-400 hover:text-slate-600'}`}
                     >
                       Coleções
                     </button>
@@ -1297,7 +1297,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                           <select
                             value={filterRarity}
                             onChange={(e) => setFilterRarity(e.target.value)}
-                            className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
+                            className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#616895]"
                           >
                             <option value="all">Todas as Raridades</option>
                             {folderRarities.map(r => (
@@ -1312,7 +1312,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                             <select
                               value={filterSet}
                               onChange={(e) => setFilterSet(e.target.value)}
-                              className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
+                              className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#616895]"
                             >
                               <option value="all">Todas as Coleções</option>
                               {folderSets.map(s => (
@@ -1327,7 +1327,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                           <select
                             value={filterCategory}
                             onChange={(e) => setFilterCategory(e.target.value)}
-                            className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
+                            className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#616895]"
                           >
                             <option value="all">Todas as Categorias</option>
                             {folderVariationTypes.map(v => (
@@ -1341,7 +1341,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                           <select
                             value={filterQuality}
                             onChange={(e) => setFilterQuality(e.target.value)}
-                            className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
+                            className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#616895]"
                           >
                             <option value="all">Todas as Qualidades</option>
                             {Object.keys(CardCondition).map(c => (
@@ -1359,7 +1359,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                               setFilterQuality('all');
                               setSearchQuery('');
                             }}
-                            className="text-[10px] font-semibold text-slate-400 hover:text-[#646B99] transition-colors"
+                            className="text-[10px] font-semibold text-slate-400 hover:text-[#616895] transition-colors"
                           >
                             Limpar Filtros
                           </button>
@@ -1443,7 +1443,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                   ) : (
                     <div className="grid gap-3">
                       {paginatedFolderCards.map(({ card, data }) => (
-                        <div key={card.id} className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
+                        <div key={card.id} className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-100 shadow-[var(--shadow-tab)] hover:shadow-md transition-all">
                           <CardImage
                             src={card.imageUrl}
                             alt={card.name}
@@ -1454,7 +1454,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                           <div className="flex-1 min-w-0">
                             <h4
                               onClick={() => setEditingCard(card)}
-                              className="text-slate-800 font-semibold truncate text-xs cursor-pointer hover:text-[#646B99] transition-colors"
+                              className="text-slate-800 font-semibold truncate text-xs cursor-pointer hover:text-[#616895] transition-colors"
                             >
                               {card.name}
                             </h4>
@@ -1474,7 +1474,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                           className={`px-1.5 py-0.5 border rounded text-[8px] font-medium flex items-center gap-1 ${
                                             isOnlyOne
                                               ? 'bg-amber-50 border-amber-200 text-amber-700 font-semibold'
-                                              : 'bg-slate-50 border-slate-100 text-[#646B99]'
+                                              : 'bg-slate-50 border-slate-100 text-[#616895]'
                                           }`}
                                         >
                                           {isOnlyOne && <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />}
@@ -1496,7 +1496,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                             <div className="flex items-center gap-2 mt-2">
                               <button
                                 onClick={() => setEditingCard(card)}
-                                className="px-2 py-0.5 bg-[#646B99]/5 hover:bg-[#646B99]/10 text-[#646B99] border border-[#646B99]/10 rounded text-[8px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
+                                className="px-2 py-0.5 bg-[#616895]/5 hover:bg-[#616895]/10 text-[#616895] border border-[#616895]/10 rounded text-[8px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
                               >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                                 Editar Qtd / Preço
@@ -1565,7 +1565,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                             </span>
                           </div>
 
-                          <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100 mb-1">
+                          <div className="flex bg-[var(--color-surface)] p-1 rounded-lg border border-[var(--color-border)] shadow-[var(--shadow-inset)] mb-1">
                             {([
                               ['base', 'Base Set'],
                               ['complete', 'Complete Set'],
@@ -1574,7 +1574,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                               <button
                                 key={value}
                                 onClick={() => setFolderSetTierFilter(value)}
-                                className={`flex-1 py-1.5 rounded-lg text-[10px] uppercase tracking-widest transition-all ${folderSetTierFilter === value ? 'bg-white text-[#9B6BD9] shadow-sm font-semibold' : 'text-slate-400'}`}
+                                className={`flex-1 py-1.5 rounded-lg text-[10px] uppercase tracking-widest transition-all ${folderSetTierFilter === value ? 'bg-white text-[#9B6BD9] shadow-[var(--shadow-tab)] font-semibold' : 'text-slate-400'}`}
                               >
                                 {label}
                               </button>
@@ -1675,7 +1675,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                           ) : (
                             <div className="grid gap-3">
                               {setCardsInFolder.slice((setCardsPage - 1) * PAGE_SIZE, setCardsPage * PAGE_SIZE).map(({ card, data }) => (
-                                <div key={card.id} className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
+                                <div key={card.id} className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-100 shadow-[var(--shadow-tab)] hover:shadow-md transition-all">
                                   <CardImage
                                     src={card.imageUrl}
                                     alt={card.name}
@@ -1686,7 +1686,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                   <div className="flex-1 min-w-0">
                                     <h4 
                                       onClick={() => setEditingCard(card)}
-                                      className="text-slate-800 font-semibold truncate text-xs cursor-pointer hover:text-[#646B99] transition-colors"
+                                      className="text-slate-800 font-semibold truncate text-xs cursor-pointer hover:text-[#616895] transition-colors"
                                     >
                                       {card.name}
                                     </h4>
@@ -1706,7 +1706,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                                   className={`px-1.5 py-0.5 border rounded text-[8px] font-medium flex items-center gap-1 ${
                                                     isOnlyOne 
                                                       ? 'bg-amber-50 border-amber-200 text-amber-700 font-semibold' 
-                                                      : 'bg-slate-50 border-slate-100 text-[#646B99]'
+                                                      : 'bg-slate-50 border-slate-100 text-[#616895]'
                                                   }`}
                                                 >
                                                   {isOnlyOne && <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />}
@@ -1728,7 +1728,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                     <div className="flex items-center gap-2 mt-2">
                                       <button
                                         onClick={() => setEditingCard(card)}
-                                        className="px-2 py-0.5 bg-[#646B99]/5 hover:bg-[#646B99]/10 text-[#646B99] border border-[#646B99]/10 rounded text-[8px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
+                                        className="px-2 py-0.5 bg-[#616895]/5 hover:bg-[#616895]/10 text-[#616895] border border-[#616895]/10 rounded text-[8px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
                                       >
                                         <svg xmlns="http://www.w3.org/2000/svg" className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                                         Editar Qtd / Preço
@@ -1787,16 +1787,16 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                   <button
                                     key={set.id}
                                     onClick={() => setSelectedFolderSetId(set.id)}
-                                    className="flex flex-col items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-[#646B99]/30 transition-all group min-h-[140px]"
+                                    className="flex flex-col items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-[var(--shadow-tab)] hover:shadow-md hover:border-[#616895]/30 transition-all group min-h-[140px]"
                                   >
                                     <div className="h-12 w-full flex items-center justify-center mb-2">
                                       <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain filter group-hover:scale-110 transition-transform" fallback="empty" />
                                     </div>
                                     <div className="w-full space-y-1 mt-auto text-center">
-                                      <p className="text-[10px] font-medium text-slate-600 line-clamp-1 group-hover:text-[#646B99] transition-colors">
+                                      <p className="text-[10px] font-medium text-slate-600 line-clamp-1 group-hover:text-[#616895] transition-colors">
                                         {set.name}
                                       </p>
-                                      <p className="text-[9px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2 py-0.5 rounded-full inline-block">
+                                      <p className="text-[9px] font-semibold text-[#616895] bg-[#616895]/5 px-2 py-0.5 rounded-full inline-block">
                                         {count} {count === 1 ? 'carta' : 'cartas'}
                                       </p>
                                       {/* Progresso da coleção inteira do usuário nesse set (não só o que está
@@ -1822,7 +1822,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                 <button
                                   key={era}
                                   onClick={() => setSelectedFolderSeries(era)}
-                                  className="w-full flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-[#646B99]/30 transition-all group gap-4"
+                                  className="w-full flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-[var(--shadow-tab)] hover:shadow-md hover:border-[#616895]/30 transition-all group gap-4"
                                 >
                                   <div className="flex items-center gap-4 flex-1">
                                     <div className="h-10 w-24 flex items-center justify-center">
@@ -1838,7 +1838,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2.5 py-1 rounded-full border border-[#646B99]/10">
+                                    <span className="text-[10px] font-semibold text-[#616895] bg-[#616895]/5 px-2.5 py-1 rounded-full border border-[#616895]/10">
                                       {count} {count === 1 ? 'carta' : 'cartas'}
                                     </span>
                                     <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-slate-300 group-hover:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
@@ -1860,16 +1860,16 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
         // --- FRIENDS TAB VIEW ---
         selectedFriend === null ? (
           <div className="space-y-6">
-            <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+            <div className="flex bg-[var(--color-surface)] p-1 rounded-lg border border-[var(--color-border)] shadow-[var(--shadow-inset)]">
               <button
                 onClick={() => setFriendsSubTab('friends')}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${friendsSubTab === 'friends' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${friendsSubTab === 'friends' ? 'bg-white text-[#616895] shadow-[var(--shadow-tab)]' : 'text-slate-400 hover:text-slate-600'}`}
               >
                 Amigos
               </button>
               <button
                 onClick={() => setFriendsSubTab('history')}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${friendsSubTab === 'history' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${friendsSubTab === 'history' ? 'bg-white text-[#616895] shadow-[var(--shadow-tab)]' : 'text-slate-400 hover:text-slate-600'}`}
               >
                 Histórico de Trocas
               </button>
@@ -1891,14 +1891,14 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                          setTradeError(null);
                          setTradeSuccessMessage(null);
                        }}
-                       className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 cursor-pointer hover:border-[#646B99]/30 hover:shadow-md transition-all shadow-sm group"
+                       className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 cursor-pointer hover:border-[#616895]/30 hover:shadow-md transition-all shadow-[var(--shadow-tab)] group"
                      >
                        <div className="flex items-center gap-4">
-                         <div className="w-10 h-10 rounded-xl bg-[#646B99]/10 flex items-center justify-center text-[#646B99] font-bold text-sm">
+                         <div className="w-10 h-10 rounded-xl bg-[#616895]/10 flex items-center justify-center text-[#616895] font-bold text-sm">
                            {friend.username[0]?.toUpperCase()}
                          </div>
                          <div>
-                           <span className="text-sm font-semibold text-slate-700 group-hover:text-[#646B99] transition-colors">{friend.username}</span>
+                           <span className="text-sm font-semibold text-slate-700 group-hover:text-[#616895] transition-colors">{friend.username}</span>
                            <p className="text-[10px] text-slate-400">Ver coleções compartilhadas</p>
                          </div>
                        </div>
@@ -1931,7 +1931,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                       const diff = trade.requestedValue - trade.offeredValue;
 
                       return (
-                        <div key={trade.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+                        <div key={trade.id} className="bg-white rounded-2xl border border-slate-100 shadow-[var(--shadow-tab)] p-4 space-y-3">
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="text-sm font-semibold text-slate-700">Troca com {counterpartName}</p>
@@ -2018,7 +2018,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
             </p>
             <div className="bg-slate-50 rounded-xl p-4 text-center mb-4 border border-slate-100">
               <p className="text-[9px] text-slate-400 uppercase tracking-widest">Valor total</p>
-              <p className="text-2xl font-bold text-[#646B99]">R${pendingTradeConfirm.totalValue.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-[#616895]">R${pendingTradeConfirm.totalValue.toFixed(2)}</p>
             </div>
             {tradeError && <p className="text-red-500 text-[10px] mb-3">{tradeError}</p>}
             <div className="flex gap-3">
@@ -2052,7 +2052,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                   }
                 }}
                 disabled={creatingTrade}
-                className="flex-1 py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors disabled:opacity-50"
+                className="flex-1 py-2 bg-[#616895] text-white text-xs font-semibold rounded-lg hover:bg-[#4a4d73] transition-colors disabled:opacity-50"
               >
                 {creatingTrade ? 'Enviando...' : 'Confirmar'}
               </button>
@@ -2073,7 +2073,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                 placeholder="Ex: Cartas Ultra Raras, Para Sábado..."
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-[#646B99] mb-4"
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-[#616895] mb-4"
               />
               
               <div className="flex gap-3">
@@ -2088,7 +2088,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                 </button>
                 <button 
                   onClick={handleCreateFolder}
-                  className="flex-1 py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors disabled:opacity-50"
+                  className="flex-1 py-2 bg-[#616895] text-white text-xs font-semibold rounded-lg hover:bg-[#4a4d73] transition-colors disabled:opacity-50"
                   disabled={!newFolderName.trim()}
                 >
                   Criar Pasta
@@ -2135,7 +2135,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                   className={`px-1.5 py-0.5 border rounded text-[8px] font-medium flex items-center gap-1 ${
                     isOnlyOne
                       ? 'bg-amber-50 border-amber-200 text-amber-700 font-semibold'
-                      : 'bg-slate-50 border-slate-100 text-[#646B99]'
+                      : 'bg-slate-50 border-slate-100 text-[#616895]'
                   }`}
                 >
                   {isOnlyOne && <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />}
@@ -2172,7 +2172,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
             return (
               <div
                 key={card.id}
-                className={`rounded-xl border transition-all ${isInFolder ? 'border-[#646B99]/30 bg-[#646B99]/5' : 'border-slate-100 hover:bg-slate-50'}`}
+                className={`rounded-xl border transition-all ${isInFolder ? 'border-[#616895]/30 bg-[#616895]/5' : 'border-slate-100 hover:bg-slate-50'}`}
               >
                 <div
                   onClick={() => {
@@ -2188,7 +2188,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                     type="checkbox"
                     checked={isInFolder}
                     onChange={() => {}} // Controlled via onClick
-                    className="w-3.5 h-3.5 text-[#646B99] border-slate-300 rounded focus:ring-[#646B99]"
+                    className="w-3.5 h-3.5 text-[#616895] border-slate-300 rounded focus:ring-[#616895]"
                   />
                   <CardImage src={card.imageUrl} alt={card.name} className="w-10 h-14 object-contain rounded bg-white border border-slate-100/50 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -2214,7 +2214,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                             type="checkbox"
                             checked={checked}
                             onChange={() => toggleEntry(entry)}
-                            className="w-3.5 h-3.5 text-[#646B99] border-slate-300 rounded focus:ring-[#646B99] flex-shrink-0"
+                            className="w-3.5 h-3.5 text-[#616895] border-slate-300 rounded focus:ring-[#616895] flex-shrink-0"
                           />
                           <span className="text-[10px] text-slate-600 flex-1 min-w-0 truncate">
                             {entry.variation} {entry.condition}{langLabel ? ` · ${langLabel}` : ''} <span className="text-slate-300">(possui {entry.quantity})</span>
@@ -2227,7 +2227,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                               >
                                 -
                               </button>
-                              <span className="w-6 text-center text-[10px] text-[#646B99] font-semibold tabular-nums">
+                              <span className="w-6 text-center text-[10px] text-[#616895] font-semibold tabular-nums">
                                 {sel?.quantity}
                               </span>
                               <button
@@ -2270,20 +2270,20 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                           placeholder="Buscar por nome, número ou set..."
                           value={manageSearchQuery}
                           onChange={(e) => setManageSearchQuery(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#646B99] transition-all"
+                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#616895] transition-all"
                         />
                       </div>
 
-                      <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100 mb-2">
+                      <div className="flex bg-[var(--color-surface)] p-1 rounded-lg border border-[var(--color-border)] shadow-[var(--shadow-inset)] mb-2">
                         <button
                           onClick={() => { setManageViewMode('cards'); setManageSelectedSeries(null); setManageSelectedSetId(null); }}
-                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all ${manageViewMode === 'cards' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all ${manageViewMode === 'cards' ? 'bg-white text-[#616895] shadow-[var(--shadow-tab)]' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                           Todas as Cartas
                         </button>
                         <button
                           onClick={() => { setManageViewMode('collections'); setManageSelectedSeries(null); setManageSelectedSetId(null); }}
-                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all ${manageViewMode === 'collections' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all ${manageViewMode === 'collections' ? 'bg-white text-[#616895] shadow-[var(--shadow-tab)]' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                           Coleções
                         </button>
@@ -2350,13 +2350,13 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                                 <button
                                   key={set.id}
                                   onClick={() => setManageSelectedSetId(set.id)}
-                                  className="flex flex-col items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:border-[#646B99]/30 transition-all min-h-[110px]"
+                                  className="flex flex-col items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-[var(--shadow-tab)] hover:border-[#616895]/30 transition-all min-h-[110px]"
                                 >
                                   <div className="h-9 w-full flex items-center justify-center mb-1">
                                     <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain" fallback="empty" />
                                   </div>
                                   <p className="text-[9px] font-medium text-slate-600 line-clamp-1 text-center">{set.name}</p>
-                                  <p className="text-[8px] font-semibold text-[#646B99] bg-[#646B99]/5 px-1.5 py-0.5 rounded-full mt-1">
+                                  <p className="text-[8px] font-semibold text-[#616895] bg-[#616895]/5 px-1.5 py-0.5 rounded-full mt-1">
                                     {count} {count === 1 ? 'carta' : 'cartas'}
                                   </p>
                                 </button>
@@ -2373,10 +2373,10 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                             <button
                               key={era}
                               onClick={() => setManageSelectedSeries(era)}
-                              className="w-full flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm hover:border-[#646B99]/30 transition-all"
+                              className="w-full flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-100 shadow-[var(--shadow-tab)] hover:border-[#616895]/30 transition-all"
                             >
                               <span className="text-[11px] font-semibold text-slate-700">{era}</span>
-                              <span className="text-[9px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2 py-0.5 rounded-full border border-[#646B99]/10">
+                              <span className="text-[9px] font-semibold text-[#616895] bg-[#616895]/5 px-2 py-0.5 rounded-full border border-[#616895]/10">
                                 {count} {count === 1 ? 'carta' : 'cartas'}
                               </span>
                             </button>
@@ -2390,7 +2390,7 @@ const TradesView: React.FC<TradesViewProps> = ({ user, onUpdateUser }) => {
                   <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
                     <button
                       onClick={() => { setShowManageCards(false); setVariationPickerCardId(null); }}
-                      className="w-full py-2.5 bg-[#646B99] hover:bg-[#4d5275] text-white text-xs font-semibold rounded-xl transition-colors"
+                      className="w-full py-2.5 bg-[#616895] hover:bg-[#4a4d73] text-white text-xs font-semibold rounded-xl transition-colors"
                     >
                       Concluído
                     </button>

@@ -125,7 +125,7 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-40 gap-4 bg-white min-h-[80vh]">
-        <div className="w-10 h-10 border-4 border-[#646B99] border-t-transparent rounded-full animate-spin" />
+        <div className="w-10 h-10 border-4 border-[#616895] border-t-transparent rounded-full animate-spin" />
         <p className="text-slate-400 text-xs uppercase tracking-widest">Calculando Estatísticas...</p>
       </div>
     );
@@ -139,7 +139,7 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
           <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-2">Status do Mestre Treinador</p>
         </div>
         <div className="text-right">
-          <div className="text-3xl text-[#646B99] leading-none">
+          <div className="text-3xl text-[#616895] leading-none">
             {globalStats.uniqueOwned}<span className="text-lg text-slate-300">/{totalCollectibleCards}</span>
           </div>
           <div className="text-[9px] uppercase text-slate-300 tracking-widest mt-1">Cartas Unitárias Colecionadas</div>
@@ -148,7 +148,7 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
         </div>
       </div>
 
-      <div className="mb-6 bg-gradient-to-r from-[#646B99] to-[#4d5275] rounded-3xl p-6 shadow-lg">
+      <div className="mb-6 bg-[var(--color-primary)] rounded-3xl p-6 shadow-[var(--shadow-card-lg)]">
         <p className="text-[10px] text-white/60 uppercase tracking-widest">Valor Total da Coleção</p>
         <p className="text-3xl text-white font-semibold mt-1">R${globalStats.totalValue.toFixed(2)}</p>
         <p className="text-[9px] text-white/50 mt-1">Soma de todas as coleções, baseada nos preços que você informou</p>
@@ -158,7 +158,7 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
         {eraGroups.map(({ series, sets: setsInEra, tierStats }) => {
           const isOpen = expandedEras.has(series);
           return (
-            <div key={series} className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+            <div key={series} className="bg-[var(--color-surface-card)] rounded-3xl border border-[var(--color-border)] shadow-[var(--shadow-card)] overflow-hidden">
               <button
                 onClick={() => toggleEra(series)}
                 className="w-full flex items-center justify-between gap-4 p-5 text-left hover:bg-slate-50/60 transition-colors"
@@ -188,10 +188,10 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
                   {setsInEra.map(set => {
                     const stats = calculateStats(set);
                     return (
-                      <div key={set.id} className="bg-slate-50/60 rounded-2xl p-4 border border-slate-100/70">
+                      <div key={set.id} className="bg-[var(--color-surface)] rounded-2xl p-4 border border-[var(--color-border)]">
                         <div className="flex justify-between items-start mb-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center p-1.5 border border-slate-100">
+                            <div className="w-10 h-10 rounded-md bg-white flex items-center justify-center p-1.5 shadow-[var(--shadow-inset-lg)]">
                               <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain" fallback="empty" />
                             </div>
                             <div>
@@ -203,7 +203,7 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
                             </div>
                           </div>
                           <div className="text-right flex-shrink-0">
-                            <span className="text-sm text-[#646B99]">{stats.count}</span>
+                            <span className="text-sm text-[#616895]">{stats.count}</span>
                             <span className="text-slate-300 text-[10px]"> / {set.total}</span>
                           </div>
                         </div>

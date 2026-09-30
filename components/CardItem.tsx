@@ -185,7 +185,7 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
       <div className="flex items-center gap-3 bg-white border border-slate-100 rounded-xl p-2 shadow-sm animate-in fade-in duration-200">
         <button
           onClick={toggleOwned}
-          className={`relative flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isColor ? 'bg-[#646B99] text-white' : 'bg-slate-100 text-slate-300'}`}
+          className={`relative flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isColor ? 'bg-[#616895] text-white' : 'bg-slate-100 text-slate-300'}`}
           title={isColor ? 'Possui esta carta' : 'Marcar como possuída'}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
@@ -220,12 +220,12 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
               onChange={(e) => setDraftQuantity(e.target.value.replace(/[^0-9]/g, ''))}
               onBlur={commitQuantity}
               onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-              className="w-6 text-center text-[11px] text-[#646B99] tabular-nums bg-white border border-[#646B99] rounded outline-none"
+              className="w-6 text-center text-[11px] text-[#616895] tabular-nums bg-white border border-[#616895] rounded outline-none"
             />
           ) : (
             <span
               onClick={startEditingQuantity}
-              className="w-6 text-center text-[11px] text-[#646B99] tabular-nums cursor-pointer"
+              className="w-6 text-center text-[11px] text-[#616895] tabular-nums cursor-pointer"
             >
               {totalQuantity}
             </span>
@@ -268,7 +268,7 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
           className={`w-full h-full object-cover transition-all duration-500 ${isColor ? 'grayscale-0' : 'grayscale brightness-[0.8] opacity-40'} ${!card.imageUrl ? 'bg-slate-100' : ''}`}
         />
         {cardData.isForTrade && (
-          <div className="absolute top-1 left-1 w-5 h-5 bg-[#646B99] rounded-full flex items-center justify-center shadow-md border border-white">
+          <div className="absolute top-1 left-1 w-5 h-5 bg-[#616895] rounded-full flex items-center justify-center shadow-md border border-white">
              <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
           </div>
         )}
@@ -303,12 +303,12 @@ const CardItem: React.FC<CardItemProps> = ({ card, user, onUpdateUser, onShowInf
                 onChange={(e) => setDraftQuantity(e.target.value.replace(/[^0-9]/g, ''))}
                 onBlur={commitQuantity}
                 onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-                className="w-7 text-center text-[11px] text-[#646B99] tabular-nums bg-white border border-[#646B99] rounded outline-none"
+                className="w-7 text-center text-[11px] text-[#616895] tabular-nums bg-white border border-[#616895] rounded outline-none"
               />
             ) : (
               <span
                 onClick={startEditingQuantity}
-                className="text-[11px] text-[#646B99] tabular-nums cursor-pointer"
+                className="text-[11px] text-[#616895] tabular-nums cursor-pointer"
               >
                 {totalQuantity}
               </span>
