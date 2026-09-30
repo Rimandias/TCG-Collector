@@ -23,8 +23,7 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
   const [variantFlagsBySet, setVariantFlagsBySet] = useState<Record<string, Record<string, CardVariantInfo>>>({});
   const requestedSetIdsRef = useRef<Set<string>>(new Set());
   // Só a era clicada abre - por padrão tudo fechado, já que ter cartas de várias eras ao
-  // mesmo tempo deixava a tela cheia de cards de sets difícil de navegar (era só uma lista
-  // achatada de todo set possuído, sem nenhum agrupamento).
+  // mesmo tempo deixava a tela cheia de cards de sets difícil de navegar.
   const [expandedEras, setExpandedEras] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -88,8 +87,7 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
 
   // Agrupa só os sets já possuídos (mesmo filtro que a lista antiga usava, count === 0 nunca
   // aparecia) por era, cada grupo já ordenado do set mais recente pro mais antigo. A ordem
-  // das eras segue a mesma convenção da Home: era mais recente primeiro, por data de
-  // lançamento mais antiga dentro dela.
+  // das eras segue a mesma convenção da Home: era mais recente primeiro.
   const eraGroups = useMemo(() => {
     const ownedSets = sets
       .filter(set => calculateStats(set).count > 0)
@@ -133,25 +131,28 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
 
   return (
     <div className="animate-in fade-in duration-500 px-6 pb-20 pt-4">
-      <div className="mb-10 flex items-end justify-between border-b border-slate-50 pb-6">
-        <div>
-          <h2 className="text-2xl text-slate-800 tracking-tight leading-none">Minha Pasta</h2>
-          <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-2">Status do Mestre Treinador</p>
-        </div>
-        <div className="text-right">
-          <div className="text-3xl text-[#616895] leading-none">
-            {globalStats.uniqueOwned}<span className="text-lg text-slate-300">/{totalCollectibleCards}</span>
-          </div>
-          <div className="text-[9px] uppercase text-slate-300 tracking-widest mt-1">Cartas Unitárias Colecionadas</div>
-          <div className="text-sm text-slate-500 leading-none mt-2">{globalStats.totalOwned}</div>
-          <div className="text-[9px] uppercase text-slate-300 tracking-widest mt-1">Total de cartas (com as repetidas)</div>
-        </div>
+      <div className="mb-6">
+        <h2 className="text-2xl text-slate-800 tracking-tight leading-none">Minha pasta</h2>
+        <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-2">Status do mestre treinador</p>
       </div>
 
-      <div className="mb-6 bg-[var(--color-primary)] rounded-3xl p-6 shadow-[var(--shadow-card-lg)]">
+      <div className="mb-4 bg-[var(--color-primary)] rounded-3xl p-6 shadow-[var(--shadow-card-lg)]">
         <p className="text-[10px] text-white/60 uppercase tracking-widest">Valor Total da Coleção</p>
         <p className="text-3xl text-white font-semibold mt-1">R${globalStats.totalValue.toFixed(2)}</p>
-        <p className="text-[9px] text-white/50 mt-1">Soma de todas as coleções, baseada nos preços que você informou</p>
+        <p className="text-[9px] text-white/50 mt-1">Soma de todas as coleções, baseadas nos preços que você informou.</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="flex flex-col items-center justify-center text-center gap-1 h-20 bg-[var(--color-primary)] text-white rounded-2xl shadow-[var(--shadow-btn)]">
+          <p className="text-xl font-semibold leading-none">
+            {globalStats.uniqueOwned}<span className="text-white/60">/{totalCollectibleCards}</span>
+          </p>
+          <p className="text-[9px] text-white/70 px-2 leading-tight">Cartas colecionadas (unitárias)</p>
+        </div>
+        <div className="flex flex-col items-center justify-center text-center gap-1 h-20 bg-[var(--color-primary)] text-white rounded-2xl shadow-[var(--shadow-btn)]">
+          <p className="text-xl font-semibold leading-none">{globalStats.totalOwned}</p>
+          <p className="text-[9px] text-white/70 px-2 leading-tight">Total de cartas (com as repetidas)</p>
+        </div>
       </div>
 
       <div className="grid gap-4">
@@ -170,8 +171,9 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
                       {setsInEra.length} {setsInEra.length === 1 ? 'coleção' : 'coleções'}
                     </span>
                   </div>
-                  <div className="mt-2 max-w-xs">
-                    <SetProgressBar stats={tierStats} size="sm" />
+                  <div className="mt-2 max-w-xs space-y-1">
+                    <SetProgressBar stats={tierStats} size="sm" hideLabel />
+                    <p className="text-[10px] text-[var(--color-primary)] font-semibold">{Math.round(tierStats.totalPercent)}%</p>
                   </div>
                 </div>
                 <svg
@@ -203,13 +205,13 @@ const CollectionView: React.FC<CollectionViewProps> = ({ user }) => {
                             </div>
                           </div>
                           <div className="text-right flex-shrink-0">
-                            <span className="text-sm text-[#616895]">{stats.count}</span>
+                            <span className="text-sm text-[var(--color-primary)]">{stats.count}</span>
                             <span className="text-slate-300 text-[10px]"> / {set.total}</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="flex-1 min-w-0">
-                            <SetProgressBar stats={stats.tierStats} size="sm" />
+                            <SetProgressBar stats={stats.tierStats} size="sm" hideLabel />
                           </div>
                           <TierDots stats={stats.tierStats} />
                         </div>

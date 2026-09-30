@@ -345,7 +345,7 @@ const App: React.FC = () => {
         {/* Static Left Icon Container (w-10) */}
         <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
           {activeTab !== AppTab.HOME || selectedSeries || selectedSet ? (
-            <button 
+            <button
               onClick={() => {
                 if (selectedSet) {
                   setSelectedSet(null);
@@ -379,10 +379,10 @@ const App: React.FC = () => {
             placeholder={
               activeTab !== AppTab.HOME
                 ? "Buscar carta..."
-                : selectedSet 
-                  ? `Buscar em ${selectedSet.name}...` 
-                  : selectedSeries 
-                    ? `Buscar em ${selectedSeries}...` 
+                : selectedSet
+                  ? `Buscar em ${selectedSet.name}...`
+                  : selectedSeries
+                    ? `Buscar em ${selectedSeries}...`
                     : "Buscar carta..."
             }
             value={searchQuery}
