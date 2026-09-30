@@ -47,15 +47,15 @@ const SetProgressBar: React.FC<SetProgressBarProps> = ({ stats, size = 'md', hid
           pintada por cima). */}
       <div className={`relative w-full ${height} bg-slate-100 rounded-full overflow-hidden`}>
         <div
-          className="absolute inset-y-0 left-0 rounded-full bg-emerald-400 transition-all duration-700"
+          className="absolute inset-y-0 left-0 rounded-full bg-[var(--color-base)] transition-all duration-700"
           style={{ width: `${regularFill}%` }}
         />
         <div
-          className="absolute inset-y-0 left-0 rounded-full bg-[#4A90D9] transition-all duration-700"
+          className="absolute inset-y-0 left-0 rounded-full bg-[var(--color-complete)] transition-all duration-700"
           style={{ width: `${secretFill}%` }}
         />
         <div
-          className="absolute inset-y-0 left-0 rounded-full bg-[#9B6BD9] transition-all duration-700"
+          className="absolute inset-y-0 left-0 rounded-full bg-[var(--color-master)] transition-all duration-700"
           style={{ width: `${variationFill}%` }}
         />
       </div>

@@ -138,7 +138,7 @@ const DecksView: React.FC<DecksViewProps> = ({ user, onUpdateUser }) => {
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               </button>
-              <div className="w-9 h-9 rounded-xl bg-[#646B99]/10 flex items-center justify-center text-[#646B99] flex-shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-[#616895]/10 flex items-center justify-center text-[#616895] flex-shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="18" x="5" y="3" rx="2"/><path d="M9 3v18"/></svg>
               </div>
               <div className="min-w-0 flex-1 pr-3">
@@ -163,7 +163,7 @@ const DecksView: React.FC<DecksViewProps> = ({ user, onUpdateUser }) => {
             key={`empty-${i}`}
             onClick={handleCreate}
             disabled={busy}
-            className="flex items-center justify-center gap-2 h-[72px] border-2 border-dashed border-slate-200 rounded-2xl text-slate-300 hover:text-[#646B99] hover:border-[#646B99] transition-colors disabled:opacity-40"
+            className="flex items-center justify-center gap-2 h-[72px] border-2 border-dashed border-slate-200 rounded-2xl text-slate-300 hover:text-[#616895] hover:border-[#616895] transition-colors disabled:opacity-40"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
             <span className="text-[10px] font-semibold uppercase tracking-wide">Criar Deck</span>
@@ -380,7 +380,7 @@ const DeckEditor: React.FC<DeckEditorProps> = ({ deck, sets, user, onUpdateUser,
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <button onClick={() => setShowSearch(true)} className="text-[11px] font-semibold bg-[#646B99] text-white px-3 py-1.5 rounded-lg">+ Carta</button>
+        <button onClick={() => setShowSearch(true)} className="text-[11px] font-semibold bg-[#616895] text-white px-3 py-1.5 rounded-lg">+ Carta</button>
         <button onClick={() => setShowImport(true)} className="text-[11px] font-semibold bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg">Colar lista</button>
         <button onClick={() => setShowExport(true)} className="text-[11px] font-semibold bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg">Exportar</button>
         {cards.length > 0 && (
@@ -429,7 +429,7 @@ const DeckEditor: React.FC<DeckEditorProps> = ({ deck, sets, user, onUpdateUser,
                 {importResult.unresolved.map((line, i) => <p key={i}>{line}</p>)}
               </div>
             )}
-            <button onClick={() => setImportResult(null)} className="w-full bg-[#646B99] text-white text-xs font-semibold py-2 rounded-xl mt-2">OK</button>
+            <button onClick={() => setImportResult(null)} className="w-full bg-[#616895] text-white text-xs font-semibold py-2 rounded-xl mt-2">OK</button>
           </div>
         </div>
       )}
@@ -485,7 +485,7 @@ const DeckCardTile: React.FC<DeckCardTileProps> = ({ deckCard, card, ownedQty, i
         </div>
         <div className="flex items-center bg-slate-50 border border-slate-200 rounded-full overflow-hidden h-8 flex-shrink-0">
           <button onClick={() => onQuantityChange(needed - 1)} className="w-7 h-full text-slate-400 hover:text-red-500">-</button>
-          <span className="w-6 text-center text-[11px] text-[#646B99] tabular-nums">{needed}</span>
+          <span className="w-6 text-center text-[11px] text-[#616895] tabular-nums">{needed}</span>
           <button onClick={() => onQuantityChange(needed + 1)} className="w-7 h-full text-slate-400 hover:text-emerald-500">+</button>
         </div>
         {WishlistButton}
@@ -514,7 +514,7 @@ const DeckCardTile: React.FC<DeckCardTileProps> = ({ deckCard, card, ownedQty, i
         <div className={`flex items-center bg-slate-50 border border-slate-200 rounded-full overflow-hidden shadow-sm ${isCompact ? 'h-7' : 'h-8'}`}>
           <div className="flex items-center flex-1 justify-between px-1 h-full">
             <button onClick={() => onQuantityChange(needed - 1)} className="w-6 h-full flex items-center justify-center text-slate-400 hover:text-red-500">-</button>
-            <span className={`text-[#646B99] tabular-nums ${isCompact ? 'text-[9px]' : 'text-[10px]'}`}>{ownedQty}/{needed}</span>
+            <span className={`text-[#616895] tabular-nums ${isCompact ? 'text-[9px]' : 'text-[10px]'}`}>{ownedQty}/{needed}</span>
             <button onClick={() => onQuantityChange(needed + 1)} className="w-6 h-full flex items-center justify-center text-slate-400 hover:text-emerald-500">+</button>
           </div>
         </div>
@@ -557,7 +557,7 @@ const CardSearchModal: React.FC<{ onPick: (cardId: string) => void; onClose: () 
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Buscar carta pelo nome..."
-          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-[#646B99] mb-3"
+          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-[#616895] mb-3"
         />
         <div className="flex-1 overflow-y-auto space-y-1.5">
           {results.map((card) => (
@@ -600,7 +600,7 @@ const ImportModal: React.FC<{ onImport: (text: string) => void; onClose: () => v
           placeholder={'Pokémon: 18\n4 Beldum TEF 113\n...'}
           rows={10}
           disabled={isImporting}
-          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-mono outline-none focus:ring-1 focus:ring-[#646B99] disabled:opacity-60"
+          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-mono outline-none focus:ring-1 focus:ring-[#616895] disabled:opacity-60"
         />
         <div className="flex gap-2">
           <button
@@ -613,7 +613,7 @@ const ImportModal: React.FC<{ onImport: (text: string) => void; onClose: () => v
           <button
             onClick={() => onImport(text)}
             disabled={isImporting}
-            className="flex-1 bg-[#646B99] text-white text-xs font-semibold py-2 rounded-xl flex items-center justify-center gap-2 disabled:opacity-80"
+            className="flex-1 bg-[#616895] text-white text-xs font-semibold py-2 rounded-xl flex items-center justify-center gap-2 disabled:opacity-80"
           >
             {isImporting && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
             {isImporting ? 'Importando...' : 'Importar'}
@@ -635,7 +635,7 @@ const ExportModal: React.FC<{ text: string; onClose: () => void }> = ({ text, on
           <button onClick={onClose} className="flex-1 bg-slate-100 text-slate-600 text-xs font-semibold py-2 rounded-xl">Fechar</button>
           <button
             onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-            className="flex-1 bg-[#646B99] text-white text-xs font-semibold py-2 rounded-xl"
+            className="flex-1 bg-[#616895] text-white text-xs font-semibold py-2 rounded-xl"
           >
             {copied ? 'Copiado!' : 'Copiar'}
           </button>

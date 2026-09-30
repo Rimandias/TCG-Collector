@@ -39,7 +39,7 @@ const TradeItemsList: React.FC<{
                 <p className="text-[9px] font-semibold text-red-500 mt-0.5">Não está mais disponível — excluída da troca</p>
               )}
             </div>
-            <span className={`text-[10px] font-semibold flex-shrink-0 ${isUnavailable ? 'text-slate-300 line-through' : 'text-[#646B99]'}`}>R${(item.quantity * item.unitPrice).toFixed(2)}</span>
+            <span className={`text-[10px] font-semibold flex-shrink-0 ${isUnavailable ? 'text-slate-300 line-through' : 'text-[#616895]'}`}>R${(item.quantity * item.unitPrice).toFixed(2)}</span>
             {onRemoveItem && (
               <button
                 onClick={() => onRemoveItem(idx)}

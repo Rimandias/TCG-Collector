@@ -105,7 +105,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 placeholder="NOME DE USUÁRIO"
                 value={formData.username}
                 onChange={(e) => setFormData({...formData, username: e.target.value})}
-                className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs tracking-widest text-slate-900 outline-none focus:border-[#646B99] transition-colors"
+                className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs tracking-widest text-slate-900 outline-none focus:border-[#616895] transition-colors"
               />
             </div>
           )}
@@ -115,7 +115,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             placeholder="E-MAIL"
             value={formData.email}
             onChange={(e) => setFormData({...formData, email: e.target.value})}
-            className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs tracking-widest text-slate-900 outline-none focus:border-[#646B99] transition-colors"
+            className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs tracking-widest text-slate-900 outline-none focus:border-[#616895] transition-colors"
           />
 
           <input
@@ -123,7 +123,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             placeholder="SENHA"
             value={formData.password}
             onChange={(e) => setFormData({...formData, password: e.target.value})}
-            className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs tracking-widest text-slate-900 outline-none focus:border-[#646B99] transition-colors"
+            className="w-full bg-slate-50 border-b-2 border-slate-100 px-0 py-4 text-xs tracking-widest text-slate-900 outline-none focus:border-[#616895] transition-colors"
           />
 
           {error && (
@@ -143,7 +143,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                   setResetSent(false);
                   setResetError(null);
                 }}
-                className="text-[9px] uppercase tracking-widest text-slate-400 hover:text-[#646B99] transition-colors"
+                className="text-[9px] uppercase tracking-widest text-slate-400 hover:text-[#616895] transition-colors"
               >
                 Esqueci minha senha
               </button>
@@ -181,7 +181,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 </p>
                 <button
                   onClick={() => setShowForgotPassword(false)}
-                  className="w-full py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors"
+                  className="w-full py-2 bg-[#616895] text-white text-xs font-semibold rounded-lg hover:bg-[#4a4d73] transition-colors"
                 >
                   Fechar
                 </button>
@@ -198,7 +198,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                     value={resetEmail}
                     onChange={(e) => setResetEmail(e.target.value)}
                     autoFocus
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-[#646B99] mb-2"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-[#616895] mb-2"
                   />
                   {resetError && <p className="text-red-500 text-[10px] mb-2">{resetError}</p>}
 
@@ -213,7 +213,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                     <button
                       type="submit"
                       disabled={!resetEmail.trim() || resetSubmitting}
-                      className="flex-1 py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors disabled:opacity-50"
+                      className="flex-1 py-2 bg-[#616895] text-white text-xs font-semibold rounded-lg hover:bg-[#4a4d73] transition-colors disabled:opacity-50"
                     >
                       {resetSubmitting ? 'Enviando...' : 'Enviar'}
                     </button>

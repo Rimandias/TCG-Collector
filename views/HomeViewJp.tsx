@@ -175,7 +175,7 @@ const HomeViewJp: React.FC<HomeViewJpProps> = ({ user, onUpdateUser, onBackToWes
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-40 gap-4 bg-white min-h-[80vh]">
-        <div className="w-10 h-10 border-4 border-[#646B99] border-t-transparent rounded-full animate-spin" />
+        <div className="w-10 h-10 border-4 border-[#616895] border-t-transparent rounded-full animate-spin" />
         <p className="text-slate-400 text-xs uppercase tracking-widest">Sincronizando catálogo japonês...</p>
       </div>
     );
@@ -185,7 +185,7 @@ const HomeViewJp: React.FC<HomeViewJpProps> = ({ user, onUpdateUser, onBackToWes
     return (
       <div className="flex flex-col items-center justify-center py-40 px-8 text-center gap-6 bg-white min-h-[80vh]">
         <p className="text-slate-400 text-xs leading-relaxed">{error}</p>
-        <button onClick={init} className="px-8 py-3 bg-[#646B99] text-white text-xs uppercase tracking-widest rounded-full hover:bg-[#4d5275] transition-all shadow-lg">
+        <button onClick={init} className="px-8 py-3 bg-[#616895] text-white text-xs uppercase tracking-widest rounded-full hover:bg-[#4a4d73] transition-all shadow-lg">
           Tentar Novamente
         </button>
       </div>
@@ -208,7 +208,7 @@ const HomeViewJp: React.FC<HomeViewJpProps> = ({ user, onUpdateUser, onBackToWes
           placeholder={selectedSet ? `Buscar em ${selectedSet.name}...` : selectedSeries ? `Buscar em ${selectedSeries}...` : 'Buscar era...'}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-9 pr-4 py-2.5 text-xs text-slate-700 outline-none focus:border-[#646B99] transition-all"
+          className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-9 pr-4 py-2.5 text-xs text-slate-700 outline-none focus:border-[#616895] transition-all"
         />
       </div>
 
@@ -228,7 +228,7 @@ const HomeViewJp: React.FC<HomeViewJpProps> = ({ user, onUpdateUser, onBackToWes
                 <p className="text-[9px] text-slate-400 uppercase tracking-wide">Cartas</p>
               </div>
               <div className="flex-1 bg-white p-3 rounded-xl border border-slate-200 flex flex-col items-center justify-center gap-1 shadow-sm">
-                <span className="text-sm font-semibold text-[#646B99]">R${setStats?.value.toFixed(2) ?? '0.00'}</span>
+                <span className="text-sm font-semibold text-[#616895]">R${setStats?.value.toFixed(2) ?? '0.00'}</span>
                 <p className="text-[9px] text-slate-400 uppercase tracking-wide">Valor estimado</p>
               </div>
             </div>
@@ -242,14 +242,14 @@ const HomeViewJp: React.FC<HomeViewJpProps> = ({ user, onUpdateUser, onBackToWes
 
           <div className="flex items-center gap-2 mb-3">
             <div className="flex flex-1 bg-slate-50 p-1 rounded-xl border border-slate-100">
-              <button onClick={() => setFilterTab('tudo')} className={`flex-1 py-2 rounded-lg text-xs uppercase tracking-widest transition-all ${filterTab === 'tudo' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400'}`}>Tudo</button>
-              <button onClick={() => setFilterTab('restantes')} className={`flex-1 py-2 rounded-lg text-xs uppercase tracking-widest transition-all ${filterTab === 'restantes' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400'}`}>Restantes</button>
+              <button onClick={() => setFilterTab('tudo')} className={`flex-1 py-2 rounded-lg text-xs uppercase tracking-widest transition-all ${filterTab === 'tudo' ? 'bg-white text-[#616895] shadow-sm' : 'text-slate-400'}`}>Tudo</button>
+              <button onClick={() => setFilterTab('restantes')} className={`flex-1 py-2 rounded-lg text-xs uppercase tracking-widest transition-all ${filterTab === 'restantes' ? 'bg-white text-[#616895] shadow-sm' : 'text-slate-400'}`}>Restantes</button>
             </div>
             <CardViewModeSelector viewMode={viewMode} onChange={setViewMode} />
           </div>
 
           <div className="mb-4">
-            <button onClick={handleSelectAllInSet} className="w-full py-2 bg-[#646B99]/5 border border-[#646B99]/20 text-[#646B99] text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-[#646B99]/10 transition-colors">
+            <button onClick={handleSelectAllInSet} className="w-full py-2 bg-[#616895]/5 border border-[#616895]/20 text-[#616895] text-[10px] font-semibold uppercase tracking-widest rounded-xl hover:bg-[#616895]/10 transition-colors">
               Selecionar Todos (1x Standard NM)
             </button>
           </div>
@@ -287,12 +287,12 @@ const HomeViewJp: React.FC<HomeViewJpProps> = ({ user, onUpdateUser, onBackToWes
                     <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain filter group-hover:scale-110 transition-transform" fallback="empty" />
                   </div>
                   <div className="w-full space-y-2 mt-auto">
-                    <p className="text-[10px] font-medium text-slate-600 text-center line-clamp-1 group-hover:text-[#646B99] transition-colors flex items-center justify-center gap-1">
+                    <p className="text-[10px] font-medium text-slate-600 text-center line-clamp-1 group-hover:text-[#616895] transition-colors flex items-center justify-center gap-1">
                       {set.symbolUrl && <CardImage src={set.symbolUrl} alt="" className="w-3 h-3 object-contain flex-shrink-0" fallback="empty" />}
                       {set.name}
                     </p>
                     <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                      <div className={`h-full transition-all duration-500 ${progress > 80 ? 'bg-emerald-400' : progress > 30 ? 'bg-[#646B99]' : 'bg-red-500'}`} style={{ width: `${progress}%` }} />
+                      <div className={`h-full transition-all duration-500 ${progress > 80 ? 'bg-emerald-400' : progress > 30 ? 'bg-[#616895]' : 'bg-red-500'}`} style={{ width: `${progress}%` }} />
                     </div>
                     <p className="text-[9px] text-slate-400 uppercase text-center">{Math.round(progress)}%</p>
                   </div>

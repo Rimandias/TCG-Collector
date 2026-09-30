@@ -192,14 +192,14 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, my
             <button
               onClick={() => runAction('choose_payment')}
               disabled={busy}
-              className="w-full py-2.5 bg-[#646B99] text-white text-xs font-semibold rounded-xl hover:bg-[#4d5275] transition-colors disabled:opacity-50"
+              className="w-full py-2.5 bg-[#616895] text-white text-xs font-semibold rounded-xl hover:bg-[#4a4d73] transition-colors disabled:opacity-50"
             >
               Receber em dinheiro (R${requested.total.toFixed(2)})
             </button>
             <button
               onClick={() => runAction('choose_offer')}
               disabled={busy}
-              className="w-full py-2.5 bg-white border border-[#646B99]/30 text-[#646B99] text-xs font-semibold rounded-xl hover:bg-[#646B99]/5 transition-colors disabled:opacity-50"
+              className="w-full py-2.5 bg-white border border-[#616895]/30 text-[#616895] text-xs font-semibold rounded-xl hover:bg-[#616895]/5 transition-colors disabled:opacity-50"
             >
               Escolher cartas para troca do amigo
             </button>
@@ -254,7 +254,7 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, my
               <button
                 onClick={() => runAction('confirm')}
                 disabled={busy}
-                className="flex-1 py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors disabled:opacity-50"
+                className="flex-1 py-2 bg-[#616895] text-white text-xs font-semibold rounded-lg hover:bg-[#4a4d73] transition-colors disabled:opacity-50"
               >
                 {busy ? 'Confirmando...' : 'OK, confirmar'}
               </button>
@@ -312,7 +312,7 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, my
           )}
 
           {payerName && receiverName && (
-            <p className="text-[11px] text-slate-600 bg-[#646B99]/5 border border-[#646B99]/10 rounded-lg p-3 mb-4">
+            <p className="text-[11px] text-slate-600 bg-[#616895]/5 border border-[#616895]/10 rounded-lg p-3 mb-4">
               <span className="font-semibold">{payerIsMe ? 'Você' : payerName}</span> deve pagar <span className="font-semibold">R${Math.abs(diff).toFixed(2)}</span> para{' '}
               <span className="font-semibold">{receiverIsMe ? 'você' : receiverName}</span> para equilibrar a troca.
             </p>
@@ -335,7 +335,7 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, my
               <button
                 onClick={() => runAction('confirm')}
                 disabled={busy}
-                className="flex-1 py-2 bg-[#646B99] text-white text-xs font-semibold rounded-lg hover:bg-[#4d5275] transition-colors disabled:opacity-50"
+                className="flex-1 py-2 bg-[#616895] text-white text-xs font-semibold rounded-lg hover:bg-[#4a4d73] transition-colors disabled:opacity-50"
               >
                 {busy ? 'Confirmando...' : 'OK'}
               </button>
@@ -378,7 +378,7 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, my
           {onStartNewTrade && (
             <button
               onClick={onStartNewTrade}
-              className="w-full mt-2 py-2 text-[#646B99] text-[10px] uppercase tracking-widest hover:text-[#4d5275] transition-colors"
+              className="w-full mt-2 py-2 text-[#616895] text-[10px] uppercase tracking-widest hover:text-[#4a4d73] transition-colors"
             >
               Iniciar outra troca
             </button>
@@ -425,7 +425,7 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, my
             </p>
           )}
 
-          <button onClick={onClose} className="w-full mt-1 py-2.5 bg-[#646B99] text-white text-xs font-semibold rounded-xl hover:bg-[#4d5275] transition-colors">
+          <button onClick={onClose} className="w-full mt-1 py-2.5 bg-[#616895] text-white text-xs font-semibold rounded-xl hover:bg-[#4a4d73] transition-colors">
             Fechar
           </button>
         </div>
@@ -448,7 +448,7 @@ const TradeActionModal: React.FC<TradeActionModalProps> = ({ trade, myUserId, my
           {onStartNewTrade && (
             <button
               onClick={onStartNewTrade}
-              className="w-full mt-2 py-2 text-[#646B99] text-[10px] uppercase tracking-widest hover:text-[#4d5275] transition-colors"
+              className="w-full mt-2 py-2 text-[#616895] text-[10px] uppercase tracking-widest hover:text-[#4a4d73] transition-colors"
             >
               Iniciar outra troca
             </button>

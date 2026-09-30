@@ -7,12 +7,12 @@ interface CardViewModeSelectorProps {
 }
 
 const CardViewModeSelector: React.FC<CardViewModeSelectorProps> = ({ viewMode, onChange }) => {
-  const baseBtn = 'p-1.5 rounded-lg transition-colors';
-  const activeBtn = 'bg-white text-[#646B99] shadow-sm';
-  const inactiveBtn = 'text-slate-400 hover:text-slate-600';
+  const baseBtn = 'p-1.5 rounded-md transition-colors';
+  const activeBtn = 'bg-white text-[var(--color-primary)] shadow-[var(--shadow-tab)]';
+  const inactiveBtn = 'text-[var(--color-text-muted)] hover:text-slate-600';
 
   return (
-    <div className="flex items-center gap-0.5 bg-slate-50 border border-slate-100 rounded-xl p-1">
+    <div className="flex items-center gap-0.5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md p-1 shadow-[var(--shadow-inset)]">
       <button
         type="button"
         onClick={() => onChange('grid3')}

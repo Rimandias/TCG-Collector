@@ -165,7 +165,7 @@ export const aggregateSetTierStats = (statsList: SetTierStats[]): SetTierStats =
 };
 
 export const TIER_COLOR_CLASSES: Record<SetTierColor, { text: string }> = {
-  green: { text: 'text-emerald-500' },
-  blue: { text: 'text-[#4A90D9]' },
-  purple: { text: 'text-[#9B6BD9]' },
+  green: { text: 'text-[var(--color-base)]' },
+  blue: { text: 'text-[var(--color-complete)]' },
+  purple: { text: 'text-[var(--color-master)]' },
 };

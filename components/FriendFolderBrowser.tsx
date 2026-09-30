@@ -350,7 +350,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
     return (
       <div
         key={key}
-        className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${isSelected ? 'border-[#646B99]/40 bg-[#646B99]/5' : 'border-slate-100 bg-white'}`}
+        className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${isSelected ? 'border-[#616895]/40 bg-[#616895]/5' : 'border-slate-100 bg-white'}`}
       >
         {line.card && (
           <CardImage src={line.card.imageUrl} alt={line.card.name} className="w-12 h-16 rounded-lg object-contain bg-slate-50 border border-slate-100/40 flex-shrink-0" />
@@ -386,7 +386,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
             >
               -
             </button>
-            <span className="w-6 text-center text-[11px] text-[#646B99] tabular-nums">{qty}</span>
+            <span className="w-6 text-center text-[11px] text-[#616895] tabular-nums">{qty}</span>
             <button
               onClick={() => setLineQuantity(line, qty + 1)}
               disabled={qty >= line.availableQuantity}
@@ -396,7 +396,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
             </button>
           </div>
           {isSelected && (
-            <span className="text-xs font-bold text-[#646B99]">R${(qty * line.price).toFixed(2)}</span>
+            <span className="text-xs font-bold text-[#616895]">R${(qty * line.price).toFixed(2)}</span>
           )}
         </div>
       </div>
@@ -417,10 +417,10 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
     return (
       <div
         key={key}
-        className={`relative bg-white rounded-xl border p-1.5 flex flex-col items-center gap-1 ${isSelected ? 'border-[#646B99]/40 bg-[#646B99]/5' : 'border-slate-100'}`}
+        className={`relative bg-white rounded-xl border p-1.5 flex flex-col items-center gap-1 ${isSelected ? 'border-[#616895]/40 bg-[#616895]/5' : 'border-slate-100'}`}
       >
         {isWishlisted && (
-          <span className="absolute top-1 left-1 z-10 w-4 h-4 bg-rose-500 rounded-full flex items-center justify-center shadow-sm" title="Na sua lista de desejos">
+          <span className="absolute top-1 left-1 z-10 w-4 h-4 bg-rose-500 rounded-full flex items-center justify-center shadow-[var(--shadow-tab)]" title="Na sua lista de desejos">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21s-6.716-4.35-9.428-8.06C.89 10.31 1.2 6.6 4.2 4.9c2.29-1.3 4.94-.62 6.3 1.24l1.5 2.05 1.5-2.05c1.36-1.86 4.01-2.54 6.3-1.24 3 1.7 3.31 5.41 1.63 8.04C18.716 16.65 12 21 12 21z"/></svg>
           </span>
         )}
@@ -445,7 +445,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
           >
             -
           </button>
-          <span className="text-[10px] text-[#646B99] tabular-nums">{qty}</span>
+          <span className="text-[10px] text-[#616895] tabular-nums">{qty}</span>
           <button
             onClick={() => setLineQuantity(line, qty + 1)}
             disabled={qty >= line.availableQuantity}
@@ -462,7 +462,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-2">
-        <div className="w-6 h-6 border-2 border-[#646B99] border-t-transparent rounded-full animate-spin" />
+        <div className="w-6 h-6 border-2 border-[#616895] border-t-transparent rounded-full animate-spin" />
         <p className="text-[10px] text-slate-400 uppercase tracking-widest">Carregando pastas...</p>
       </div>
     );
@@ -493,13 +493,13 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
               <button
                 key={folder.id}
                 onClick={() => openFolder(folder.id)}
-                className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:border-[#646B99]/30 transition-all group text-left"
+                className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-100 shadow-[var(--shadow-tab)] hover:border-[#616895]/30 transition-all group text-left"
               >
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-500 flex-shrink-0">
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
                   </div>
-                  <h3 className="text-sm font-semibold text-slate-800 group-hover:text-[#646B99] transition-colors">{folder.name}</h3>
+                  <h3 className="text-sm font-semibold text-slate-800 group-hover:text-[#616895] transition-colors">{folder.name}</h3>
                 </div>
                 <span className="text-xs bg-slate-50 border border-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-medium">
                   {folder.cards.length}
@@ -541,7 +541,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                   placeholder="Buscar por nome, número ou set..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#646B99] transition-all shadow-sm"
+                  className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-[#616895] transition-all shadow-[var(--shadow-tab)]"
                 />
               </div>
               {(viewMode === 'cards' || selectedSetId !== null) && (
@@ -549,7 +549,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                   <CardViewModeSelector viewMode={cardsLayout} onChange={setCardsLayout} />
                   <button
                     onClick={() => setShowFilters(!showFilters)}
-                    className={`px-3 py-2 border rounded-xl flex items-center gap-1.5 text-xs font-semibold transition-all flex-shrink-0 ${showFilters ? 'bg-[#646B99] text-white border-[#646B99]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                    className={`px-3 py-2 border rounded-xl flex items-center gap-1.5 text-xs font-semibold transition-all flex-shrink-0 ${showFilters ? 'bg-[#616895] text-white border-[#616895]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                     Filtros
@@ -557,16 +557,16 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                 </>
               )}
             </div>
-            <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+            <div className="flex bg-[var(--color-surface)] p-1 rounded-lg border border-[var(--color-border)] shadow-[var(--shadow-inset)]">
               <button
                 onClick={() => { setViewMode('cards'); setSelectedEra(null); setSelectedSetId(null); }}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${viewMode === 'cards' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${viewMode === 'cards' ? 'bg-white text-[#616895] shadow-[var(--shadow-tab)]' : 'text-slate-400 hover:text-slate-600'}`}
               >
                 Todas as Cartas
               </button>
               <button
                 onClick={() => { setViewMode('collections'); setSelectedEra(null); setSelectedSetId(null); }}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${viewMode === 'collections' ? 'bg-white text-[#646B99] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${viewMode === 'collections' ? 'bg-white text-[#616895] shadow-[var(--shadow-tab)]' : 'text-slate-400 hover:text-slate-600'}`}
               >
                 Coleções
               </button>
@@ -579,7 +579,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                   <select
                     value={filterRarity}
                     onChange={(e) => setFilterRarity(e.target.value)}
-                    className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
+                    className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#616895]"
                   >
                     <option value="all">Todas as Raridades</option>
                     {folderRarities.map((r) => (
@@ -594,7 +594,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                     <select
                       value={filterSet}
                       onChange={(e) => setFilterSet(e.target.value)}
-                      className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
+                      className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#616895]"
                     >
                       <option value="all">Todas as Coleções</option>
                       {folderSets.map((s) => (
@@ -609,7 +609,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                   <select
                     value={filterCategory}
                     onChange={(e) => setFilterCategory(e.target.value)}
-                    className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
+                    className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#616895]"
                   >
                     <option value="all">Todas as Categorias</option>
                     {folderVariationTypes.map((v) => (
@@ -623,7 +623,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                   <select
                     value={filterQuality}
                     onChange={(e) => setFilterQuality(e.target.value)}
-                    className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#646B99]"
+                    className="bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] text-slate-600 outline-none focus:border-[#616895]"
                   >
                     <option value="all">Todas as Qualidades</option>
                     {Object.keys(CardCondition).map((c) => (
@@ -641,7 +641,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                       setFilterQuality('all');
                       setSearchQuery('');
                     }}
-                    className="text-[10px] font-semibold text-slate-400 hover:text-[#646B99] transition-colors"
+                    className="text-[10px] font-semibold text-slate-400 hover:text-[#616895] transition-colors"
                   >
                     Limpar Filtros
                   </button>
@@ -687,7 +687,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                     </span>
                   </div>
 
-                  <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+                  <div className="flex bg-[var(--color-surface)] p-1 rounded-lg border border-[var(--color-border)] shadow-[var(--shadow-inset)]">
                     {([
                       ['base', 'Base Set'],
                       ['complete', 'Complete Set'],
@@ -696,7 +696,7 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                       <button
                         key={value}
                         onClick={() => setSetTierFilter(value)}
-                        className={`flex-1 py-1.5 rounded-lg text-[10px] uppercase tracking-widest transition-all ${setTierFilter === value ? 'bg-white text-[#9B6BD9] shadow-sm font-semibold' : 'text-slate-400'}`}
+                        className={`flex-1 py-1.5 rounded-lg text-[10px] uppercase tracking-widest transition-all ${setTierFilter === value ? 'bg-white text-[#9B6BD9] shadow-[var(--shadow-tab)] font-semibold' : 'text-slate-400'}`}
                       >
                         {label}
                       </button>
@@ -763,13 +763,13 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                       <button
                         key={set.id}
                         onClick={() => setSelectedSetId(set.id)}
-                        className="flex flex-col items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-[#646B99]/30 transition-all group min-h-[110px]"
+                        className="flex flex-col items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-[var(--shadow-tab)] hover:shadow-md hover:border-[#616895]/30 transition-all group min-h-[110px]"
                       >
                         <div className="h-10 w-full flex items-center justify-center mb-1">
                           <CardImage src={set.logoUrl} alt="" className="max-h-full max-w-full object-contain group-hover:scale-110 transition-transform" fallback="empty" />
                         </div>
                         <p className="text-[10px] font-medium text-slate-600 line-clamp-1 text-center">{set.name}</p>
-                        <p className="text-[9px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2 py-0.5 rounded-full mt-1">
+                        <p className="text-[9px] font-semibold text-[#616895] bg-[#616895]/5 px-2 py-0.5 rounded-full mt-1">
                           {count} {count === 1 ? 'carta' : 'cartas'}
                         </p>
                         {/* Progresso do que está visível nesta pasta pra esse set - não temos a
@@ -791,10 +791,10 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
                   <button
                     key={era}
                     onClick={() => setSelectedEra(era)}
-                    className="w-full flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-[#646B99]/30 transition-all"
+                    className="w-full flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-[var(--shadow-tab)] hover:shadow-md hover:border-[#616895]/30 transition-all"
                   >
                     <span className="text-xs font-semibold text-slate-700">{era}</span>
-                    <span className="text-[10px] font-semibold text-[#646B99] bg-[#646B99]/5 px-2.5 py-1 rounded-full border border-[#646B99]/10">
+                    <span className="text-[10px] font-semibold text-[#616895] bg-[#616895]/5 px-2.5 py-1 rounded-full border border-[#616895]/10">
                       {count} {count === 1 ? 'carta' : 'cartas'}
                     </span>
                   </button>
@@ -810,12 +810,12 @@ const FriendFolderBrowser: React.FC<FriendFolderBrowserProps> = ({
           <div className="w-full max-w-lg bg-white border border-slate-200 shadow-2xl rounded-2xl p-4 flex items-center justify-between gap-3">
             <div>
               <p className="text-[9px] text-slate-400 uppercase tracking-widest">{totalCards} carta(s) selecionada(s)</p>
-              <p className="text-lg font-bold text-[#646B99]">R${totalValue.toFixed(2)}</p>
+              <p className="text-lg font-bold text-[#616895]">R${totalValue.toFixed(2)}</p>
             </div>
             <button
               onClick={handleSubmit}
               disabled={submitting}
-              className="px-5 py-2.5 bg-[#646B99] text-white text-xs font-semibold rounded-xl hover:bg-[#4d5275] transition-colors disabled:opacity-50"
+              className="px-5 py-2.5 bg-[#616895] text-white text-xs font-semibold rounded-xl hover:bg-[#4a4d73] transition-colors disabled:opacity-50"
             >
               {submitting ? 'Enviando...' : submitLabel}
             </button>
