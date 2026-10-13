@@ -165,6 +165,8 @@ const FALLBACK_LOGO_SET_ID: Record<string, string> = {
   'sm7.5': 'sm7', // Dragões Soberanos -> Tempestade Celestial (mesma era, lançamento próximo)
   sma: 'sm115', // Destinos Ocultos Cofre Brilhante -> Destinos Ocultos (mesmo dia de lançamento)
   sv07: 'sv01', // Coroa Estelar (símbolo ausente nos dois locales)
+  '30th': 'me01', // Celebração de 30 Anos (lançamento recente, sem logo/símbolo publicado ainda) -> Megaevolução
+  '30th-c': 'me01', // Coleção Clássica de 30 Anos (mesmo caso acima) -> Megaevolução
 };
 
 function mapSet(raw: any) {
