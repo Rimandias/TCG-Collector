@@ -83,6 +83,30 @@ const SERIE_ID_TO_ERA: Record<string, string> = {
   pop: 'POP',
 };
 
+// Coleção-carro-chefe de cada era - mesmo mapa/mesma ideia do ERA_FLAGSHIP_SET_ID em
+// HomeView.tsx (duplicado porque frontend e backend não compartilham módulo; mantenha os
+// dois em sincronia). Usado só pelo fallback automático de logo/símbolo abaixo - a Home usa
+// a cópia dela pro logo do CARD DA ERA, isso aqui é pro logo do SET em si (tela de set,
+// seletor de deck, Coleção, etc), que sem isso ficava em branco até alguém notar e cadastrar
+// a coleção em FALLBACK_LOGO_SET_ID na mão.
+const ERA_FLAGSHIP_SET_ID: Record<string, string> = {
+  'Mega Evolution': 'me01',
+  'Scarlet & Violet': 'sv01',
+  'Sword & Shield': 'swsh1',
+  'Sun & Moon': 'sm1',
+  XY: 'xy1',
+  'Black & White': 'bw1',
+  'HeartGold & SoulSilver': 'hgss1',
+  Platinum: 'pl1',
+  'Diamond & Pearl': 'dp1',
+  POP: 'pop1',
+  EX: 'ex1',
+  'E-Card': 'ecard1',
+  Neo: 'neo1',
+  Gym: 'gym1',
+  Base: 'base1',
+};
+
 // "McDonald's Collection", "Trainer kits", "Legendary Collection", "Call of Legends" e
 // "Miscellaneous" são séries próprias na TCGdex, mas na pokemontcg.io (referência que o
 // app sempre usou) essas coleções ficam dentro da era em que foram lançadas - decompõe
@@ -275,6 +299,20 @@ tcgRouter.get(
         if (!set || !fallbackSet) continue;
         if (!set.logoUrl) set.logoUrl = fallbackSet.logoUrl;
         if (!set.symbolUrl) set.symbolUrl = fallbackSet.symbolUrl;
+      }
+
+      // Fallback automático por era - roda depois do manual, como rede de segurança pra
+      // coleção nova sem logo/símbolo publicado ainda (ex: "Celebração de 30 Anos" ficou
+      // assim por semanas até alguém notar e cadastrar à mão em FALLBACK_LOGO_SET_ID). Usa a
+      // coleção-carro-chefe da mesma era (ERA_FLAGSHIP_SET_ID acima) sempre que ela mesma já
+      // tiver logo/símbolo - cobre coleção futura automaticamente, sem precisar de deploy.
+      for (const set of mapped as any[]) {
+        if (set.logoUrl && set.symbolUrl) continue;
+        const flagshipId = ERA_FLAGSHIP_SET_ID[set.series];
+        const flagshipSet = flagshipId && byId.get(flagshipId);
+        if (!flagshipSet || flagshipSet === set) continue;
+        if (!set.logoUrl) set.logoUrl = flagshipSet.logoUrl;
+        if (!set.symbolUrl) set.symbolUrl = flagshipSet.symbolUrl;
       }
 
       await supabase.from('sets_cache').upsert({ id: 'all', data: mapped, updated_at: new Date().toISOString() });
