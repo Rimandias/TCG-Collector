@@ -58,19 +58,26 @@ const shouldRunBackgroundSync = (url: string): boolean => {
 
 // FETCH SETS WITH CLIENT-SIDE SWR CACHING (o backend já cacheia/faz fallback do lado dele)
 export const fetchSets = async () => {
-  // v2: catálogo migrou de pokemontcg.io pra TCGdex (nomes/logos em PT-BR) - invalida
-  // qualquer cache antigo do navegador que ainda tenha os dados da API anterior.
-  const CACHE_KEY = 'poketracker_cache_sets_v2';
+  // v3: guarda {data, cachedAt} em vez de um array cru (v2) - a v2 não tinha NENHUM prazo de
+  // validade, só era substituída quando a revalidação em segundo plano terminava, e mesmo
+  // assim só aparecia pro usuário na PRÓXIMA chamada (o fetch em segundo plano nunca atualiza
+  // a tela já renderizada) - uma coleção nova lançada ficava presa no navegador de quem já
+  // tinha usado o app até um recarregamento "sortudo" bater com uma revalidação concluída.
+  // Trocar a chave também invalida de uma vez todo cache v2 já salvo por aí.
+  const CACHE_KEY = 'poketracker_cache_sets_v3';
+  const CACHE_TTL_MS = 60 * 60 * 1000; // 1h
 
-  let cachedData: any[] | null = null;
+  let cachedEntry: { data: any[]; cachedAt: number } | null = null;
   try {
     const item = localStorage.getItem(CACHE_KEY);
-    if (item) cachedData = JSON.parse(item);
+    if (item) cachedEntry = JSON.parse(item);
   } catch (e) {
     console.warn('Could not read sets cache:', e);
   }
 
-  if (cachedData && Array.isArray(cachedData) && cachedData.length > 0) {
+  const isWithinTtl = !!cachedEntry && Date.now() - cachedEntry.cachedAt < CACHE_TTL_MS;
+
+  if (cachedEntry && isWithinTtl && Array.isArray(cachedEntry.data) && cachedEntry.data.length > 0) {
     // Revalida em segundo plano, sem bloquear a UI. Timeout generoso (20s) porque
     // é comum haver dezenas dessas chamadas concorrentes logo no login. Deduplicada e
     // limitada por cooldown para não repetir a cada troca de aba (Home/Coleções/Trocas).
@@ -79,7 +86,7 @@ export const fetchSets = async () => {
       fetchDeduped(url, 20000)
         .then((body) => {
           if (body?.data) {
-            localStorage.setItem(CACHE_KEY, JSON.stringify(body.data));
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ data: body.data, cachedAt: Date.now() }));
           }
         })
         .catch((err) => {
@@ -87,15 +94,19 @@ export const fetchSets = async () => {
         });
     }
 
-    return cachedData;
+    return cachedEntry.data;
   }
 
+  // Sem cache, ou cache passou da validade (1h) - busca de verdade (bloqueante) em vez de
+  // devolver dado velho: é o que garante que uma mudança no catálogo chega sozinha, sem
+  // precisar de um recarregamento extra "no escuro" pra pegar o resultado de uma
+  // revalidação em segundo plano que já rodou antes.
   try {
     const body = await fetchDeduped(`${API_BASE}/tcg/sets`, 8000);
     if (!body?.data) throw new Error('Invalid data format received from backend');
 
     try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify(body.data));
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ data: body.data, cachedAt: Date.now() }));
     } catch (e) {
       console.warn('Could not write sets cache:', e);
     }
@@ -103,6 +114,9 @@ export const fetchSets = async () => {
     return body.data;
   } catch (error) {
     console.error('Error fetching sets from backend:', error);
+    // Cache expirado (mas presente) é melhor que nada se a busca ao vivo falhar de vez -
+    // mesmo raciocínio do stale-cache-protected no backend (routes/tcg.ts).
+    if (cachedEntry && Array.isArray(cachedEntry.data)) return cachedEntry.data;
     return [];
   }
 };
