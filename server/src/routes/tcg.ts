@@ -202,6 +202,49 @@ function buildSymbolUrl(raw: any): string {
   return raw.symbol ? `${raw.symbol}.webp` : '';
 }
 
+// buildSymbolUrl acima SEMPRE devolve alguma URL (desde que raw.logo exista, o que já é
+// quase universal) - então nunca é "" mesmo quando o arquivo derivado não existe de
+// verdade (o locale que forneceu o logo às vezes não tem o symbol publicado, só o outro
+// locale tem). Isso por si só já quebrava os fallbacks abaixo (FALLBACK_LOGO_SET_ID/
+// ERA_FLAGSHIP_SET_ID), que só substituem symbolUrl quando ele está vazio - uma URL
+// "com cara de válida" mas 404 nunca disparava o fallback. Essa verificação por HEAD
+// (só roda na atualização do cache, a cada 12h, não por requisição de usuário) confirma
+// se o arquivo existe de verdade; se não, tenta o outro locale antes de desistir; só
+// então limpa pra "" e deixa os fallbacks de coleção relacionada assumirem.
+async function verifyAssetUrl(url: string): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    try {
+      const response = await fetch(url, { method: 'HEAD', signal: controller.signal });
+      return response.ok;
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return false;
+  }
+}
+
+function swapAssetLocale(url: string): string | null {
+  const match = url.match(/^(https:\/\/assets\.tcgdex\.net\/)(pt|en)(\/.*)$/);
+  if (!match) return null;
+  return `${match[1]}${match[2] === 'pt' ? 'en' : 'pt'}${match[3]}`;
+}
+
+async function verifySymbolUrls(sets: any[]): Promise<void> {
+  await mapConcurrent(sets, 15, async (set: any) => {
+    if (!set.symbolUrl) return;
+    if (await verifyAssetUrl(set.symbolUrl)) return;
+    const alt = swapAssetLocale(set.symbolUrl);
+    if (alt && (await verifyAssetUrl(alt))) {
+      set.symbolUrl = alt;
+      return;
+    }
+    set.symbolUrl = '';
+  });
+}
+
 function mapSet(raw: any) {
   return {
     id: raw.id,
@@ -300,6 +343,8 @@ tcgRouter.get(
         console.warn(`[tcg] Busca ao vivo de /sets voltou com só ${mapped.length} coleções (cache anterior tinha ${previousCount}) - mantendo cache antigo em vez de sobrescrever.`);
         return res.json({ data: cached.data, source: 'stale-cache-protected' });
       }
+
+      await verifySymbolUrls(mapped as any[]);
 
       const byId = new Map(mapped.map((s: any) => [s.id, s]));
       for (const [setId, fallbackId] of Object.entries(FALLBACK_LOGO_SET_ID)) {
