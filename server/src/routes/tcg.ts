@@ -189,9 +189,18 @@ const FALLBACK_LOGO_SET_ID: Record<string, string> = {
   'sm7.5': 'sm7', // Dragões Soberanos -> Tempestade Celestial (mesma era, lançamento próximo)
   sma: 'sm115', // Destinos Ocultos Cofre Brilhante -> Destinos Ocultos (mesmo dia de lançamento)
   sv07: 'sv01', // Coroa Estelar (símbolo ausente nos dois locales)
-  '30th': 'me01', // Celebração de 30 Anos (lançamento recente, sem logo/símbolo publicado ainda) -> Megaevolução
-  '30th-c': 'me01', // Coleção Clássica de 30 Anos (mesmo caso acima) -> Megaevolução
 };
+
+// O campo `symbol` que a própria TCGdex devolve na API usa um prefixo "univ/" (locale-
+// agnóstico) que NUNCA resolve de verdade - testado direto contra o CDN e confirmado 404
+// até pra eras antigas e consolidadas (sv01, swsh1), não só coleções novas. O arquivo real
+// mora sob o mesmo prefixo de locale do logo (raw.logo, que SEMPRE resolve - é o que a Home/
+// Coleção já usam pra logo grande sem problema) - só troca o "/logo" final por "/symbol".
+// Deriva do logo em vez de confiar no campo symbol quebrado da API.
+function buildSymbolUrl(raw: any): string {
+  if (raw.logo) return `${raw.logo.replace(/\/logo$/, '/symbol')}.webp`;
+  return raw.symbol ? `${raw.symbol}.webp` : '';
+}
 
 function mapSet(raw: any) {
   return {
@@ -201,7 +210,7 @@ function mapSet(raw: any) {
     printedTotal: raw.cardCount?.official || 0,
     total: raw.cardCount?.total || raw.cardCount?.official || 0,
     logoUrl: raw.logo ? `${raw.logo}.webp` : '',
-    symbolUrl: raw.symbol ? `${raw.symbol}.webp` : '',
+    symbolUrl: buildSymbolUrl(raw),
     releaseDate: raw.releaseDate || '',
     updatedAt: raw.releaseDate || '',
     // Código curto (ex: "TEF") usado em listas de deck copiadas de outros lugares (Limitless,
