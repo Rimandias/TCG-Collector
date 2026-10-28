@@ -519,7 +519,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           <div className="flex items-center justify-between">
             <TierDots stats={tierStats} />
             {selectedSet.symbolUrl && (
-              <CardImage src={selectedSet.symbolUrl} alt="" className="w-9 h-5 rounded-[3px] object-cover flex-shrink-0" fallback="empty" />
+              <CardImage src={selectedSet.symbolUrl} alt="" className="w-9 h-5 rounded-[3px] object-contain flex-shrink-0" fallback="empty" />
             )}
           </div>
         </div>
@@ -690,7 +690,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                     <div className="flex items-center justify-between">
                       <TierDots stats={tierStats} size="xs" />
                       {set.symbolUrl && (
-                        <CardImage src={set.symbolUrl} alt="" className="w-9 h-[19px] rounded-[3px] object-cover flex-shrink-0" fallback="empty" />
+                        <CardImage src={set.symbolUrl} alt="" className="w-9 h-[19px] rounded-[3px] object-contain flex-shrink-0" fallback="empty" />
                       )}
                     </div>
                   </button>
