@@ -674,7 +674,7 @@ const HomeView: React.FC<HomeViewProps> = ({
               )}
             </div>
           ) : (
-            <div className="mt-6 grid grid-cols-2 gap-4">
+            <div className="mt-6 grid grid-cols-2 md:grid-cols-3 gap-4">
               {setsInSeries.map(set => {
                 const tierStats = getSetTierStatsFromCounts(set, user.ownedCards, seriesVariantFlags[set.id]);
                 return (
