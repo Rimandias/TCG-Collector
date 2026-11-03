@@ -205,12 +205,16 @@ function buildSymbolUrl(raw: any): string {
 // buildSymbolUrl acima SEMPRE devolve alguma URL (desde que raw.logo exista, o que já é
 // quase universal) - então nunca é "" mesmo quando o arquivo derivado não existe de
 // verdade (o locale que forneceu o logo às vezes não tem o symbol publicado, só o outro
-// locale tem). Isso por si só já quebrava os fallbacks abaixo (FALLBACK_LOGO_SET_ID/
-// ERA_FLAGSHIP_SET_ID), que só substituem symbolUrl quando ele está vazio - uma URL
-// "com cara de válida" mas 404 nunca disparava o fallback. Essa verificação por HEAD
-// (só roda na atualização do cache, a cada 12h, não por requisição de usuário) confirma
-// se o arquivo existe de verdade; se não, tenta o outro locale antes de desistir; só
-// então limpa pra "" e deixa os fallbacks de coleção relacionada assumirem.
+// locale tem). O mesmo problema existe pro logoUrl: a TCGdex retorna o campo `logo`
+// preenchido (string não-vazia) mesmo quando o arquivo daquele locale específico ainda
+// não foi publicado de verdade no CDN (ex: "Escuridão Absoluta"/me05 - `logo` vem
+// preenchido em pt, mas o arquivo em si 404, e como o campo já "existe", o merge com en
+// logo abaixo nem roda). Um campo preenchido-mas-quebrado nunca ficava "" pra disparar os
+// fallbacks (FALLBACK_LOGO_SET_ID/ERA_FLAGSHIP_SET_ID), que só substituem quando o valor
+// já está vazio. Essa verificação por HEAD (só roda na atualização do cache, a cada 12h,
+// não por requisição de usuário) confirma se o arquivo existe de verdade pra logoUrl e
+// symbolUrl; se não, tenta o outro locale antes de desistir; só então limpa pra "" e deixa
+// os fallbacks de coleção relacionada assumirem.
 async function verifyAssetUrl(url: string): Promise<boolean> {
   try {
     const controller = new AbortController();
@@ -232,16 +236,19 @@ function swapAssetLocale(url: string): string | null {
   return `${match[1]}${match[2] === 'pt' ? 'en' : 'pt'}${match[3]}`;
 }
 
-async function verifySymbolUrls(sets: any[]): Promise<void> {
+async function verifyImageFields(sets: any[], fields: Array<'logoUrl' | 'symbolUrl'>): Promise<void> {
   await mapConcurrent(sets, 15, async (set: any) => {
-    if (!set.symbolUrl) return;
-    if (await verifyAssetUrl(set.symbolUrl)) return;
-    const alt = swapAssetLocale(set.symbolUrl);
-    if (alt && (await verifyAssetUrl(alt))) {
-      set.symbolUrl = alt;
-      return;
+    for (const field of fields) {
+      const url = set[field];
+      if (!url) continue;
+      if (await verifyAssetUrl(url)) continue;
+      const alt = swapAssetLocale(url);
+      if (alt && (await verifyAssetUrl(alt))) {
+        set[field] = alt;
+        continue;
+      }
+      set[field] = '';
     }
-    set.symbolUrl = '';
   });
 }
 
@@ -344,7 +351,7 @@ tcgRouter.get(
         return res.json({ data: cached.data, source: 'stale-cache-protected' });
       }
 
-      await verifySymbolUrls(mapped as any[]);
+      await verifyImageFields(mapped as any[], ['logoUrl', 'symbolUrl']);
 
       const byId = new Map(mapped.map((s: any) => [s.id, s]));
       for (const [setId, fallbackId] of Object.entries(FALLBACK_LOGO_SET_ID)) {
